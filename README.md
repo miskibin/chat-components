@@ -1,5 +1,7 @@
 # Shadcn chat input Component
 
+## [demo](https://chat-input-azure.vercel.app/)
+
 A customizable, accessible chat input component built for React applications using the shadcn/ui design system.
 
 ![image](https://github.com/user-attachments/assets/9fc27797-d32a-4166-a0fc-c5f5e93d1b3e)
