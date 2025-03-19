@@ -1,6 +1,9 @@
-# ChatInput Component
+# Shadcn chat input Component
 
 A customizable, accessible chat input component built for React applications using the shadcn/ui design system.
+
+![Uploading image.png…]()
+
 
 ## Features
 
