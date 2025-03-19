@@ -100,7 +100,7 @@ export const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [input]);
 
     return (
-      <div className={cn("relative w-full", className)}>
+      <div className={cn("relative w-full max-w-[800px] mx-auto", className)}>
         <form onSubmit={handleSendMessage} className="relative">
           <div className="relative bg-background border rounded-lg overflow-hidden shadow-sm">
             <textarea
