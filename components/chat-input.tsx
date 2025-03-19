@@ -1,10 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { PlusCircle, Send, Square } from "lucide-react";
+import { ChevronDown, PlusCircle, Send, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface ChatInputProps
   extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -16,6 +22,10 @@ export interface ChatInputProps
     icon: React.ReactNode;
     label: string;
     id: string;
+    type?: "toggle" | "dropdown";
+    options?: { value: string; label: string }[];
+    value?: string;
+    onChange?: (value: string) => void;
   }[];
 }
 
@@ -129,30 +139,68 @@ export const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground flex-shrink-0 p-0"
+                  className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground flex-shrink-0 p-0"
                 >
-                  <PlusCircle size={16} />
+                  <PlusCircle size={14} />
                   <span className="sr-only">Add attachment</span>
                 </Button>
 
                 {tools.map((tool) => (
-                  <Toggle
-                    key={tool.id}
-                    pressed={activeTools.includes(tool.id)}
-                    onPressedChange={() => toggleTool(tool.id)}
-                    size="sm"
-                    variant="outline"
-                    className={cn(
-                      "h-8 rounded-md px-2 flex items-center gap-1 text-xs",
-                      activeTools.includes(tool.id)
-                        ? "bg-primary/20 text-primary border-primary hover:bg-primary/30 hover:text-primary"
-                        : "hover:bg-muted"
+                  <React.Fragment key={tool.id}>
+                    {tool.type === "dropdown" ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild disabled={isLoading}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs font-normal gap-1 px-2"
+                          >
+                            {tool.icon}
+                            <span className="hidden sm:inline">
+                              {tool.options?.find(
+                                (opt) => opt.value === tool.value
+                              )?.label || tool.label}
+                            </span>
+                            <ChevronDown size={12} className="opacity-50" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {tool.options?.map((option) => (
+                            <DropdownMenuItem
+                              key={option.value}
+                              className={cn(
+                                "text-xs cursor-pointer",
+                                tool.value === option.value &&
+                                  "bg-muted font-medium"
+                              )}
+                              onClick={() => {
+                                tool.onChange?.(option.value);
+                              }}
+                            >
+                              {option.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <Toggle
+                        pressed={activeTools.includes(tool.id)}
+                        onPressedChange={() => toggleTool(tool.id)}
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                          "h-7 rounded-md px-2 flex items-center gap-1 text-xs  me-2",
+                          activeTools.includes(tool.id)
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground"
+                        )}
+                        disabled={isLoading}
+                      >
+                        {tool.icon}
+                        <span className="hidden sm:inline">{tool.label}</span>
+                      </Toggle>
                     )}
-                    disabled={isLoading}
-                  >
-                    {tool.icon}
-                    <span className="hidden sm:inline">{tool.label}</span>
-                  </Toggle>
+                  </React.Fragment>
                 ))}
               </div>
 
@@ -163,7 +211,7 @@ export const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     onClick={onStopGeneration}
                     size="sm"
                     variant="ghost"
-                    className="rounded-full text-destructive hover:text-destructive hover:bg-destructive/20 flex-shrink-0 p-0"
+                    className="rounded-full text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0 p-0 h-7 w-7"
                   >
                     <Square size={14} className="fill-destructive" />
                     <span className="sr-only">Stop generation</span>
@@ -175,13 +223,13 @@ export const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     variant="ghost"
                     disabled={!input.trim()}
                     className={cn(
-                      "h-8 w-8 rounded-full flex-shrink-0 p-0",
+                      "h-7 w-7 rounded-full flex-shrink-0 p-0",
                       input.trim()
                         ? "text-primary hover:text-primary"
                         : "text-muted-foreground"
                     )}
                   >
-                    <Send size={16} />
+                    <Send size={14} />
                     <span className="sr-only">Send message</span>
                   </Button>
                 )}

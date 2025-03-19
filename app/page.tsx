@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Globe, Sparkles } from "lucide-react";
+import { Globe, Sparkles, Bot } from "lucide-react";
 import { ChatInput } from "@/components/chat-input";
 import { Message } from "@/components/message";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,17 @@ export default function ChatExample() {
   const [isLoading, setIsLoading] = useState(false);
   const [generationStage, setGenerationStage] =
     useState<GenerationStage>("idle");
+  const [selectedModel, setSelectedModel] = useState("gpt-4");
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // List of AI models
+  const models = [
+    { value: "gpt-4", label: "GPT-4" },
+    { value: "gpt-3.5", label: "GPT-3.5" },
+    { value: "claude-3", label: "Claude 3" },
+    { value: "gemini-pro", label: "Gemini Pro" },
+    { value: "llama-3", label: "Llama 3" },
+  ];
 
   const handleSendMessage = (content: string) => {
     // Add user message
@@ -46,7 +56,7 @@ export default function ChatExample() {
         timeoutRef.current = setTimeout(() => {
           const assistantMessage: Message = {
             id: (Date.now() + 1).toString(),
-            content: `This is a response to: "${content}"`,
+            content: `[${models.find(m => m.value === selectedModel)?.label}] Response to: "${content}"`,
             sender: "assistant",
           };
 
@@ -216,6 +226,15 @@ export default function ChatExample() {
                 id: "think",
                 label: "Think",
                 icon: <Sparkles size={14} className="mr-1" />,
+              },
+              {
+                id: "model",
+                label: "Model",
+                icon: <Bot size={14} className="mr-1" />,
+                type: "dropdown",
+                options: models,
+                value: selectedModel,
+                onChange: setSelectedModel,
               },
             ]}
           />
