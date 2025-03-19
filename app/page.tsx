@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Globe, Sparkles } from "lucide-react";
 import { ChatInput } from "@/components/chat-input";
 import { Message } from "@/components/message";
 import { Button } from "@/components/ui/button";
+import {
+  GenerationStatus,
+  GenerationStage,
+} from "@/components/generation-status";
 
 interface Message {
   id: string;
@@ -15,6 +19,8 @@ interface Message {
 export default function ChatExample() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [generationStage, setGenerationStage] =
+    useState<GenerationStage>("idle");
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleSendMessage = (content: string) => {
@@ -28,18 +34,29 @@ export default function ChatExample() {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
-    // Simulate assistant response
-    timeoutRef.current = setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: `This is a response to: "${content}"`,
-        sender: "assistant",
-      };
+    // Simulate different generation stages
+    setGenerationStage("thinking");
 
-      setMessages((prev) => [...prev, assistantMessage]);
-      setIsLoading(false);
-      timeoutRef.current = null;
-    }, 3000); // Longer timeout to demonstrate stop functionality
+    timeoutRef.current = setTimeout(() => {
+      setGenerationStage("searching");
+
+      timeoutRef.current = setTimeout(() => {
+        setGenerationStage("responding");
+
+        timeoutRef.current = setTimeout(() => {
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            content: `This is a response to: "${content}"`,
+            sender: "assistant",
+          };
+
+          setMessages((prev) => [...prev, assistantMessage]);
+          setIsLoading(false);
+          setGenerationStage("idle");
+          timeoutRef.current = null;
+        }, 1500);
+      }, 1500);
+    }, 1500);
   };
 
   const handleStopGeneration = () => {
@@ -56,6 +73,7 @@ export default function ChatExample() {
 
       setMessages((prev) => [...prev, stoppedMessage]);
       setIsLoading(false);
+      setGenerationStage("idle");
     }
   };
 
@@ -104,6 +122,15 @@ export default function ChatExample() {
     }
   };
 
+  // Clean up timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <>
       <div className="p-4 flex justify-between items-center border-b bg-gray-100">
@@ -130,8 +157,6 @@ export default function ChatExample() {
         </div>
       </div>
       <div className="container mx-auto min-h-[80vh] flex flex-col">
-        {/* Navbar */}
-
         {/* Messages area */}
         <div className="h-4/5 flex-1 overflow-y-auto p-4 space-y-8">
           {messages.length === 0 ? (
@@ -171,17 +196,7 @@ export default function ChatExample() {
             ))
           )}
 
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="max-w-[80%] p-3 rounded-lg bg-muted">
-                <div className="flex space-x-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0.2s]" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0.4s]" />
-                </div>
-              </div>
-            </div>
-          )}
+          {isLoading && <GenerationStatus stage={generationStage} />}
         </div>
 
         {/* Chat input */}
