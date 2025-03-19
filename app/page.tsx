@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Globe, Sparkles } from "lucide-react";
 import { ChatInput } from "@/components/chat-input";
+import { Button } from "@/components/ui/button";
 
 interface Message {
   id: string;
@@ -59,6 +60,31 @@ export default function ChatExample() {
 
   return (
     <div className="flex flex-col h-[500px] border rounded-md">
+      {/* Navbar */}
+      <div className="p-4 flex justify-between items-center border-b bg-gray-100">
+        <h1 className="text-lg font-semibold">Chat Example</h1>
+        <div className="flex gap-2">
+          <Button asChild>
+            <a
+              href="https://github.com/miskibin/chat-input"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Repository
+            </a>
+          </Button>
+          <Button asChild variant="outline">
+            <a
+              href="https://github.com/miskibin/chat-input/blob/main/README.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Documentation
+            </a>
+          </Button>
+        </div>
+      </div>
+
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
@@ -99,7 +125,7 @@ export default function ChatExample() {
         )}
       </div>
 
-      {/* Chat input - Added max-w-4xl and centered */}
+      {/* Chat input - Added max-w-3xl and centered */}
       <div className="p-4 flex justify-center">
         <div className="w-full max-w-3xl">
           <ChatInput
