@@ -12,8 +12,8 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
+  X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 export interface MessageProps {
   content: string;
@@ -81,23 +81,32 @@ export function Message({
         {isEditing ? (
           <div className="p-3">
             <textarea
-              className="w-full bg-background text-foreground p-2 rounded-md border"
+              className={cn(
+                "w-full p-2 rounded-md border resize-none focus:outline-none focus:ring-1 focus:ring-primary",
+                sender === "user"
+                  ? "bg-primary/90 text-primary-foreground border-primary-foreground/20"
+                  : "bg-muted text-foreground border-input"
+              )}
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
               rows={3}
               autoFocus
             />
             <div className="flex justify-end gap-2 mt-2">
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={() => setIsEditing(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                title="Cancel"
               >
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleSaveEdit}>
-                Save
-              </Button>
+                <X size={16} />
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                title="Save"
+              >
+                <Check size={16} />
+              </button>
             </div>
           </div>
         ) : (
