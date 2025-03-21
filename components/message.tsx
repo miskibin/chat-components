@@ -4,16 +4,7 @@ import * as React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
-import {
-  Copy,
-  Check,
-  ThumbsUp,
-  ThumbsDown,
-  RefreshCw,
-  Pencil,
-  Trash2,
-  X,
-} from "lucide-react";
+import { PencilIcon } from "lucide-react";
 
 // Define the pattern handler type
 export interface PatternHandler {
@@ -24,42 +15,39 @@ export interface PatternHandler {
   }>;
 }
 
+// Define a generic action button interface
+export interface ActionButton {
+  id: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  title?: string;
+  className?: string;
+  position?: "inside" | "outside"; // Whether button should appear inside or outside the message
+}
+
 export interface MessageProps {
   content: string;
   sender: "user" | "assistant";
+  actionButtons?: ActionButton[]; // Custom action buttons
+  editable?: boolean; // Whether this message can be edited
   onEdit?: (content: string) => void;
-  onDelete?: () => void;
-  onRegenerate?: () => void;
-  onReaction?: (reaction: "like" | "dislike") => void;
   patternHandlers?: PatternHandler[];
   className?: string;
+  contentClassName?: string; // Additional className for the content container
 }
 
 export function Message({
   content,
   sender,
+  actionButtons = [],
+  editable = false,
   onEdit,
-  onDelete,
-  onRegenerate,
-  onReaction,
   patternHandlers = [],
   className,
+  contentClassName,
 }: MessageProps) {
-  const [isCopied, setIsCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
-  const [reaction, setReaction] = useState<"like" | "dislike" | null>(null);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
-
-  const handleEdit = () => {
-    setIsEditing(true);
-    setEditedContent(content);
-  };
 
   const handleSaveEdit = () => {
     setIsEditing(false);
@@ -68,9 +56,14 @@ export function Message({
     }
   };
 
-  const handleReaction = (type: "like" | "dislike") => {
-    setReaction(reaction === type ? null : type);
-    onReaction?.(type);
+  // Handle keyboard events for the edit textarea
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      handleSaveEdit();
+    } else if (e.key === "Escape") {
+      setIsEditing(false);
+      setEditedContent(content);
+    }
   };
 
   // Function to process content with pattern handlers
@@ -117,168 +110,152 @@ export function Message({
     return <>{segments}</>;
   };
 
+  // Filter buttons by position
+  const insideButtons = actionButtons.filter(
+    (btn) => btn.position !== "outside"
+  );
+  const outsideButtons = actionButtons.filter(
+    (btn) => btn.position === "outside"
+  );
+
   return (
     <div
       className={cn(
-        "group relative flex flex-col",
+        "group relative flex flex-col w-full",
         sender === "user" ? "items-end" : "items-start",
         className
       )}
     >
-      <div
-        className={cn(
-          "max-w-[85%] rounded-lg",
-          sender === "user"
-            ? "bg-primary text-primary-foreground"
-            : "bg-transparent"
-        )}
-      >
-        {isEditing ? (
-          <div className="p-3">
-            <textarea
-              className={cn(
-                "w-full p-2 rounded-md border resize-none focus:outline-none focus:ring-1 focus:ring-primary",
-                sender === "user"
-                  ? "bg-primary/90 text-primary-foreground border-primary-foreground/20"
-                  : "bg-muted text-foreground border-input"
-              )}
-              value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
-              rows={3}
-              autoFocus
-            />
-            <div className="flex justify-end gap-2 mt-2">
-              <button
-                onClick={() => setIsEditing(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                title="Cancel"
-              >
-                <X size={16} />
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                title="Save"
-              >
-                <Check size={16} />
-              </button>
+      <div className="relative">
+        {/* Message content */}
+        <div
+          className={cn(
+            "max-w-[90vw] sm:max-w-[70vw]",
+            sender === "user"
+              ? "bg-primary text-primary-foreground rounded-lg"
+              : "",
+            contentClassName
+          )}
+        >
+          {isEditing ? (
+            <div className="p-3">
+              <textarea
+                className={cn(
+                  "w-full p-2 rounded-md border resize-none focus:outline-none focus:ring-1 focus:ring-primary",
+                  sender === "user"
+                    ? "bg-primary/90 text-primary-foreground border-primary-foreground/20"
+                    : "bg-muted text-foreground border-input"
+                )}
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={3}
+                autoFocus
+              />
+              <div className="flex justify-end gap-2 mt-2">
+                <button
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditedContent(content);
+                  }}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                  title="Cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="text-primary hover:text-primary/80 transition-colors p-1"
+                  title="Save"
+                >
+                  Save
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="p-3">
-            <div
-              className={cn(
-                "prose prose-sm max-w-none text-base",
-                sender === "user" ? "prose-invert" : "prose-neutral"
-              )}
-            >
-              {patternHandlers.length > 0 ? (
-                // Fix: Separate props and children in React.createElement
-                React.createElement(
-                  ReactMarkdown,
-                  {
-                    components: {
-                      p: ({ children }) => {
-                        const processedContent = processContent(
-                          String(children)
-                        );
-                        return processedContent ? (
-                          <p>{processedContent}</p>
-                        ) : (
-                          <p>{children}</p>
-                        );
+          ) : (
+            <div className="p-3">
+              <div
+                className={cn(
+                  "prose prose-sm max-w-none text-base",
+                  sender === "user" ? "prose-invert" : "prose-neutral"
+                )}
+              >
+                {patternHandlers.length > 0 ? (
+                  React.createElement(
+                    ReactMarkdown,
+                    {
+                      components: {
+                        p: ({ children }) => {
+                          const processedContent = processContent(
+                            String(children)
+                          );
+                          return processedContent ? (
+                            <p>{processedContent}</p>
+                          ) : (
+                            <p>{children}</p>
+                          );
+                        },
                       },
                     },
-                  },
-                  content // Pass content as children, not as a prop
-                )
-              ) : (
-                <ReactMarkdown>{content}</ReactMarkdown>
-              )}
+                    content
+                  )
+                ) : (
+                  <ReactMarkdown>{content}</ReactMarkdown>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* Message Actions - Always visible */}
-      <div
-        className={cn(
-          "transition-opacity mt-1",
-          sender === "user" ? "flex justify-end" : "flex justify-start"
-        )}
-      >
-        <div className="flex items-center gap-2">
-          {sender === "user" ? (
-            <>
-              <button
-                onClick={handleCopy}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                title="Copy message"
-              >
-                {isCopied ? (
-                  <Check size={14} className="text-green-500" />
-                ) : (
-                  <Copy size={14} />
-                )}
-              </button>
-              <button
-                onClick={handleEdit}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                title="Edit message"
-              >
-                <Pencil size={14} />
-              </button>
-              <button
-                onClick={onDelete}
-                className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                title="Delete message"
-              >
-                <Trash2 size={14} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleCopy}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                title="Copy message"
-              >
-                {isCopied ? (
-                  <Check size={14} className="text-green-500" />
-                ) : (
-                  <Copy size={14} />
-                )}
-              </button>
-              <button
-                onClick={onRegenerate}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                title="Regenerate response"
-              >
-                <RefreshCw size={14} />
-              </button>
-              <button
-                onClick={() => handleReaction("like")}
-                className={cn(
-                  "text-muted-foreground hover:text-foreground transition-colors p-1",
-                  reaction === "like" && "text-green-500"
-                )}
-                title="Like response"
-              >
-                <ThumbsUp size={14} />
-              </button>
-              <button
-                onClick={() => handleReaction("dislike")}
-                className={cn(
-                  "text-muted-foreground hover:text-foreground transition-colors p-1",
-                  reaction === "dislike" && "text-red-500"
-                )}
-                title="Dislike response"
-              >
-                <ThumbsDown size={14} />
-              </button>
-            </>
+          {/* Inside action buttons */}
+          {!isEditing && insideButtons.length > 0 && (
+            <div className="px-3 py-1 flex justify-start">
+              <div className="flex items-center gap-2">
+                {insideButtons.map((button) => (
+                  <button
+                    key={button.id}
+                    onClick={button.onClick}
+                    className={cn(
+                      "text-muted-foreground hover:text-foreground transition-colors p-1",
+                      button.className
+                    )}
+                    title={button.title}
+                  >
+                    {button.icon}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
+
+        {/* Outside action buttons - only visible on hover, positioned in row next to message */}
+        {!isEditing && outsideButtons.length > 0 && (
+          <div className="absolute left-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-1 -translate-x-full pr-2 h-full items-center">
+            {outsideButtons.map((button) => (
+              <button
+                key={button.id}
+                onClick={button.onClick}
+                className={cn(
+                  "text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted",
+                  button.className
+                )}
+                title={button.title}
+              >
+                {button.icon}
+              </button>
+            ))}
+            {/* Edit button if message is editable */}
+            {editable && onEdit && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted"
+                title="Edit message"
+              >
+                <PencilIcon size={16} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

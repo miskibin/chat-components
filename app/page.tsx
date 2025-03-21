@@ -387,11 +387,6 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
                     actionButtons={actionButtons}
                     editable={message.sender === "user"}
                     onEdit={(content) => handleEditMessage(message.id, content)}
-                    contentClassName={
-                      message.sender === "assistant"
-                        ? "bg-muted rounded-lg"
-                        : ""
-                    }
                     patternHandlers={
                       message.sender === "assistant"
                         ? patternHandlers
