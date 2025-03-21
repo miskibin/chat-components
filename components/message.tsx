@@ -15,6 +15,15 @@ import {
   X,
 } from "lucide-react";
 
+// Define the pattern handler type
+export interface PatternHandler {
+  pattern: RegExp;
+  component: React.ComponentType<{
+    match: RegExpExecArray;
+    children: React.ReactNode;
+  }>;
+}
+
 export interface MessageProps {
   content: string;
   sender: "user" | "assistant";
@@ -22,6 +31,7 @@ export interface MessageProps {
   onDelete?: () => void;
   onRegenerate?: () => void;
   onReaction?: (reaction: "like" | "dislike") => void;
+  patternHandlers?: PatternHandler[];
   className?: string;
 }
 
@@ -32,6 +42,7 @@ export function Message({
   onDelete,
   onRegenerate,
   onReaction,
+  patternHandlers = [],
   className,
 }: MessageProps) {
   const [isCopied, setIsCopied] = useState(false);
@@ -60,6 +71,50 @@ export function Message({
   const handleReaction = (type: "like" | "dislike") => {
     setReaction(reaction === type ? null : type);
     onReaction?.(type);
+  };
+
+  // Function to process content with pattern handlers
+  const processContent = (text: string): React.ReactElement | null => {
+    if (!text || patternHandlers.length === 0) {
+      return null;
+    }
+
+    const segments: Array<React.ReactNode> = [];
+    let lastIndex = 0;
+
+    for (const { pattern, component: Component } of patternHandlers) {
+      // Reset the lastIndex to ensure we find all matches
+      pattern.lastIndex = 0;
+
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        // Add text before the match
+        if (match.index > lastIndex) {
+          segments.push(text.substring(lastIndex, match.index));
+        }
+
+        // Add the processed match
+        segments.push(
+          <Component key={`pattern-${match.index}`} match={match}>
+            {match[0]}
+          </Component>
+        );
+
+        lastIndex = pattern.lastIndex;
+      }
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      segments.push(text.substring(lastIndex));
+    }
+
+    // If no matches were found, return null so we use the standard rendering
+    if (segments.length === 0) {
+      return null;
+    }
+
+    return <>{segments}</>;
   };
 
   return (
@@ -113,11 +168,33 @@ export function Message({
           <div className="p-3">
             <div
               className={cn(
-                "prose prose-sm max-w-none text-base", // Increased font size
+                "prose prose-sm max-w-none text-base",
                 sender === "user" ? "prose-invert" : "prose-neutral"
               )}
             >
-              <ReactMarkdown>{content}</ReactMarkdown>
+              {patternHandlers.length > 0 ? (
+                // Fix: Separate props and children in React.createElement
+                React.createElement(
+                  ReactMarkdown,
+                  {
+                    components: {
+                      p: ({ children }) => {
+                        const processedContent = processContent(
+                          String(children)
+                        );
+                        return processedContent ? (
+                          <p>{processedContent}</p>
+                        ) : (
+                          <p>{children}</p>
+                        );
+                      },
+                    },
+                  },
+                  content // Pass content as children, not as a prop
+                )
+              ) : (
+                <ReactMarkdown>{content}</ReactMarkdown>
+              )}
             </div>
           </div>
         )}
