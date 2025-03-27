@@ -13,6 +13,7 @@ import {
   Trash2,
   Info,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ChatInput } from "@/components/chat-input";
 import { Message, PatternHandler } from "@/components/message";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,7 @@ export default function ChatExample() {
     Record<string, boolean>
   >({});
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [copying, setCopying] = useState<string | null>(null); // Track which message is being copied
 
   // Define pattern handlers
   const patternHandlers: PatternHandler[] = [
@@ -233,35 +235,81 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
-      setIsLoading(true);
 
       // Remove the current assistant message
       setMessages((prev) => prev.filter((msg) => msg.id !== id));
 
-      // Simulate new response
-      timeoutRef.current = setTimeout(() => {
-        const regeneratedMessage: MessageData = {
-          id: Date.now().toString(),
-          content: `Regenerated response to: "${userMessage.content}"`,
-          sender: "assistant",
-          metadata: {
-            model: selectedModel,
-            responseTime: 2.1,
-            tokens: 180,
-          },
-        };
+      setIsLoading(true);
+      setGenerationStage("thinking");
 
-        setMessages((prev) => [...prev, regeneratedMessage]);
-        setIsLoading(false);
-        timeoutRef.current = null;
-      }, 2000);
+      // Simulate different generation stages
+      timeoutRef.current = setTimeout(() => {
+        setGenerationStage("searching");
+
+        timeoutRef.current = setTimeout(() => {
+          setGenerationStage("responding");
+
+          timeoutRef.current = setTimeout(() => {
+            // Create a different response for regeneration
+            let responseContent = "";
+
+            if (
+              userMessage.content.toLowerCase().includes("ai") ||
+              userMessage.content
+                .toLowerCase()
+                .includes("artificial intelligence")
+            ) {
+              responseContent = `Artificial Intelligence is transforming industries across the globe [1]. 
+              
+It uses computational models to perform tasks that typically require human cognition [2]. Recent advances have enabled AI systems to demonstrate remarkable capabilities in language understanding and generation [3].`;
+            } else {
+              responseContent = `[Regenerated with ${
+                models.find((m) => m.value === selectedModel)?.label
+              }] Here's a different response to: "${userMessage.content}"`;
+            }
+
+            const regeneratedMessage: MessageData = {
+              id: Date.now().toString(),
+              content: responseContent,
+              sender: "assistant",
+              metadata: {
+                model: selectedModel,
+                responseTime: 3.2,
+                tokens: 215,
+              },
+            };
+
+            setMessages((prev) => [...prev, regeneratedMessage]);
+            setIsLoading(false);
+            setGenerationStage("idle");
+            timeoutRef.current = null;
+
+            // Show regeneration toast
+            toast.success("Response regenerated", {
+              description: "A new response has been generated.",
+              duration: 3000,
+            });
+          }, 1500);
+        }, 1500);
+      }, 1500);
     }
   };
 
   // Utility functions for message actions
-  const handleCopy = (content: string) => {
+  const handleCopy = (id: string, content: string) => {
     navigator.clipboard.writeText(content);
-    // You could add a toast notification here
+    setCopying(id);
+
+    // Show a toast notification using Sonner
+    toast.success("Copied to clipboard", {
+      description: "Message content has been copied to your clipboard.",
+      duration: 2000,
+    });
+
+    // Reset the copying state after a short delay
+    setTimeout(() => {
+      setCopying(null);
+    }, 1000);
   };
 
   const toggleMetadata = (id: string) => {
@@ -332,8 +380,15 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
                       },
                       {
                         id: "copy",
-                        icon: <Copy size={14} />,
-                        onClick: () => handleCopy(message.content),
+                        icon: (
+                          <Copy
+                            size={14}
+                            className={
+                              copying === message.id ? "text-green-500" : ""
+                            }
+                          />
+                        ),
+                        onClick: () => handleCopy(message.id, message.content),
                         title: "Copy message",
                         position: "inside" as const,
                       },
@@ -364,8 +419,15 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
                   : [
                       {
                         id: "copy",
-                        icon: <Copy size={16} />,
-                        onClick: () => handleCopy(message.content),
+                        icon: (
+                          <Copy
+                            size={16}
+                            className={
+                              copying === message.id ? "text-green-500" : ""
+                            }
+                          />
+                        ),
+                        onClick: () => handleCopy(message.id, message.content),
                         title: "Copy message",
                         position: "outside" as const,
                       },
@@ -398,22 +460,32 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
                   {message.sender === "assistant" &&
                     message.metadata &&
                     metadataVisible[message.id] && (
-                      <div className="ml-4 mt-1 p-2 bg-muted rounded-md text-xs">
-                        <h4 className="font-medium mb-1">Message Info</h4>
-                        <ul>
+                      <div className="ml-10 mt-1 p-3 bg-muted/80 rounded-md text-sm border border-border shadow-sm max-w-[70%]">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-sm">Message Info</h4>
+                          <button
+                            onClick={() => toggleMetadata(message.id)}
+                            className="text-muted-foreground hover:text-foreground text-xs"
+                          >
+                            Close
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
                           {Object.entries(message.metadata).map(
                             ([key, value]) => (
-                              <li key={key} className="flex justify-between">
-                                <span className="text-muted-foreground capitalize">
+                              <div key={key} className="contents">
+                                <div className="text-muted-foreground capitalize text-xs">
                                   {key.replace(/([A-Z])/g, " $1").trim()}:
-                                </span>
-                                <span className="font-medium">
+                                </div>
+                                <div className="font-medium text-xs">
                                   {String(value)}
-                                </span>
-                              </li>
+                                  {key === "responseTime" && "s"}
+                                  {key === "tokens" && " tokens"}
+                                </div>
+                              </div>
                             )
                           )}
-                        </ul>
+                        </div>
                       </div>
                     )}
                 </div>
