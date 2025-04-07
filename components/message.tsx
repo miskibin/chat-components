@@ -176,10 +176,10 @@ export function Message({
             <div className="p-3">
               <div
                 className={cn(
-                  "prose prose-sm max-w-none text-base ",
+                  "prose prose-sm max-w-none text-base",
                   sender === "user"
                     ? "prose-invert prose-p:text-primary-foreground"
-                    : "prose-neutral"
+                    : "prose-neutral dark:prose-invert"
                 )}
               >
                 {patternHandlers.length > 0 ? (

@@ -1,31 +1,16 @@
+// 2. ChatExample.tsx - Main Component
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import {
-  Globe,
-  Sparkles,
-  Bot,
-  ExternalLink,
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
-  RefreshCw,
-  Trash2,
-  Info,
-} from "lucide-react";
 import { toast } from "sonner";
-import { ChatInput } from "@/components/chat-input";
-import { Message, PatternHandler } from "@/components/message";
-import { Button } from "@/components/ui/button";
-import {
-  GenerationStatus,
-  GenerationStage,
-} from "@/components/generation-status";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ChatHeader } from "./header";
+import { MessageList } from "./message-list";
+import { ChatFooter } from "./footer";
 
 interface MessageData {
   id: string;
@@ -37,6 +22,8 @@ interface MessageData {
     tokens?: number;
   };
 }
+
+type GenerationStage = "idle" | "thinking" | "searching" | "responding";
 
 // Example sources for citations
 const sources = {
@@ -61,13 +48,16 @@ const sources = {
 };
 
 // Citation reference component to handle [number] patterns
-const CitationReference: React.FC<{
-  match: RegExpExecArray;
+const CitationReference = ({
+  match,
+  children,
+}: {
+  match: RegExpMatchArray;
   children: React.ReactNode;
-}> = ({ match, children }) => {
-  // Extract the citation number from the match
-  const citationNumber = match[1];
-  const source = sources[citationNumber as keyof typeof sources];
+}) => {
+  // Extract the citation number from the match and cast it
+  const citationNumber = match[1] as keyof typeof sources;
+  const source = sources[citationNumber];
 
   if (!source) {
     return <span>{children}</span>;
@@ -92,7 +82,7 @@ const CitationReference: React.FC<{
             rel="noopener noreferrer"
             className="flex items-center text-sm text-blue-500 hover:underline"
           >
-            View source <ExternalLink size={12} className="ml-1" />
+            View source <span className="ml-1">↗</span>
           </a>
         </div>
       </PopoverContent>
@@ -105,29 +95,16 @@ export default function ChatExample() {
   const [isLoading, setIsLoading] = useState(false);
   const [generationStage, setGenerationStage] =
     useState<GenerationStage>("idle");
-  const [selectedModel, setSelectedModel] = useState("gpt-4");
-  const [metadataVisible, setMetadataVisible] = useState<
-    Record<string, boolean>
-  >({});
+  const [selectedModel] = useState("gpt-4");
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [copying, setCopying] = useState<string | null>(null); // Track which message is being copied
 
   // Define pattern handlers
-  const patternHandlers: PatternHandler[] = [
+  const patternHandlers = [
     {
       // Match citation references like [1], [2], etc.
       pattern: /\[(\d+)\]/g,
       component: CitationReference,
     },
-  ];
-
-  // List of AI models
-  const models = [
-    { value: "gpt-4", label: "GPT-4" },
-    { value: "gpt-3.5", label: "GPT-3.5" },
-    { value: "claude-3", label: "Claude 3" },
-    { value: "gemini-pro", label: "Gemini Pro" },
-    { value: "llama-3", label: "Llama 3" },
   ];
 
   const handleSendMessage = (content: string) => {
@@ -163,7 +140,15 @@ export default function ChatExample() {
 Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. Recent advancements in deep learning have significantly improved AI capabilities in areas like image recognition and natural language processing [3].`;
           } else {
             responseContent = `[${
-              models.find((m) => m.value === selectedModel)?.label
+              selectedModel === "gpt-4"
+                ? "GPT-4"
+                : selectedModel === "gpt-3.5"
+                ? "GPT-3.5"
+                : selectedModel === "claude-3"
+                ? "Claude 3"
+                : selectedModel === "gemini-pro"
+                ? "Gemini Pro"
+                : "Llama 3"
             }] Response to: "${content}"`;
           }
 
@@ -264,7 +249,15 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
 It uses computational models to perform tasks that typically require human cognition [2]. Recent advances have enabled AI systems to demonstrate remarkable capabilities in language understanding and generation [3].`;
             } else {
               responseContent = `[Regenerated with ${
-                models.find((m) => m.value === selectedModel)?.label
+                selectedModel === "gpt-4"
+                  ? "GPT-4"
+                  : selectedModel === "gpt-3.5"
+                  ? "GPT-3.5"
+                  : selectedModel === "claude-3"
+                  ? "Claude 3"
+                  : selectedModel === "gemini-pro"
+                  ? "Gemini Pro"
+                  : "Llama 3"
               }] Here's a different response to: "${userMessage.content}"`;
             }
 
@@ -295,30 +288,6 @@ It uses computational models to perform tasks that typically require human cogni
     }
   };
 
-  // Utility functions for message actions
-  const handleCopy = (id: string, content: string) => {
-    navigator.clipboard.writeText(content);
-    setCopying(id);
-
-    // Show a toast notification using Sonner
-    toast.success("Copied to clipboard", {
-      description: "Message content has been copied to your clipboard.",
-      duration: 2000,
-    });
-
-    // Reset the copying state after a short delay
-    setTimeout(() => {
-      setCopying(null);
-    }, 1000);
-  };
-
-  const toggleMetadata = (id: string) => {
-    setMetadataVisible((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
-
   // Clean up timeouts on unmount
   useEffect(() => {
     return () => {
@@ -329,204 +298,24 @@ It uses computational models to perform tasks that typically require human cogni
   }, []);
 
   return (
-    <>
-      <div className="p-4 flex justify-between items-center border-b bg-gray-100">
-        <h1 className="text-lg font-semibold">Chat Example</h1>
-        <div className="flex gap-2">
-          <Button asChild>
-            <a
-              href="https://github.com/miskibin/chat-input"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Repository
-            </a>
-          </Button>
-          <Button asChild variant="outline">
-            <a
-              href="https://github.com/miskibin/chat-input/blob/main/README.md"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Documentation
-            </a>
-          </Button>
-        </div>
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <ChatHeader />
+      <div className="container mx-auto min-h-[80vh] flex flex-col flex-1">
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          generationStage={generationStage}
+          patternHandlers={patternHandlers}
+          onEditMessage={handleEditMessage}
+          onDeleteMessage={handleDeleteMessage}
+          onRegenerateMessage={handleRegenerateMessage}
+        />
+        <ChatFooter
+          onSendMessage={handleSendMessage}
+          onStopGeneration={handleStopGeneration}
+          isLoading={isLoading}
+        />
       </div>
-      <div className="container mx-auto min-h-[80vh] flex flex-col">
-        {/* Messages area */}
-        <div className="h-4/5 flex-1 overflow-y-auto p-4 space-y-8">
-          {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-muted-foreground text-base">
-                Ask me anything about AI to see citation references in action...
-              </p>
-            </div>
-          ) : (
-            messages.map((message) => {
-              // Dynamically create action buttons based on message type
-              const actionButtons =
-                message.sender === "assistant"
-                  ? [
-                      {
-                        id: "info",
-                        icon: <Info size={14} />,
-                        onClick: () => toggleMetadata(message.id),
-                        title: "View message info",
-                        position: "inside" as const,
-                        className: metadataVisible[message.id]
-                          ? "text-blue-500"
-                          : "",
-                      },
-                      {
-                        id: "copy",
-                        icon: (
-                          <Copy
-                            size={14}
-                            className={
-                              copying === message.id ? "text-green-500" : ""
-                            }
-                          />
-                        ),
-                        onClick: () => handleCopy(message.id, message.content),
-                        title: "Copy message",
-                        position: "inside" as const,
-                      },
-                      {
-                        id: "regenerate",
-                        icon: <RefreshCw size={14} />,
-                        onClick: () => handleRegenerateMessage(message.id),
-                        title: "Regenerate response",
-                        position: "inside" as const,
-                      },
-                      {
-                        id: "like",
-                        icon: <ThumbsUp size={14} />,
-                        onClick: () =>
-                          console.log(`Liked message ${message.id}`),
-                        title: "Like response",
-                        position: "inside" as const,
-                      },
-                      {
-                        id: "dislike",
-                        icon: <ThumbsDown size={14} />,
-                        onClick: () =>
-                          console.log(`Disliked message ${message.id}`),
-                        title: "Dislike response",
-                        position: "inside" as const,
-                      },
-                    ]
-                  : [
-                      {
-                        id: "copy",
-                        icon: (
-                          <Copy
-                            size={16}
-                            className={
-                              copying === message.id ? "text-green-500" : ""
-                            }
-                          />
-                        ),
-                        onClick: () => handleCopy(message.id, message.content),
-                        title: "Copy message",
-                        position: "outside" as const,
-                      },
-                      {
-                        id: "delete",
-                        icon: <Trash2 size={16} />,
-                        onClick: () => handleDeleteMessage(message.id),
-                        title: "Delete message",
-                        position: "outside" as const,
-                        className: "hover:text-destructive",
-                      },
-                    ];
-
-              return (
-                <div key={message.id} className="w-full">
-                  <Message
-                    content={message.content}
-                    sender={message.sender}
-                    actionButtons={actionButtons}
-                    editable={message.sender === "user"}
-                    onEdit={(content) => handleEditMessage(message.id, content)}
-                    patternHandlers={
-                      message.sender === "assistant"
-                        ? patternHandlers
-                        : undefined
-                    }
-                  />
-
-                  {/* Metadata display if toggled */}
-                  {message.sender === "assistant" &&
-                    message.metadata &&
-                    metadataVisible[message.id] && (
-                      <div className="ml-10 mt-1 p-3 bg-muted/80 rounded-md text-sm border border-border shadow-sm max-w-[70%]">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-sm">Message Info</h4>
-                          <button
-                            onClick={() => toggleMetadata(message.id)}
-                            className="text-muted-foreground hover:text-foreground text-xs"
-                          >
-                            Close
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.entries(message.metadata).map(
-                            ([key, value]) => (
-                              <div key={key} className="contents">
-                                <div className="text-muted-foreground capitalize text-xs">
-                                  {key.replace(/([A-Z])/g, " $1").trim()}:
-                                </div>
-                                <div className="font-medium text-xs">
-                                  {String(value)}
-                                  {key === "responseTime" && "s"}
-                                  {key === "tokens" && " tokens"}
-                                </div>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-                </div>
-              );
-            })
-          )}
-
-          {isLoading && <GenerationStatus stage={generationStage} />}
-        </div>
-
-        {/* Chat input */}
-        <div className="p-4">
-          <ChatInput
-            onSend={handleSendMessage}
-            onStopGeneration={handleStopGeneration}
-            isLoading={isLoading}
-            placeholder="Ask about AI to see citation handling"
-            tools={[
-              {
-                id: "search",
-                label: "Search",
-                icon: <Globe size={14} className="mr-1" />,
-              },
-              {
-                id: "think",
-                label: "Think",
-                icon: <Sparkles size={14} className="mr-1" />,
-              },
-              {
-                id: "model",
-                label: "Model",
-                icon: <Bot size={14} className="mr-1" />,
-                type: "dropdown",
-                options: models,
-                value: selectedModel,
-                onChange: setSelectedModel,
-              },
-            ]}
-          />
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
