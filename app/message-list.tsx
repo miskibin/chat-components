@@ -74,11 +74,7 @@ export function MessageList({
   return (
     <div className="h-4/5 flex-1 overflow-y-auto p-4 space-y-8">
       {messages.length === 0 ? (
-        <div className="flex items-center justify-center h-full">
-          <p className="text-muted-foreground text-base">
-            Ask me anything about AI to see citation references in action...
-          </p>
-        </div>
+        <div className="flex items-center justify-center h-full"></div>
       ) : (
         messages.map((message) => {
           const actionButtons =
