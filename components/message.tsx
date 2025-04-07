@@ -4,7 +4,7 @@ import * as React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
-import { PencilIcon } from "lucide-react";
+import { PencilIcon, Save, Undo } from "lucide-react";
 
 // Define the pattern handler type
 export interface PatternHandler {
@@ -158,17 +158,17 @@ export function Message({
                     setIsEditing(false);
                     setEditedContent(content);
                   }}
-                  className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                  className="text-white transition-colors"
                   title="Cancel"
                 >
-                  Cancel
+                  <Undo height={18} />
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  className="text-primary hover:text-primary/80 transition-colors p-1"
+                  className="text-white"
                   title="Save"
                 >
-                  Save
+                  <Save height={18} />
                 </button>
               </div>
             </div>
@@ -176,7 +176,7 @@ export function Message({
             <div className="p-3">
               <div
                 className={cn(
-                  "prose prose-sm max-w-none text-base",
+                  "prose prose-sm max-w-none text-base prose-p:text-primary-foreground",
                   sender === "user" ? "prose-invert" : "prose-neutral"
                 )}
               >
