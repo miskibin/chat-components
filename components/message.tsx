@@ -9,10 +9,7 @@ import { PencilIcon, Save, Undo } from "lucide-react";
 // Define the pattern handler type
 export interface PatternHandler {
   pattern: RegExp;
-  component: React.ComponentType<{
-    match: RegExpExecArray;
-    children: React.ReactNode;
-  }>;
+  render: (match: RegExpExecArray) => React.ReactNode;
 }
 
 // Define a generic action button interface
@@ -67,47 +64,60 @@ export function Message({
   };
 
   // Function to process content with pattern handlers
-  const processContent = (text: string): React.ReactElement | null => {
-    if (!text || patternHandlers.length === 0) {
-      return null;
+  const processContent = (text: string): React.ReactNode => {
+    // Safety check for empty or non-string text
+    if (!text || typeof text !== 'string' || patternHandlers.length === 0) {
+      return text;
     }
 
     const segments: Array<React.ReactNode> = [];
     let lastIndex = 0;
 
-    for (const { pattern, component: Component } of patternHandlers) {
-      // Reset the lastIndex to ensure we find all matches
-      pattern.lastIndex = 0;
+    try {
+      for (const { pattern, render } of patternHandlers) {
+        // Reset the lastIndex to ensure we find all matches
+        pattern.lastIndex = 0;
 
-      let match;
-      while ((match = pattern.exec(text)) !== null) {
-        // Add text before the match
-        if (match.index > lastIndex) {
-          segments.push(text.substring(lastIndex, match.index));
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+          // Add text before the match
+          if (match.index > lastIndex) {
+            segments.push(text.substring(lastIndex, match.index));
+          }
+
+          // Safety check: Ensure the render function returns a valid React node
+          let rendered;
+          try {
+            rendered = render(match);
+            // Ensure rendered content is not undefined
+            if (rendered === undefined) {
+              rendered = match[0]; // Fallback to original text
+            }
+          } catch (e) {
+            console.error("Error rendering pattern match:", e);
+            rendered = match[0]; // Fallback to original text
+          }
+
+          segments.push(rendered);
+          lastIndex = pattern.lastIndex;
         }
-
-        // Add the processed match
-        segments.push(
-          <Component key={`pattern-${match.index}`} match={match}>
-            {match[0]}
-          </Component>
-        );
-
-        lastIndex = pattern.lastIndex;
       }
-    }
 
-    // Add remaining text
-    if (lastIndex < text.length) {
-      segments.push(text.substring(lastIndex));
-    }
+      // Add remaining text
+      if (lastIndex < text.length) {
+        segments.push(text.substring(lastIndex));
+      }
 
-    // If no matches were found, return null so we use the standard rendering
-    if (segments.length === 0) {
-      return null;
-    }
+      // If no matches were found, return the original text
+      if (segments.length === 0) {
+        return text;
+      }
 
-    return <>{segments}</>;
+      return <>{segments}</>;
+    } catch (error) {
+      console.error("Error processing content patterns:", error);
+      return text; // Return original text as fallback
+    }
   };
 
   // Filter buttons by position
@@ -183,26 +193,26 @@ export function Message({
                 )}
               >
                 {patternHandlers.length > 0 ? (
-                  React.createElement(
-                    ReactMarkdown,
-                    {
-                      components: {
-                        p: ({ children }) => {
-                          const processedContent = processContent(
-                            String(children)
-                          );
-                          return processedContent ? (
-                            <p>{processedContent}</p>
-                          ) : (
-                            <p>{children}</p>
-                          );
-                        },
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => {
+                        try {
+                          // Safety check to ensure children is valid
+                          const childText = String(children || '');
+                          const processedContent = processContent(childText);
+                          return <p>{processedContent}</p>;
+                        } catch (error) {
+                          console.error("Error rendering markdown paragraph:", error);
+                          // Fallback to simple text rendering
+                          return <p>{String(children || '')}</p>;
+                        }
                       },
-                    },
-                    content
-                  )
+                    }}
+                  >
+                    {content || ''}
+                  </ReactMarkdown>
                 ) : (
-                  <ReactMarkdown>{content}</ReactMarkdown>
+                  <ReactMarkdown>{content || ''}</ReactMarkdown>
                 )}
               </div>
             </div>
