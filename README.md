@@ -84,55 +84,132 @@ export default function ChatPage() {
 }
 ```
 
-### Message Component
+## Usage: Message Component
 
-```jsx
-import { Message } from "@/components/ui/message";
+The `Message` component is a flexible chat message UI element that supports:
+- Custom action buttons (inside or outside the message)
+- Inline editing (for user messages)
+- Pattern handling (e.g. citations, links, custom markup)
+- Markdown rendering with Tailwind prose styling
+
+### Basic Example
+
+```tsx
+import { Message, PatternHandler } from "@/components/message";
 import { Copy, ThumbsUp, ThumbsDown, Info } from "lucide-react";
 
-export default function ChatMessages() {
-  const actionButtons = [
-    {
-      id: "copy",
-      icon: <Copy size={14} />,
-      onClick: () => console.log("Copy clicked"),
-      title: "Copy message",
-      position: "inside",
-    },
-    {
-      id: "like",
-      icon: <ThumbsUp size={14} />,
-      onClick: () => console.log("Like clicked"),
-      title: "Like response",
-      position: "inside",
-    },
-    {
-      id: "info",
-      icon: <Info size={14} />,
-      onClick: () => console.log("Info clicked"),
-      title: "View message info",
-      position: "inside",
-    },
-  ];
+// Optional: Define pattern handlers for special inline content
+const patternHandlers: PatternHandler[] = [
+  {
+    pattern: /\[(\d+)\]/g,
+    render: (match) => <span style={{ color: 'blue' }}>{match[0]}</span>,
+  },
+];
 
+const actionButtons = [
+  {
+    id: "copy",
+    icon: <Copy size={14} />,
+    onClick: () => alert("Copy clicked"),
+    title: "Copy message",
+    position: "inside",
+  },
+  {
+    id: "like",
+    icon: <ThumbsUp size={14} />,
+    onClick: () => alert("Like clicked"),
+    title: "Like response",
+    position: "inside",
+  },
+  {
+    id: "info",
+    icon: <Info size={14} />,
+    onClick: () => alert("Info clicked"),
+    title: "View message info",
+    position: "inside",
+  },
+];
+
+export default function Example() {
   return (
-    <div className="space-y-4">
-      <Message
-        content="How can I help you today?"
-        sender="assistant"
-        actionButtons={actionButtons}
-      />
-      
-      <Message
-        content="I need help with React components"
-        sender="user"
-        editable={true}
-        onEdit={(newContent) => console.log("Edited:", newContent)}
-      />
-    </div>
+    <Message
+      content={"This is a message with a citation [1]."}
+      sender="assistant"
+      actionButtons={actionButtons}
+      patternHandlers={patternHandlers}
+    />
   );
 }
 ```
+
+### Props
+
+| Prop              | Type                        | Description                                      |
+|-------------------|-----------------------------|--------------------------------------------------|
+| `content`         | `string`                    | The message text (supports markdown)             |
+| `sender`          | `'user' | 'assistant'`      | Who sent the message                             |
+| `actionButtons`   | `ActionButton[]`            | Custom action buttons (see below)                |
+| `editable`        | `boolean`                   | If true, message can be edited (user only)       |
+| `onEdit`          | `(content: string) => void` | Callback for when message is edited              |
+| `patternHandlers` | `PatternHandler[]`          | Array of pattern handlers for inline content      |
+| `className`       | `string`                    | Additional class for the message container        |
+| `contentClassName`| `string`                    | Additional class for the content wrapper          |
+
+#### ActionButton
+| Prop      | Type            | Description                                 |
+|-----------|-----------------|---------------------------------------------|
+| `id`      | `string`        | Unique button id                            |
+| `icon`    | `React.ReactNode`| Icon to display                             |
+| `onClick` | `() => void`    | Click handler                               |
+| `title`   | `string`        | Tooltip/title text                          |
+| `className`| `string`       | Additional class for the button             |
+| `position`| `'inside'\|'outside'` | Where to show the button (default: inside) |
+
+#### PatternHandler
+| Prop      | Type            | Description                                 |
+|-----------|-----------------|---------------------------------------------|
+| `pattern` | `RegExp`        | Regex to match special inline content       |
+| `render`  | `(match: RegExpExecArray) => React.ReactNode` | Render function for the match |
+
+### Pattern Handling Example
+
+To highlight citations like `[1]` in blue and make them clickable:
+
+```tsx
+const patternHandlers: PatternHandler[] = [
+  {
+    pattern: /\[(\d+)\]/g,
+    render: (match) => (
+      <a href={`#citation-${match[1]}`} style={{ color: 'blue', fontWeight: 600 }}>
+        {match[0]}
+      </a>
+    ),
+  },
+];
+
+<Message
+  content={"This is a message with a citation [1]."}
+  sender="assistant"
+  patternHandlers={patternHandlers}
+/>
+```
+
+### Editing
+
+To allow editing (for user messages):
+
+```tsx
+<Message
+  content={userMessage}
+  sender="user"
+  editable={true}
+  onEdit={newContent => setUserMessage(newContent)}
+/>
+```
+
+---
+
+For a full chat experience, see how `Message` is used in `MessageList` in `app/message-list.tsx`.
 
 ### Generation Status
 

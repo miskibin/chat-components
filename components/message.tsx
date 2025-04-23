@@ -48,85 +48,86 @@ export function Message({
 
   const handleSaveEdit = () => {
     setIsEditing(false);
-    if (onEdit && editedContent !== content) {
-      onEdit(editedContent);
-    }
+    if (onEdit && editedContent !== content) onEdit(editedContent);
   };
 
-  // Handle keyboard events for the edit textarea
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      handleSaveEdit();
-    } else if (e.key === "Escape") {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSaveEdit();
+    else if (e.key === "Escape") {
       setIsEditing(false);
       setEditedContent(content);
     }
   };
 
-  // Function to process content with pattern handlers
   const processContent = (text: string): React.ReactNode => {
-    // Safety check for empty or non-string text
-    if (!text || typeof text !== 'string' || patternHandlers.length === 0) {
+    if (!text || typeof text !== "string" || patternHandlers.length === 0)
       return text;
+    const segments: React.ReactNode[] = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+      let earliest: {
+        handler: PatternHandler;
+        match: RegExpExecArray;
+        index: number;
+      } | null = null;
+      for (const handler of patternHandlers) {
+        handler.pattern.lastIndex = cursor;
+        const match = handler.pattern.exec(text);
+        if (match && (!earliest || match.index < earliest.index))
+          earliest = { handler, match, index: match.index };
+      }
+      if (!earliest) {
+        segments.push(text.slice(cursor));
+        break;
+      }
+      if (earliest.index > cursor)
+        segments.push(text.slice(cursor, earliest.index));
+      let rendered;
+      try {
+        rendered = earliest.handler.render(earliest.match) ?? earliest.match[0];
+      } catch {
+        rendered = earliest.match[0];
+      }
+      segments.push(rendered);
+      cursor = earliest.index + earliest.match[0].length;
     }
-
-    const segments: Array<React.ReactNode> = [];
-    let lastIndex = 0;
-
-    try {
-      for (const { pattern, render } of patternHandlers) {
-        // Reset the lastIndex to ensure we find all matches
-        pattern.lastIndex = 0;
-
-        let match;
-        while ((match = pattern.exec(text)) !== null) {
-          // Add text before the match
-          if (match.index > lastIndex) {
-            segments.push(text.substring(lastIndex, match.index));
-          }
-
-          // Safety check: Ensure the render function returns a valid React node
-          let rendered;
-          try {
-            rendered = render(match);
-            // Ensure rendered content is not undefined
-            if (rendered === undefined) {
-              rendered = match[0]; // Fallback to original text
-            }
-          } catch (e) {
-            console.error("Error rendering pattern match:", e);
-            rendered = match[0]; // Fallback to original text
-          }
-
-          segments.push(rendered);
-          lastIndex = pattern.lastIndex;
-        }
-      }
-
-      // Add remaining text
-      if (lastIndex < text.length) {
-        segments.push(text.substring(lastIndex));
-      }
-
-      // If no matches were found, return the original text
-      if (segments.length === 0) {
-        return text;
-      }
-
-      return <>{segments}</>;
-    } catch (error) {
-      console.error("Error processing content patterns:", error);
-      return text; // Return original text as fallback
-    }
+    return <>{segments}</>;
   };
 
-  // Filter buttons by position
   const insideButtons = actionButtons.filter(
     (btn) => btn.position !== "outside"
   );
   const outsideButtons = actionButtons.filter(
     (btn) => btn.position === "outside"
   );
+
+  const markdownComponents =
+    patternHandlers.length > 0
+      ? {
+          p: ({ children }: any) => (
+            <p>
+              {Array.isArray(children)
+                ? children.map((c, i) =>
+                    typeof c === "string" ? processContent(c) : c
+                  )
+                : typeof children === "string"
+                ? processContent(children)
+                : children}
+            </p>
+          ),
+          li: ({ children }: any) => (
+            <li>
+              {Array.isArray(children)
+                ? children.map((c, i) =>
+                    typeof c === "string" ? processContent(c) : c
+                  )
+                : typeof children === "string"
+                ? processContent(children)
+                : children}
+            </li>
+          ),
+        }
+      : undefined;
 
   return (
     <div
@@ -137,7 +138,6 @@ export function Message({
       )}
     >
       <div className="relative">
-        {/* Message content */}
         <div
           className={cn(
             "max-w-[90vw] sm:max-w-[70vw]",
@@ -192,33 +192,12 @@ export function Message({
                     : "prose-neutral dark:prose-invert"
                 )}
               >
-                {patternHandlers.length > 0 ? (
-                  <ReactMarkdown
-                    components={{
-                      p: ({ children }) => {
-                        try {
-                          // Safety check to ensure children is valid
-                          const childText = String(children || '');
-                          const processedContent = processContent(childText);
-                          return <p>{processedContent}</p>;
-                        } catch (error) {
-                          console.error("Error rendering markdown paragraph:", error);
-                          // Fallback to simple text rendering
-                          return <p>{String(children || '')}</p>;
-                        }
-                      },
-                    }}
-                  >
-                    {content || ''}
-                  </ReactMarkdown>
-                ) : (
-                  <ReactMarkdown>{content || ''}</ReactMarkdown>
-                )}
+                <ReactMarkdown components={markdownComponents}>
+                  {content || ""}
+                </ReactMarkdown>
               </div>
             </div>
           )}
-
-          {/* Inside action buttons */}
           {!isEditing && insideButtons.length > 0 && (
             <div className="px-3 py-1 flex justify-start">
               <div className="flex items-center gap-2">
@@ -239,8 +218,6 @@ export function Message({
             </div>
           )}
         </div>
-
-        {/* Outside action buttons - only visible on hover, positioned in row next to message */}
         {!isEditing && outsideButtons.length > 0 && (
           <div className="absolute left-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-1 -translate-x-full pr-2 h-full items-center">
             {outsideButtons.map((button) => (
@@ -256,7 +233,6 @@ export function Message({
                 {button.icon}
               </button>
             ))}
-            {/* Edit button if message is editable */}
             {editable && onEdit && (
               <button
                 onClick={() => setIsEditing(true)}

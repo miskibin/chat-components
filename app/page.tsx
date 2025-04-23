@@ -103,7 +103,9 @@ export default function ChatExample() {
     {
       // Match citation references like [1], [2], etc.
       pattern: /\[(\d+)\]/g,
-      component: CitationReference,
+      render: (match: RegExpMatchArray) => (
+        <CitationReference match={match}>{match[0]}</CitationReference>
+      ),
     },
   ];
 
