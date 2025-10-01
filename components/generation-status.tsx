@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, Sparkles, MessageSquare } from "lucide-react";
+import { Globe, MessageSquare, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
@@ -32,7 +32,7 @@ export function GenerationStatus({ stage, className }: GenerationStatusProps) {
       <div className="flex items-center gap-2 p-3 rounded-lg bg-muted max-w-[80%]">
         {stage === "thinking" && (
           <>
-            <Sparkles size={16} className="text-yellow-500 animate-pulse" />
+            <Brain size={16} className="text-purple-500 animate-pulse" />
             <span className="text-sm text-muted-foreground">
               Thinking{dots}
             </span>

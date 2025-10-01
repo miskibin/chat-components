@@ -1,4 +1,4 @@
-// 2. ChatExample.tsx - Main Component
+// ChatExample.tsx - Main Component with Think Tag Demo
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -55,7 +55,6 @@ const CitationReference = ({
   match: RegExpMatchArray;
   children: React.ReactNode;
 }) => {
-  // Extract the citation number from the match and cast it
   const citationNumber = match[1] as keyof typeof sources;
   const source = sources[citationNumber];
 
@@ -101,7 +100,6 @@ export default function ChatExample() {
   // Define pattern handlers
   const patternHandlers = [
     {
-      // Match citation references like [1], [2], etc.
       pattern: /\[(\d+)\]/g,
       render: (match: RegExpMatchArray) => (
         <CitationReference match={match}>{match[0]}</CitationReference>
@@ -110,7 +108,6 @@ export default function ChatExample() {
   ];
 
   const handleSendMessage = (content: string) => {
-    // Add user message
     const userMessage: MessageData = {
       id: Date.now().toString(),
       content,
@@ -119,8 +116,6 @@ export default function ChatExample() {
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
-
-    // Simulate different generation stages
     setGenerationStage("thinking");
 
     timeoutRef.current = setTimeout(() => {
@@ -130,18 +125,66 @@ export default function ChatExample() {
         setGenerationStage("responding");
 
         timeoutRef.current = setTimeout(() => {
-          // Generate response with example citations if the query is related to AI
           let responseContent = "";
 
+          // Generate response with thinking tags for AI-related queries
           if (
             content.toLowerCase().includes("ai") ||
-            content.toLowerCase().includes("artificial intelligence")
+            content.toLowerCase().includes("artificial intelligence") ||
+            content.toLowerCase().includes("machine learning")
           ) {
-            responseContent = `Artificial Intelligence (AI) is a field of computer science focused on creating systems capable of performing tasks that typically require human intelligence [1]. These include learning, reasoning, problem-solving, perception, and language understanding.
-            
-Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. Recent advancements in deep learning have significantly improved AI capabilities in areas like image recognition and natural language processing [3].`;
+            responseContent = `<think>
+Let me break down this question about AI systematically:
+
+1. **Understanding the query**: The user is asking about artificial intelligence and its applications
+2. **Key areas to cover**: 
+   - Definition and core concepts
+   - Machine learning as a subset
+   - Recent developments
+3. **Sources to reference**: I should cite relevant sources [1], [2], and [3]
+4. **Structure**: Start with a clear definition, then expand into ML and recent advances
+</think>
+
+Artificial Intelligence (AI) is a field of computer science focused on creating systems capable of performing tasks that typically require human intelligence [1]. These include learning, reasoning, problem-solving, perception, and language understanding.
+
+Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. This approach allows computers to improve their performance on tasks through experience, without being explicitly programmed for every scenario.
+
+Recent advancements in deep learning have significantly improved AI capabilities in areas like:
+- **Image recognition**: Identifying objects, faces, and scenes in photos
+- **Natural language processing**: Understanding and generating human language
+- **Decision making**: Making complex decisions based on large datasets
+
+These developments [3] have enabled AI to be applied across industries, from healthcare diagnostics to autonomous vehicles.`;
+          } else if (
+            content.toLowerCase().includes("think") ||
+            content.toLowerCase().includes("reasoning")
+          ) {
+            responseContent = `<think>
+The user is asking about thinking or reasoning. Let me demonstrate the thinking process:
+
+**Step 1**: Identify what they want to know
+**Step 2**: Consider different aspects of reasoning
+**Step 3**: Provide a comprehensive answer
+**Step 4**: Make it clear and actionable
+</think>
+
+Great question! When AI systems use extended thinking or reasoning, they break down complex problems into smaller steps. This approach, similar to human problem-solving, involves:
+
+1. **Analyzing the problem** - Understanding what's being asked
+2. **Breaking it down** - Dividing complex questions into manageable parts
+3. **Evaluating options** - Considering different approaches
+4. **Synthesizing** - Combining insights into a coherent answer
+
+This multi-step reasoning process often leads to more accurate and thoughtful responses, especially for complex or nuanced questions.`;
           } else {
-            responseContent = `[${
+            responseContent = `<think>
+Processing user query: "${content}"
+- Query type: General question
+- Approach: Provide helpful, concise response
+- Model: ${selectedModel}
+</think>
+
+[${
               selectedModel === "gpt-4"
                 ? "GPT-4"
                 : selectedModel === "gpt-3.5"
@@ -151,7 +194,9 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
                 : selectedModel === "gemini-pro"
                 ? "Gemini Pro"
                 : "Llama 3"
-            }] Response to: "${content}"`;
+            }] I understand your question: "${content}"
+
+Let me help you with that. Could you provide more details about what specific aspect you'd like to know more about?`;
           }
 
           const assistantMessage: MessageData = {
@@ -179,7 +224,6 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
 
-      // Add a "generation stopped" message
       const stoppedMessage: MessageData = {
         id: Date.now().toString(),
         content: "Generation stopped by user",
@@ -211,7 +255,6 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
     const messageIndex = messages.findIndex((msg) => msg.id === id);
     if (messageIndex < 0) return;
 
-    // Find the previous user message
     let userMessageIndex = messageIndex - 1;
     while (
       userMessageIndex >= 0 &&
@@ -222,14 +265,11 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
-
-      // Remove the current assistant message
       setMessages((prev) => prev.filter((msg) => msg.id !== id));
 
       setIsLoading(true);
       setGenerationStage("thinking");
 
-      // Simulate different generation stages
       timeoutRef.current = setTimeout(() => {
         setGenerationStage("searching");
 
@@ -237,7 +277,6 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
           setGenerationStage("responding");
 
           timeoutRef.current = setTimeout(() => {
-            // Create a different response for regeneration
             let responseContent = "";
 
             if (
@@ -246,11 +285,30 @@ Machine learning, a subset of AI, uses algorithms to enable systems to learn fro
                 .toLowerCase()
                 .includes("artificial intelligence")
             ) {
-              responseContent = `Artificial Intelligence is transforming industries across the globe [1]. 
-              
-It uses computational models to perform tasks that typically require human cognition [2]. Recent advances have enabled AI systems to demonstrate remarkable capabilities in language understanding and generation [3].`;
+              responseContent = `<think>
+Regenerating response with different approach:
+- Focus on practical applications
+- Include more specific examples
+- Reference different aspects than before
+</think>
+
+Artificial Intelligence is transforming industries across the globe [1]. 
+
+It uses computational models to perform tasks that typically require human cognition [2]. Recent advances have enabled AI systems to demonstrate remarkable capabilities in language understanding and generation [3].
+
+Some key applications include:
+- Healthcare: Diagnostic assistance and drug discovery
+- Finance: Fraud detection and algorithmic trading
+- Transportation: Self-driving vehicles and route optimization`;
             } else {
-              responseContent = `[Regenerated with ${
+              responseContent = `<think>
+Regenerating with fresh perspective:
+- Original query: "${userMessage.content}"
+- New angle: More detailed explanation
+- Include examples
+</think>
+
+[Regenerated with ${
                 selectedModel === "gpt-4"
                   ? "GPT-4"
                   : selectedModel === "gpt-3.5"
@@ -260,7 +318,9 @@ It uses computational models to perform tasks that typically require human cogni
                   : selectedModel === "gemini-pro"
                   ? "Gemini Pro"
                   : "Llama 3"
-              }] Here's a different response to: "${userMessage.content}"`;
+              }] Here's a different perspective on: "${userMessage.content}"
+
+I've thought through this from a different angle and can provide additional insights...`;
             }
 
             const regeneratedMessage: MessageData = {
@@ -279,7 +339,6 @@ It uses computational models to perform tasks that typically require human cogni
             setGenerationStage("idle");
             timeoutRef.current = null;
 
-            // Show regeneration toast
             toast.success("Response regenerated", {
               description: "A new response has been generated.",
               duration: 3000,
@@ -290,7 +349,6 @@ It uses computational models to perform tasks that typically require human cogni
     }
   };
 
-  // Clean up timeouts on unmount
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {

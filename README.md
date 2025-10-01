@@ -19,6 +19,7 @@ This package includes several components for building modern chat interfaces:
 - 💬 Modern chat interface with rich components
 - 🛠️ Support for customizable action buttons and tools
 - 🔍 Pattern handling for citations and other special content
+- 🧠 **Thinking model support** - Automatically handles `<think>...</think>` tags in collapsible sections
 - ⌨️ Keyboard shortcuts support
 - 🔄 Generation status indicators with stop capability
 - 📱 Responsive design with mobile-friendly UI
@@ -144,32 +145,32 @@ export default function Example() {
 
 ### Props
 
-| Prop              | Type                        | Description                                      |
-|-------------------|-----------------------------|--------------------------------------------------|
-| `content`         | `string`                    | The message text (supports markdown)             |
-| `sender`          | `'user' | 'assistant'`      | Who sent the message                             |
-| `actionButtons`   | `ActionButton[]`            | Custom action buttons (see below)                |
-| `editable`        | `boolean`                   | If true, message can be edited (user only)       |
-| `onEdit`          | `(content: string) => void` | Callback for when message is edited              |
-| `patternHandlers` | `PatternHandler[]`          | Array of pattern handlers for inline content      |
-| `className`       | `string`                    | Additional class for the message container        |
-| `contentClassName`| `string`                    | Additional class for the content wrapper          |
+| Prop               | Type                        | Description                                  |
+| ------------------ | --------------------------- | -------------------------------------------- |
+| `content`          | `string`                    | The message text (supports markdown)         |
+| `sender`           | `'user'                     | 'assistant'`                                 | Who sent the message |
+| `actionButtons`    | `ActionButton[]`            | Custom action buttons (see below)            |
+| `editable`         | `boolean`                   | If true, message can be edited (user only)   |
+| `onEdit`           | `(content: string) => void` | Callback for when message is edited          |
+| `patternHandlers`  | `PatternHandler[]`          | Array of pattern handlers for inline content |
+| `className`        | `string`                    | Additional class for the message container   |
+| `contentClassName` | `string`                    | Additional class for the content wrapper     |
 
 #### ActionButton
-| Prop      | Type            | Description                                 |
-|-----------|-----------------|---------------------------------------------|
-| `id`      | `string`        | Unique button id                            |
-| `icon`    | `React.ReactNode`| Icon to display                             |
-| `onClick` | `() => void`    | Click handler                               |
-| `title`   | `string`        | Tooltip/title text                          |
-| `className`| `string`       | Additional class for the button             |
-| `position`| `'inside'\|'outside'` | Where to show the button (default: inside) |
+| Prop        | Type                  | Description                                |
+| ----------- | --------------------- | ------------------------------------------ |
+| `id`        | `string`              | Unique button id                           |
+| `icon`      | `React.ReactNode`     | Icon to display                            |
+| `onClick`   | `() => void`          | Click handler                              |
+| `title`     | `string`              | Tooltip/title text                         |
+| `className` | `string`              | Additional class for the button            |
+| `position`  | `'inside'\|'outside'` | Where to show the button (default: inside) |
 
 #### PatternHandler
-| Prop      | Type            | Description                                 |
-|-----------|-----------------|---------------------------------------------|
-| `pattern` | `RegExp`        | Regex to match special inline content       |
-| `render`  | `(match: RegExpExecArray) => React.ReactNode` | Render function for the match |
+| Prop      | Type                                          | Description                           |
+| --------- | --------------------------------------------- | ------------------------------------- |
+| `pattern` | `RegExp`                                      | Regex to match special inline content |
+| `render`  | `(match: RegExpExecArray) => React.ReactNode` | Render function for the match         |
 
 ### Pattern Handling Example
 
@@ -193,6 +194,39 @@ const patternHandlers: PatternHandler[] = [
   patternHandlers={patternHandlers}
 />
 ```
+
+### Thinking Model Support
+
+The Message component automatically detects and handles content from "thinking" models that include `<think>...</think>` tags. The reasoning content is hidden by default and displayed in a collapsible section.
+
+```tsx
+const messageFromThinkingModel = `<think>
+Let me analyze this step by step:
+1. First I need to understand the user's question
+2. Then consider the best approach
+3. Finally provide a clear answer
+</think>
+
+Based on your question, here's the answer: The sky appears blue due to Rayleigh scattering of sunlight in Earth's atmosphere.`;
+
+<Message
+  content={messageFromThinkingModel}
+  sender="assistant"
+/>
+```
+
+**Features:**
+- ✨ Automatic parsing of `<think>...</think>` tags
+- 🔒 Hidden by default with "Model reasoning" collapsible section
+- 🧠 Brain icon and intuitive toggle interface
+- 📝 Preserves markdown formatting in both reasoning and final content
+- ⚡ Optimized parsing with single-pass content processing
+
+The component will:
+1. Extract the first `<think>...</think>` block from the message
+2. Display only the remaining content as the main message
+3. Show a collapsible "Model reasoning" section with a brain icon
+4. Allow users to expand/collapse to view the model's internal reasoning
 
 ### Editing
 

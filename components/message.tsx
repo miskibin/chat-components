@@ -4,6 +4,8 @@ import * as React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { ChevronDown, Brain } from "lucide-react";
 import { PencilIcon, Save, Undo } from "lucide-react";
 
 // Define the pattern handler type
@@ -45,6 +47,23 @@ export function Message({
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
+  const [showReasoning, setShowReasoning] = useState(false);
+
+  // Parse think tags: extract reasoning and clean display content in one pass
+  // Support "thinking" models by hiding <think>...</think> content in collapsible UI
+  const { reasoning, displayContent } = React.useMemo(() => {
+    const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i;
+    const match = THINK_TAG_REGEX.exec(content);
+
+    if (!match) {
+      return { reasoning: null, displayContent: content };
+    }
+
+    return {
+      reasoning: match[1].trim(),
+      displayContent: content.replace(THINK_TAG_REGEX, "").trim(),
+    };
+  }, [content]);
 
   const handleSaveEdit = () => {
     setIsEditing(false);
@@ -59,75 +78,76 @@ export function Message({
     }
   };
 
-  const processContent = (text: string): React.ReactNode => {
-    if (!text || typeof text !== "string" || patternHandlers.length === 0)
-      return text;
-    const segments: React.ReactNode[] = [];
-    let cursor = 0;
-    while (cursor < text.length) {
-      let earliest: {
-        handler: PatternHandler;
-        match: RegExpExecArray;
-        index: number;
-      } | null = null;
-      for (const handler of patternHandlers) {
-        handler.pattern.lastIndex = cursor;
-        const match = handler.pattern.exec(text);
-        if (match && (!earliest || match.index < earliest.index))
-          earliest = { handler, match, index: match.index };
-      }
-      if (!earliest) {
-        segments.push(text.slice(cursor));
-        break;
-      }
-      if (earliest.index > cursor)
-        segments.push(text.slice(cursor, earliest.index));
-      let rendered;
-      try {
-        rendered = earliest.handler.render(earliest.match) ?? earliest.match[0];
-      } catch {
-        rendered = earliest.match[0];
-      }
-      segments.push(rendered);
-      cursor = earliest.index + earliest.match[0].length;
-    }
-    return <>{segments}</>;
-  };
-
-  const insideButtons = actionButtons.filter(
-    (btn) => btn.position !== "outside"
-  );
-  const outsideButtons = actionButtons.filter(
-    (btn) => btn.position === "outside"
-  );
-
-  const markdownComponents =
-    patternHandlers.length > 0
-      ? {
-          p: ({ children }: any) => (
-            <p>
-              {Array.isArray(children)
-                ? children.map((c, i) =>
-                    typeof c === "string" ? processContent(c) : c
-                  )
-                : typeof children === "string"
-                ? processContent(children)
-                : children}
-            </p>
-          ),
-          li: ({ children }: any) => (
-            <li>
-              {Array.isArray(children)
-                ? children.map((c, i) =>
-                    typeof c === "string" ? processContent(c) : c
-                  )
-                : typeof children === "string"
-                ? processContent(children)
-                : children}
-            </li>
-          ),
+  const processContent = React.useCallback(
+    (text: string): React.ReactNode => {
+      if (!text || typeof text !== "string" || patternHandlers.length === 0)
+        return text;
+      const segments: React.ReactNode[] = [];
+      let cursor = 0;
+      while (cursor < text.length) {
+        let earliest: {
+          handler: PatternHandler;
+          match: RegExpExecArray;
+          index: number;
+        } | null = null;
+        for (const handler of patternHandlers) {
+          handler.pattern.lastIndex = cursor;
+          const match = handler.pattern.exec(text);
+          if (match && (!earliest || match.index < earliest.index))
+            earliest = { handler, match, index: match.index };
         }
-      : undefined;
+        if (!earliest) {
+          segments.push(text.slice(cursor));
+          break;
+        }
+        if (earliest.index > cursor)
+          segments.push(text.slice(cursor, earliest.index));
+        let rendered;
+        try {
+          rendered =
+            earliest.handler.render(earliest.match) ?? earliest.match[0];
+        } catch {
+          rendered = earliest.match[0];
+        }
+        segments.push(rendered);
+        cursor = earliest.index + earliest.match[0].length;
+      }
+      return <>{segments}</>;
+    },
+    [patternHandlers]
+  );
+
+  const { insideButtons, outsideButtons } = React.useMemo(() => {
+    const inside = actionButtons.filter((btn) => btn.position !== "outside");
+    const outside = actionButtons.filter((btn) => btn.position === "outside");
+    return { insideButtons: inside, outsideButtons: outside };
+  }, [actionButtons]);
+
+  const markdownComponents = React.useMemo(() => {
+    if (patternHandlers.length === 0) return undefined;
+
+    const processChildren = (children: React.ReactNode) => {
+      if (Array.isArray(children)) {
+        return children.map((c, index) =>
+          typeof c === "string" ? (
+            processContent(c)
+          ) : (
+            <React.Fragment key={index}>{c}</React.Fragment>
+          )
+        );
+      }
+      return typeof children === "string" ? processContent(children) : children;
+    };
+
+    return {
+      p: ({ children }: { children?: React.ReactNode }) => (
+        <p>{processChildren(children)}</p>
+      ),
+      li: ({ children }: { children?: React.ReactNode }) => (
+        <li>{processChildren(children)}</li>
+      ),
+    };
+  }, [patternHandlers, processContent]);
 
   return (
     <div
@@ -193,8 +213,43 @@ export function Message({
                 )}
               >
                 <ReactMarkdown components={markdownComponents}>
-                  {content || ""}
+                  {displayContent || ""}
                 </ReactMarkdown>
+                {reasoning && (
+                  <div className="mt-3 text-sm border rounded-md bg-muted/40">
+                    <Collapsible
+                      open={showReasoning}
+                      onOpenChange={setShowReasoning}
+                    >
+                      <div className="flex items-center justify-between px-3 py-2 cursor-pointer select-none">
+                        <button
+                          type="button"
+                          onClick={() => setShowReasoning((o) => !o)}
+                          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Brain className="h-4 w-4" />
+                          <span className="font-medium">Model reasoning</span>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              showReasoning ? "rotate-180" : "rotate-0"
+                            )}
+                          />
+                        </button>
+                      </div>
+                      <CollapsibleContent className="px-3 pb-3 pt-0 [&[data-state=closed]]:hidden">
+                        <div
+                          className={cn(
+                            "prose prose-xs max-w-none text-muted-foreground whitespace-pre-wrap break-words",
+                            sender === "user" ? "prose-invert" : ""
+                          )}
+                        >
+                          {reasoning}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                )}
               </div>
             </div>
           )}
