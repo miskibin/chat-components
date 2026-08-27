@@ -21,7 +21,7 @@
       "type": "registry:ui",
       "title": "Message",
       "description": "User bubble and assistant markdown with collapsed reasoning, tool calls, code blocks, and artifacts.",
-      "dependencies": ["lucide-react", "react-markdown"],
+      "dependencies": ["lucide-react", "react-markdown", "shiki", "next-themes"],
       "registryDependencies": ["collapsible"],
       "files": [
         {
@@ -146,6 +146,8 @@
       "dependencies": [
         "lucide-react",
         "react-markdown",
+        "shiki",
+        "next-themes",
         "@dnd-kit/core",
         "@dnd-kit/utilities",
         "@radix-ui/react-context-menu"

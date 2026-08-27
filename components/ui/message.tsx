@@ -10,6 +10,7 @@ import {
   MessageCode,
   MessageReasoning,
   MessageToolCall,
+  MessageToolCalls,
   type MessageArtifactData,
   type MessageCodeBlockData,
   type MessageToolCallData,
@@ -287,13 +288,7 @@ export function Message({
           </MessageReasoning>
         ) : null}
 
-        {tools.length > 0 ? (
-          <div className="mb-3.5">
-            {tools.map((tool) => (
-              <MessageToolCall key={tool.id} tool={tool} />
-            ))}
-          </div>
-        ) : null}
+        {tools.length > 0 ? <MessageToolCalls tools={tools} /> : null}
 
         {displayContent ? (
           <div className="lc-markdown max-w-none">
@@ -356,4 +351,5 @@ export {
   MessageCode,
   MessageReasoning,
   MessageToolCall,
+  MessageToolCalls,
 } from "@/components/ui/message-parts"

@@ -10,8 +10,10 @@ import {
   Table2,
   TriangleAlert,
 } from "lucide-react"
-import { useState } from "react"
+import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import { codeToHtml } from "shiki"
 
 import {
   Collapsible,
@@ -51,7 +53,6 @@ export function MessageReasoning({
 }: {
   children: string
   defaultOpen?: boolean
-  /** Seconds of thinking to show in the trigger label. */
   duration?: number
   className?: string
 }) {
@@ -65,18 +66,18 @@ export function MessageReasoning({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn("lc-reveal mb-3", className)}
+      className={cn("lc-reveal mb-2", className)}
     >
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="flex w-full items-center gap-1.5 py-0.5 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
         >
-          <Brain className="h-4 w-4 shrink-0" />
+          <Brain className="h-3.5 w-3.5 shrink-0 opacity-70" />
           <span className="min-w-0 flex-1">{label}</span>
           <ChevronDown
             className={cn(
-              "h-4 w-4 shrink-0 transition-transform",
+              "h-3.5 w-3.5 shrink-0 opacity-50 transition-transform",
               open && "rotate-180"
             )}
           />
@@ -84,7 +85,7 @@ export function MessageReasoning({
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div
-          className="mt-3 border-l-2 pl-3 text-[13.5px] leading-relaxed text-muted-foreground prose prose-sm prose-neutral dark:prose-invert max-w-none"
+          className="mt-2 border-l pl-3 text-[13px] leading-relaxed text-muted-foreground"
           style={{ borderColor: "var(--border)" }}
         >
           <ReactMarkdown>{children}</ReactMarkdown>
@@ -94,18 +95,13 @@ export function MessageReasoning({
   )
 }
 
-function toolFrameColor(status: NonNullable<MessageToolCallData["status"]>) {
-  if (status === "error") return "var(--destructive)"
-  if (status === "running" || status === "pending") return "var(--primary)"
-  return "var(--primary)"
-}
-
-function toolStatusVerb(status: NonNullable<MessageToolCallData["status"]>) {
-  if (status === "running" || status === "pending") return "Calling"
+function toolVerb(status: NonNullable<MessageToolCallData["status"]>) {
+  if (status === "running" || status === "pending") return "Running"
   if (status === "error") return "Failed"
-  return "Called"
+  return "Ran"
 }
 
+/** Single Cursor-style tool row — no card chrome. */
 export function MessageToolCall({
   tool,
   defaultOpen = false,
@@ -117,126 +113,240 @@ export function MessageToolCall({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const status = tool.status ?? "done"
-  const frame = toolFrameColor(status)
   const running = status === "running" || status === "pending"
   const errored = status === "error"
+  const hasBody = !!(tool.input || tool.output)
 
   return (
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn("lc-reveal my-1 mb-2 overflow-hidden rounded-lg", className)}
-      style={{
-        border: `1px solid ${frame}`,
-        background: "transparent",
-      }}
+      className={cn("lc-reveal group", className)}
     >
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left"
-          style={{
-            background: "transparent",
-            border: 0,
-            borderBottom: open ? `1px solid ${frame}` : 0,
-            color: "var(--ink)",
-          }}
+          disabled={!hasBody}
+          className={cn(
+            "flex w-full items-center gap-1.5 py-[3px] text-left text-[13px] leading-snug",
+            hasBody
+              ? "cursor-pointer text-muted-foreground hover:text-foreground"
+              : "cursor-default text-muted-foreground"
+          )}
         >
+          {running ? (
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin opacity-70" />
+          ) : errored ? (
+            <TriangleAlert className="h-3 w-3 shrink-0 text-destructive" />
+          ) : null}
+          <span className="shrink-0">{toolVerb(status)}</span>
           <span
-            className="inline-flex shrink-0"
+            className="min-w-0 truncate font-medium"
             style={{
-              color: errored
-                ? "var(--destructive)"
-                : running
-                  ? "var(--primary)"
-                  : "var(--accent-ink)",
-            }}
-          >
-            {running ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : errored ? (
-              <TriangleAlert className="h-4 w-4" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
-          </span>
-          <span className="text-[13.5px]" style={{ color: "var(--ink-2)" }}>
-            {toolStatusVerb(status)}
-          </span>
-          <code
-            className="font-medium"
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 12.5,
-              color: errored ? "var(--destructive)" : "var(--accent-ink)",
+              color: errored ? "var(--destructive)" : "var(--ink)",
+              opacity: 0.88,
             }}
           >
             {tool.name}
-          </code>
-          <ChevronDown
-            className={cn(
-              "ml-auto h-3.5 w-3.5 shrink-0 transition-transform",
-              open && "rotate-180"
-            )}
-            style={{ color: "var(--ink-3)" }}
-          />
+          </span>
+          {!open &&
+          tool.output &&
+          tool.output.length < 28 &&
+          !tool.output.includes("\n") ? (
+            <span
+              className="shrink-0 text-[12px]"
+              style={{
+                color: tool.output.startsWith("+")
+                  ? "oklch(0.62 0.15 155)"
+                  : "var(--ink-3)",
+              }}
+            >
+              {tool.output}
+            </span>
+          ) : null}
+          {hasBody ? (
+            <ChevronDown
+              className={cn(
+                "ml-auto h-3 w-3 shrink-0 opacity-0 transition group-hover:opacity-40",
+                open && "rotate-180 opacity-40"
+              )}
+            />
+          ) : null}
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div style={{ background: "var(--surface)" }}>
-          {tool.input ? (
-            <div className="px-2.5 pt-2 pb-2">
-              <div
-                className="mb-1.5 uppercase"
-                style={{
-                  fontSize: 11,
-                  color: "var(--ink-3)",
-                  letterSpacing: ".04em",
-                }}
-              >
-                Arguments
-              </div>
+      {hasBody ? (
+        <CollapsibleContent>
+          <div className="mb-1.5 ml-0.5 space-y-1.5 border-l pl-3" style={{ borderColor: "var(--border)" }}>
+            {tool.input ? (
               <pre
-                className="m-0 overflow-x-auto rounded-lg px-2.5 py-2 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words"
-                style={{
-                  background: "var(--bg-soft)",
-                  color: "var(--ink)",
-                  fontFamily: "var(--font-mono)",
-                  border: "1px solid var(--border)",
-                }}
+                className="m-0 overflow-x-auto py-1 text-[12px] leading-relaxed whitespace-pre-wrap break-words text-muted-foreground"
+                style={{ fontFamily: "var(--font-mono)" }}
               >
                 {tool.input}
               </pre>
-            </div>
-          ) : null}
-          {tool.output ? (
-            <div className="px-2.5 pt-2 pb-2.5">
-              <div
-                className="mb-1.5 uppercase"
-                style={{
-                  fontSize: 11,
-                  color: "var(--ink-3)",
-                  letterSpacing: ".04em",
-                }}
-              >
-                Result
-              </div>
+            ) : null}
+            {tool.output ? (
               <pre
-                className="m-0 overflow-x-auto rounded-lg px-2.5 py-2 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words"
+                className="m-0 overflow-x-auto py-1 text-[12px] leading-relaxed whitespace-pre-wrap break-words"
                 style={{
-                  background: "var(--bg-soft)",
-                  color: "var(--ink-2)",
                   fontFamily: "var(--font-mono)",
-                  border: "1px solid var(--border)",
+                  color: "var(--ink-2)",
                 }}
               >
                 {tool.output}
               </pre>
-            </div>
-          ) : null}
-        </div>
-      </CollapsibleContent>
+            ) : null}
+          </div>
+        </CollapsibleContent>
+      ) : null}
     </Collapsible>
+  )
+}
+
+/** Stack of minimal tool rows; collapses behind “Used N tools” when many. */
+export function MessageToolCalls({
+  tools,
+  className,
+  collapseAt = 3,
+  defaultOpen,
+}: {
+  tools: MessageToolCallData[]
+  className?: string
+  /** Collapse the list behind a summary when tool count ≥ this. */
+  collapseAt?: number
+  defaultOpen?: boolean
+}) {
+  const many = tools.length >= collapseAt
+  const [open, setOpen] = useState(defaultOpen ?? !many)
+
+  if (tools.length === 0) return null
+
+  const list = (
+    <div className="flex flex-col">
+      {tools.map((tool) => (
+        <MessageToolCall key={tool.id} tool={tool} />
+      ))}
+    </div>
+  )
+
+  if (!many) {
+    return <div className={cn("mb-3", className)}>{list}</div>
+  }
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className={cn("lc-reveal mb-3", className)}
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 py-0.5 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <span>
+            Used {tools.length} tool{tools.length === 1 ? "" : "s"}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 opacity-50 transition-transform",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>{list}</CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+const SHIKI_LANGS = new Set([
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "typescript",
+  "javascript",
+  "json",
+  "python",
+  "py",
+  "bash",
+  "shell",
+  "sh",
+  "css",
+  "html",
+  "md",
+  "markdown",
+  "sql",
+  "yaml",
+  "yml",
+  "toml",
+  "rust",
+  "go",
+  "java",
+  "c",
+  "cpp",
+  "text",
+  "plaintext",
+])
+
+function normalizeLang(lang?: string) {
+  if (!lang) return "text"
+  const l = lang.toLowerCase().trim()
+  if (l === "typescript") return "ts"
+  if (l === "javascript") return "js"
+  if (l === "python") return "py"
+  if (l === "shell" || l === "zsh") return "bash"
+  return SHIKI_LANGS.has(l) ? l : "text"
+}
+
+function HighlightedCode({
+  code,
+  language,
+}: {
+  code: string
+  language?: string
+}) {
+  const { resolvedTheme } = useTheme()
+  const [html, setHtml] = useState<string | null>(null)
+  const lang = normalizeLang(language)
+
+  useEffect(() => {
+    let cancelled = false
+    const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
+    void codeToHtml(code, { lang, theme })
+      .then((out) => {
+        if (!cancelled) setHtml(out)
+      })
+      .catch(() => {
+        if (!cancelled) setHtml(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [code, lang, resolvedTheme])
+
+  if (!html) {
+    return (
+      <pre
+        className="m-0 overflow-x-auto px-3.5 py-3 text-[12.5px] leading-[1.55]"
+        style={{
+          background: "var(--code-bg)",
+          color: "var(--code-ink)",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        <code>{code}</code>
+      </pre>
+    )
+  }
+
+  return (
+    <div
+      className="lc-code-shiki overflow-x-auto text-[12.5px] leading-[1.55] [&_pre]:m-0 [&_pre]:!bg-transparent [&_pre]:px-3.5 [&_pre]:py-3 [&_code]:font-mono"
+      style={{ background: "var(--code-bg)" }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   )
 }
 
@@ -257,61 +367,62 @@ export function MessageCode({
       /* ignore */
     }
   }
-  const label = block.title ?? block.language ?? "code"
+  const lang = normalizeLang(block.language)
+  const langLabel = (block.language ?? lang).toLowerCase()
 
   return (
     <div
-      className={cn("lc-reveal my-3 overflow-hidden rounded-xl", className)}
+      className={cn("lc-reveal my-3 overflow-hidden rounded-lg", className)}
       style={{
         border: "1px solid var(--border)",
-        background: "var(--surface)",
+        background: "var(--code-bg)",
       }}
     >
       <div
-        className="flex items-center justify-between gap-2 px-3.5 py-1.5"
+        className="flex items-center gap-2 px-3 py-1.5"
         style={{
-          background: "var(--bg-soft)",
           borderBottom: "1px solid var(--border)",
+          background: "color-mix(in oklab, var(--code-bg) 70%, var(--bg-soft))",
         }}
       >
         <span
-          className="truncate text-[12.5px] font-medium"
+          className="rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide"
           style={{
             color: "var(--ink-2)",
+            background: "var(--bg-soft)",
+            border: "1px solid var(--border)",
             fontFamily: "var(--font-mono)",
           }}
         >
-          {label}
+          {langLabel}
         </span>
+        {block.title ? (
+          <span
+            className="min-w-0 flex-1 truncate text-[12px]"
+            style={{
+              color: "var(--ink-3)",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            {block.title}
+          </span>
+        ) : (
+          <span className="flex-1" />
+        )}
         <button
           type="button"
           onClick={() => void copy()}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] transition"
-          style={{
-            color: "var(--ink-2)",
-            border: "1px solid var(--border)",
-            background: "var(--surface)",
-          }}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          title={copied ? "Copied" : "Copy"}
         >
           {copied ? (
-            <Check className="h-3 w-3" />
+            <Check className="h-3.5 w-3.5" />
           ) : (
-            <Copy className="h-3 w-3" />
+            <Copy className="h-3.5 w-3.5" />
           )}
-          {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre
-        className="overflow-x-auto px-3.5 py-3 text-[12.5px] leading-relaxed"
-        style={{
-          background: "var(--code-bg)",
-          color: "var(--code-ink)",
-          fontFamily: "var(--font-mono)",
-          margin: 0,
-        }}
-      >
-        <code>{block.code}</code>
-      </pre>
+      <HighlightedCode code={block.code} language={block.language} />
     </div>
   )
 }

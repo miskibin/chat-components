@@ -179,8 +179,21 @@ Here is a concise take, plus the tooling trail and a small code sample below.`,
         input: JSON.stringify({ path: code.title }, null, 2),
         output: "OK · 24 lines",
       },
+      {
+        id: "tool-edit",
+        name: "edit_file",
+        status: "done",
+        input: JSON.stringify({ path: code.title, edits: 1 }, null, 2),
+        output: "+12 −3",
+      },
     ],
-    codeBlocks: [code],
+    codeBlocks: [
+      {
+        ...code,
+        language: code.language,
+        title: code.title,
+      },
+    ],
     artifacts: [
       {
         id: "artifact-1",
