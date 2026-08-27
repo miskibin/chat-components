@@ -59,10 +59,52 @@
       ]
     },
     {
+      "name": "model-picker",
+      "type": "registry:ui",
+      "title": "Model Picker",
+      "description": "Dropdown model selector with badge, description, and optional disabled options.",
+      "dependencies": ["lucide-react"],
+      "files": [
+        {
+          "path": "components/ui/model-picker.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "hooks/use-click-outside.ts",
+          "type": "registry:hook"
+        }
+      ]
+    },
+    {
+      "name": "chat-sidebar",
+      "type": "registry:ui",
+      "title": "Chat Sidebar",
+      "description": "Collapsible chat sidebar chrome with nav slots, sections, and session rows.",
+      "dependencies": ["lucide-react"],
+      "files": [
+        {
+          "path": "components/ui/chat-sidebar.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "chat-navbar",
+      "type": "registry:ui",
+      "title": "Chat Navbar",
+      "description": "Thin top bar with title and action slots.",
+      "files": [
+        {
+          "path": "components/ui/chat-navbar.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "chat",
       "type": "registry:ui",
       "title": "Chat",
-      "description": "All chat UI components: input, message, generation status, and message list.",
+      "description": "Full chat UI kit: input, messages, sidebar, navbar, and model picker.",
       "dependencies": ["lucide-react", "react-markdown"],
       "registryDependencies": ["collapsible"],
       "files": [
@@ -81,6 +123,22 @@
         {
           "path": "components/ui/message-list.tsx",
           "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/model-picker.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/chat-sidebar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/chat-navbar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "hooks/use-click-outside.ts",
+          "type": "registry:hook"
         }
       ]
     }

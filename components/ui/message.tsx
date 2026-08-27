@@ -229,9 +229,10 @@ export function Message({
         )}
         <div
           className={cn(
-            "max-w-[70%] min-w-0 rounded-[18px] bg-muted px-4 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground",
+            "max-w-[70%] min-w-0 rounded-[18px] px-4 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground",
             contentClassName
           )}
+          style={{ background: "var(--user-bubble)" }}
         >
           {remainder && !longPromptExpanded ? preview : displayContent}
           {remainder ? (

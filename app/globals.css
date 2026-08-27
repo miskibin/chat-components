@@ -48,6 +48,17 @@
   --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
   --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --bg-sidebar: var(--sidebar);
+  --bg-soft: var(--muted);
+  --surface: var(--card);
+  --hover: var(--muted);
+  --ink: var(--foreground);
+  --ink-2: var(--muted-foreground);
+  --ink-3: var(--muted-foreground);
+  --accent-soft: color-mix(in oklab, var(--primary) 12%, white);
+  --accent-ink: color-mix(in oklab, var(--primary) 72%, black);
+  --user-bubble: var(--muted);
+  --lc-body-font: var(--font-sans);
 }
 
 .dark {
@@ -95,6 +106,18 @@
   --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
   --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+  --bg-sidebar: var(--sidebar);
+  --bg-soft: var(--muted);
+  --surface: var(--card);
+  --hover: color-mix(in oklab, var(--muted) 80%, white);
+  --ink: var(--foreground);
+  --ink-2: var(--muted-foreground);
+  --ink-3: var(--muted-foreground);
+  --accent-soft: color-mix(in oklab, var(--primary) 22%, #1a1a1a);
+  --accent-ink: color-mix(in oklab, var(--primary) 55%, white);
+  --user-bubble: var(--muted);
+  --lc-body-font: var(--font-sans);
 }
 
 @theme inline {
@@ -158,4 +181,27 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@keyframes lc-fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lc-reveal {
+  animation: lc-fadeUp 0.18s ease both;
+}
+
+.lc-sidebar-wrap {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lc-scroll {
+  scrollbar-width: thin;
 }

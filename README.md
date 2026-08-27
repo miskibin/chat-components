@@ -29,6 +29,9 @@ Requires a project with [shadcn/ui](https://ui.shadcn.com/) already initialized 
 - **Message** — User bubble + assistant markdown, think-tag reasoning, edit, pattern handlers, action buttons
 - **GenerationStatus** — Braille spinner for generation state
 - **MessageList** — Scroll container with smart auto-scroll
+- **ModelPicker** — Dropdown model selector (badge, description, disabled options)
+- **ChatSidebar** — Collapsible sidebar chrome (brand / nav / sections / footer slots)
+- **ChatNavbar** — Thin top bar with title and action slots
 
 ## Quick start
 
