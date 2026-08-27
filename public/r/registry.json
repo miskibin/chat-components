@@ -20,12 +20,16 @@
       "name": "message",
       "type": "registry:ui",
       "title": "Message",
-      "description": "User bubble and assistant markdown message with think-tag reasoning and actions.",
+      "description": "User bubble and assistant markdown with collapsed reasoning, tool calls, code blocks, and artifacts.",
       "dependencies": ["lucide-react", "react-markdown"],
       "registryDependencies": ["collapsible"],
       "files": [
         {
           "path": "components/ui/message.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/message-parts.tsx",
           "type": "registry:ui"
         }
       ]
@@ -154,6 +158,10 @@
         },
         {
           "path": "components/ui/message.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/message-parts.tsx",
           "type": "registry:ui"
         },
         {

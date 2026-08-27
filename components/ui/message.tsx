@@ -1,15 +1,19 @@
 "use client"
 
-import { Brain, ChevronDown, Pencil, Save, Undo2 } from "lucide-react"
+import { Pencil, Save, Undo2 } from "lucide-react"
 import * as React from "react"
 import { useMemo, useState } from "react"
 import ReactMarkdown from "react-markdown"
 
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+  MessageArtifact,
+  MessageCode,
+  MessageReasoning,
+  MessageToolCall,
+  type MessageArtifactData,
+  type MessageCodeBlockData,
+  type MessageToolCallData,
+} from "@/components/ui/message-parts"
 import { cn } from "@/lib/utils"
 
 export type PatternHandler = {
@@ -35,6 +39,12 @@ export type MessageProps = {
   patternHandlers?: PatternHandler[]
   className?: string
   contentClassName?: string
+  /** Explicit reasoning (overrides `<think>` parse when set). */
+  reasoning?: string | null
+  reasoningDefaultOpen?: boolean
+  tools?: MessageToolCallData[]
+  codeBlocks?: MessageCodeBlockData[]
+  artifacts?: MessageArtifactData[]
 }
 
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
@@ -60,20 +70,27 @@ export function Message({
   patternHandlers = [],
   className,
   contentClassName,
+  reasoning: reasoningProp,
+  reasoningDefaultOpen = false,
+  tools = [],
+  codeBlocks = [],
+  artifacts = [],
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(content)
-  const [showReasoning, setShowReasoning] = useState(false)
   const [longPromptExpanded, setLongPromptExpanded] = useState(false)
 
   const { reasoning, displayContent } = useMemo(() => {
+    if (reasoningProp != null) {
+      return { reasoning: reasoningProp || null, displayContent: content }
+    }
     const match = THINK_TAG_REGEX.exec(content)
     if (!match) return { reasoning: null, displayContent: content }
     return {
       reasoning: match[1].trim(),
       displayContent: content.replace(THINK_TAG_REGEX, "").trim(),
     }
-  }, [content])
+  }, [content, reasoningProp])
 
   React.useEffect(() => {
     setEditedContent(content)
@@ -258,36 +275,35 @@ export function Message({
           contentClassName
         )}
       >
-        <div className="prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-headings:mb-2 prose-headings:mt-4 prose-pre:rounded-lg">
-          <ReactMarkdown components={markdownComponents}>
-            {displayContent || ""}
-          </ReactMarkdown>
-        </div>
+        {reasoning ? (
+          <MessageReasoning defaultOpen={reasoningDefaultOpen}>
+            {reasoning}
+          </MessageReasoning>
+        ) : null}
 
-        {reasoning && (
-          <Collapsible open={showReasoning} onOpenChange={setShowReasoning}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="mt-3 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <Brain className="h-3.5 w-3.5" />
-                Model reasoning
-                <ChevronDown
-                  className={cn(
-                    "h-3.5 w-3.5 transition-transform",
-                    showReasoning && "rotate-180"
-                  )}
-                />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-2 rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground prose prose-sm prose-neutral dark:prose-invert max-w-none">
-                <ReactMarkdown>{reasoning}</ReactMarkdown>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
+        {tools.length > 0 ? (
+          <div className="mb-3 space-y-0">
+            {tools.map((tool) => (
+              <MessageToolCall key={tool.id} tool={tool} />
+            ))}
+          </div>
+        ) : null}
+
+        {displayContent ? (
+          <div className="prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-headings:mb-2 prose-headings:mt-4 prose-pre:rounded-lg">
+            <ReactMarkdown components={markdownComponents}>
+              {displayContent}
+            </ReactMarkdown>
+          </div>
+        ) : null}
+
+        {codeBlocks.map((block, i) => (
+          <MessageCode key={`${block.language ?? "code"}-${i}`} block={block} />
+        ))}
+
+        {artifacts.map((artifact) => (
+          <MessageArtifact key={artifact.id} artifact={artifact} />
+        ))}
 
         {(insideButtons.length > 0 ||
           outsideButtons.length > 0 ||
@@ -323,3 +339,15 @@ export function Message({
     </div>
   )
 }
+
+export type {
+  MessageArtifactData,
+  MessageCodeBlockData,
+  MessageToolCallData,
+} from "@/components/ui/message-parts"
+export {
+  MessageArtifact,
+  MessageCode,
+  MessageReasoning,
+  MessageToolCall,
+} from "@/components/ui/message-parts"

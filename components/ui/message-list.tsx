@@ -8,7 +8,13 @@ import {
   GenerationStatus,
   type GenerationStage,
 } from "@/components/ui/generation-status"
-import { Message, type PatternHandler } from "@/components/ui/message"
+import {
+  Message,
+  type MessageArtifactData,
+  type MessageCodeBlockData,
+  type MessageToolCallData,
+  type PatternHandler,
+} from "@/components/ui/message"
 
 const BOTTOM_SCROLL_THRESHOLD_PX = 48
 
@@ -16,6 +22,10 @@ export type ChatMessageData = {
   id: string
   content: string
   sender: "user" | "assistant"
+  reasoning?: string | null
+  tools?: MessageToolCallData[]
+  codeBlocks?: MessageCodeBlockData[]
+  artifacts?: MessageArtifactData[]
 }
 
 export type MessageListProps = {
@@ -98,6 +108,10 @@ export function MessageList({
               <Message
                 content={message.content}
                 sender={message.sender}
+                reasoning={message.reasoning}
+                tools={message.tools}
+                codeBlocks={message.codeBlocks}
+                artifacts={message.artifacts}
                 patternHandlers={patternHandlers}
                 editable={message.sender === "user" && !!onEditMessage}
                 onEdit={

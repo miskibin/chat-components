@@ -26,9 +26,10 @@ Requires a project with [shadcn/ui](https://ui.shadcn.com/) already initialized 
 ## Components
 
 - **ChatInput** — Composer-style textarea with attachments, drag-and-drop, optional skills/slash menu, tools slot, send/stop
-- **Message** — User bubble + assistant markdown, think-tag reasoning, edit, pattern handlers, action buttons
+- **Message** — User bubble + assistant markdown; collapsed reasoning, tool calls, code blocks, artifacts; think tags; edit; pattern handlers
+- **MessageParts** — `MessageReasoning`, `MessageToolCall`, `MessageCode`, `MessageArtifact` (also re-exported from `message`)
 - **GenerationStatus** — Braille spinner for generation state
-- **MessageList** — Scroll container with smart auto-scroll
+- **MessageList** — Scroll container with smart auto-scroll (passes reasoning / tools / code / artifacts through)
 - **ModelPicker** — Dropdown model selector (badge, description, disabled options)
 - **ChatSidebar** — Collapsible sidebar chrome (brand / nav / sections / footer slots) with optional DnD pin/trash edge zones
 - **ChatSidebarItem** — Polished session row (rename, pin, delete, status dots, context menu, drag)
@@ -98,6 +99,11 @@ Skills and slash menus mount only when those arrays are non-empty.
 | --- | --- | --- |
 | `content` | `string` | Message text (markdown for assistant; supports `<think>` tags) |
 | `sender` | `"user" \| "assistant"` | Alignment and styling |
+| `reasoning` | `string \| null` | Explicit reasoning above the answer (overrides `<think>` parse) |
+| `reasoningDefaultOpen` | `boolean` | Open reasoning by default (default `false`) |
+| `tools` | `MessageToolCallData[]` | Collapsible tool call cards |
+| `codeBlocks` | `MessageCodeBlockData[]` | Dedicated code snippets with copy |
+| `artifacts` | `MessageArtifactData[]` | Clickable artifact cards |
 | `editable` | `boolean` | Enable edit for user messages |
 | `onEdit` | `(content: string) => void` | Edit callback |
 | `actionButtons` | `ActionButton[]` | Custom actions |
@@ -116,7 +122,8 @@ Skills and slash menus mount only when those arrays are non-empty.
 - Composer-style input matching modern chat UIs
 - File attachments via button, paste, and drag-and-drop
 - Optional in-memory skills / slash commands (no network)
-- Think-tag reasoning in collapsible sections
+- Think-tag / explicit reasoning collapsed above the answer
+- Tool calls, code blocks, and optional artifacts on assistant turns
 - Keyboard shortcuts (Enter to send, Shift+Enter for newline)
 - Accessible labels and focus handling
 - Themed with Tailwind CSS + shadcn CSS variables

@@ -88,6 +88,126 @@ const DEMO_MODELS: ModelOption[] = [
   },
 ]
 
+function buildDemoAssistantReply(
+  userText: string,
+  modelId: string
+): Omit<MessageData, "id"> {
+  const lower = userText.toLowerCase()
+  const topic =
+    lower.includes("ai") ||
+    lower.includes("artificial intelligence") ||
+    lower.includes("machine learning")
+      ? "ai"
+      : lower.includes("think") || lower.includes("reasoning")
+        ? "think"
+        : "default"
+
+  const reasoningByTopic: Record<string, string> = {
+    ai: "User asked about AI. Pull a short definition, cite sources, then show a tiny code sample and a summary artifact.",
+    think: "User wants to see extended thinking. Keep the chain short, then illustrate with a tool call and a code snippet.",
+    default: `Parse the question (“${userText.slice(0, 80)}”), gather context via a tool, then answer with a code example and optional artifact.`,
+  }
+
+  const contentByTopic: Record<string, string> = {
+    ai: `Artificial Intelligence (AI) is a field of computer science focused on creating systems capable of performing tasks that typically require human intelligence [1].
+
+Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. Recent advancements in deep learning have improved capabilities across perception and language [3].`,
+    think: `When models use extended thinking, they break complex problems into smaller steps: analyze, break down, evaluate options, then synthesize a clear answer.`,
+    default: `I understand your question: “${userText}”
+
+Here is a concise take, plus the tooling trail and a small code sample below.`,
+  }
+
+  const codeByTopic: Record<string, { language: string; title: string; code: string }> = {
+    ai: {
+      language: "python",
+      title: "train_step.py",
+      code: `def train_step(model, batch, optimizer):
+    optimizer.zero_grad()
+    loss = model(batch).loss
+    loss.backward()
+    optimizer.step()
+    return float(loss)`,
+    },
+    think: {
+      language: "typescript",
+      title: "reason.ts",
+      code: `async function reason(prompt: string) {
+  const plan = await planSteps(prompt)
+  const results = []
+  for (const step of plan) {
+    results.push(await runStep(step))
+  }
+  return synthesize(results)
+}`,
+    },
+    default: {
+      language: "tsx",
+      title: "Reply.tsx",
+      code: `export function Reply({ text }: { text: string }) {
+  return <p className="text-sm leading-relaxed">{text}</p>
+}`,
+    },
+  }
+
+  const code = codeByTopic[topic]
+
+  return {
+    content: contentByTopic[topic],
+    sender: "assistant",
+    reasoning: reasoningByTopic[topic],
+    tools: [
+      {
+        id: "tool-search",
+        name: "web_search",
+        status: "done",
+        input: JSON.stringify({ query: userText.slice(0, 60) }, null, 2),
+        output: JSON.stringify(
+          {
+            hits: 3,
+            top: topic === "ai" ? "AI basics overview" : "Relevant docs",
+          },
+          null,
+          2
+        ),
+      },
+      {
+        id: "tool-read",
+        name: "read_file",
+        status: "done",
+        input: JSON.stringify({ path: code.title }, null, 2),
+        output: "OK · 24 lines",
+      },
+    ],
+    codeBlocks: [code],
+    artifacts: [
+      {
+        id: "artifact-1",
+        title:
+          topic === "ai"
+            ? "AI overview notes"
+            : topic === "think"
+              ? "Reasoning trace"
+              : "Reply summary",
+        kind: topic === "ai" ? "table" : topic === "think" ? "text" : "file",
+        summary: "Generated for this turn",
+        content:
+          topic === "ai"
+            ? "term,definition\nAI,Systems that perform human-like tasks\nML,Learning from data without explicit rules\n"
+            : topic === "think"
+              ? "1. Analyze\n2. Break down\n3. Evaluate\n4. Synthesize\n"
+              : `# Summary\n\nQuestion: ${userText.slice(0, 120)}\nModel: ${modelId}\n`,
+        onOpen: () => toast.message("Open artifact in your app"),
+      },
+    ],
+    metadata: {
+      model: modelId,
+      responseTime: 4.5,
+      tokens: 256,
+    },
+  }
+}
+
 const sources: Record<
   string,
   { title: string; url: string; author: string; date: string }
@@ -202,44 +322,12 @@ export default function ChatExample() {
       timeoutRef.current = setTimeout(() => {
         setGenerationStage("responding")
         timeoutRef.current = setTimeout(() => {
-          const lower = payload.text.toLowerCase()
-          let responseContent = ""
-
-          if (
-            lower.includes("ai") ||
-            lower.includes("artificial intelligence") ||
-            lower.includes("machine learning")
-          ) {
-            responseContent = `<think>
-Let me break down this question about AI systematically.
-</think>
-
-Artificial Intelligence (AI) is a field of computer science focused on creating systems capable of performing tasks that typically require human intelligence [1].
-
-Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. Recent advancements in deep learning have improved capabilities across perception and language [3].`
-          } else if (lower.includes("think") || lower.includes("reasoning")) {
-            responseContent = `<think>
-Demonstrate extended reasoning briefly.
-</think>
-
-When models use extended thinking, they break complex problems into smaller steps: analyze, break down, evaluate options, then synthesize a clear answer.`
-          } else {
-            responseContent = `I understand your question: "${payload.text}"
-
-Could you share a bit more detail about what you'd like to explore?`
-          }
-
+          const reply = buildDemoAssistantReply(payload.text, selectedModel)
           setMessages((prev) => [
             ...prev,
             {
               id: (Date.now() + 1).toString(),
-              content: responseContent,
-              sender: "assistant",
-              metadata: {
-                model: selectedModel,
-                responseTime: 4.5,
-                tokens: 256,
-              },
+              ...reply,
             },
           ])
           setIsGenerating(false)
@@ -256,8 +344,10 @@ Could you share a bit more detail about what you'd like to explore?`
       ...prev,
       {
         id: Date.now().toString(),
+        ...buildDemoAssistantReply("Generation stopped by user.", selectedModel),
         content: "Generation stopped by user.",
-        sender: "assistant",
+        reasoning:
+          "User hit stop. Surface a short acknowledgement with the usual demo parts so the UI still shows the full message shape.",
       },
     ])
     setIsGenerating(false)
