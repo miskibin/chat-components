@@ -30,8 +30,11 @@ Requires a project with [shadcn/ui](https://ui.shadcn.com/) already initialized 
 - **GenerationStatus** — Braille spinner for generation state
 - **MessageList** — Scroll container with smart auto-scroll
 - **ModelPicker** — Dropdown model selector (badge, description, disabled options)
-- **ChatSidebar** — Collapsible sidebar chrome (brand / nav / sections / footer slots)
+- **ChatSidebar** — Collapsible sidebar chrome (brand / nav / sections / footer slots) with optional DnD pin/trash edge zones
+- **ChatSidebarItem** — Polished session row (rename, pin, delete, status dots, context menu, drag)
 - **ChatNavbar** — Thin top bar with title and action slots
+
+Compose with slots — no hard-wired product nav. Drop zones and menus are optional modules.
 
 ## Quick start
 

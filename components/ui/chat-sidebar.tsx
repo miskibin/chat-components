@@ -1,12 +1,14 @@
 "use client"
 
-import { ChevronRight, PanelLeft } from "lucide-react"
+import { ChevronRight, PanelLeft, Pin, Trash2 } from "lucide-react"
 import {
   forwardRef,
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react"
 
+import { useSidebarDnd } from "@/components/ui/sidebar-dnd"
+import { SidebarEdgeDropZone } from "@/components/ui/sidebar-drop-zones"
 import { cn } from "@/lib/utils"
 
 export const SIDEBAR_WIDTH_EXPANDED = 290
@@ -159,23 +161,20 @@ export function SidebarEmptyState({ children }: { children: ReactNode }) {
   )
 }
 
-export type ChatSidebarItem = {
-  id: string
-  title: string
-  pinned?: boolean
-}
-
 export type ChatSidebarProps = {
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
   brand?: ReactNode
-  /** Expanded nav under the header (e.g. New chat / Search rows). */
   nav?: ReactNode
-  /** Collapsed rail icons under the toggle. */
   rail?: ReactNode
-  /** Scrollable body (sections / chat rows). */
   children?: ReactNode
   footer?: ReactNode
+  /** Extra absolute overlays inside the expanded panel (custom drop zones). */
+  overlays?: ReactNode
+  /** When inside ChatSidebarDnd, show pin/trash edge zones while dragging. */
+  edgeZones?: boolean
+  pinLabel?: string
+  trashLabel?: string
   widthExpanded?: number
   widthCollapsed?: number
   className?: string
@@ -189,10 +188,16 @@ export function ChatSidebar({
   rail,
   children,
   footer,
+  overlays,
+  edgeZones = false,
+  pinLabel = "Drop here to pin",
+  trashLabel = "Drop here to delete",
   widthExpanded = SIDEBAR_WIDTH_EXPANDED,
   widthCollapsed = SIDEBAR_WIDTH_COLLAPSED,
   className,
 }: ChatSidebarProps) {
+  const { activeDragId, pinZoneId, trashZoneId } = useSidebarDnd()
+
   return (
     <div
       className={cn(
@@ -269,11 +274,32 @@ export function ChatSidebar({
             {footer}
           </div>
         ) : null}
+
+        {overlays}
+        {edgeZones && activeDragId ? (
+          <>
+            <SidebarEdgeDropZone
+              id={pinZoneId}
+              edge="top"
+              icon={<Pin className="h-3.5 w-3.5" />}
+              label={pinLabel}
+              tone="accent"
+            />
+            <SidebarEdgeDropZone
+              id={trashZoneId}
+              edge="bottom"
+              icon={<Trash2 className="h-3.5 w-3.5" />}
+              label={trashLabel}
+              tone="danger"
+            />
+          </>
+        ) : null}
       </div>
     </div>
   )
 }
 
+/** @deprecated Prefer ChatSidebarItem from sidebar-item. */
 export function ChatSidebarItemRow({
   title,
   active,
@@ -306,3 +332,15 @@ export function ChatSidebarItemRow({
     </button>
   )
 }
+
+export type { ChatSidebarItemData } from "@/components/ui/sidebar-item"
+export {
+  ChatSidebarItem,
+  ChatSidebarItemGhost,
+  ChatSidebarItemList,
+} from "@/components/ui/sidebar-item"
+export { ChatSidebarDnd, useSidebarDnd } from "@/components/ui/sidebar-dnd"
+export {
+  SidebarDropZone,
+  SidebarEdgeDropZone,
+} from "@/components/ui/sidebar-drop-zones"

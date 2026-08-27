@@ -79,11 +79,32 @@
       "name": "chat-sidebar",
       "type": "registry:ui",
       "title": "Chat Sidebar",
-      "description": "Collapsible chat sidebar chrome with nav slots, sections, and session rows.",
-      "dependencies": ["lucide-react"],
+      "description": "Collapsible sidebar chrome with DnD pin/trash zones, polished items, and slot-based composition.",
+      "dependencies": [
+        "lucide-react",
+        "@dnd-kit/core",
+        "@dnd-kit/utilities",
+        "@radix-ui/react-context-menu"
+      ],
       "files": [
         {
           "path": "components/ui/chat-sidebar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/sidebar-item.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/sidebar-dnd.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/sidebar-drop-zones.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/context-menu.tsx",
           "type": "registry:ui"
         }
       ]
@@ -105,7 +126,13 @@
       "type": "registry:ui",
       "title": "Chat",
       "description": "Full chat UI kit: input, messages, sidebar, navbar, and model picker.",
-      "dependencies": ["lucide-react", "react-markdown"],
+      "dependencies": [
+        "lucide-react",
+        "react-markdown",
+        "@dnd-kit/core",
+        "@dnd-kit/utilities",
+        "@radix-ui/react-context-menu"
+      ],
       "registryDependencies": ["collapsible"],
       "files": [
         {
@@ -130,6 +157,22 @@
         },
         {
           "path": "components/ui/chat-sidebar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/sidebar-item.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/sidebar-dnd.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/sidebar-drop-zones.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/context-menu.tsx",
           "type": "registry:ui"
         },
         {

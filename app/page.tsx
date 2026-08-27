@@ -14,11 +14,15 @@ import {
 } from "@/components/ui/chat-navbar"
 import {
   ChatSidebar,
-  ChatSidebarItemRow,
+  ChatSidebarDnd,
+  ChatSidebarItemGhost,
+  ChatSidebarItemList,
   SideIconBtn,
   SideRow,
   SidebarCollapsibleSection,
   SidebarEmptyState,
+  useSidebarDnd,
+  type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
 import {
   MessageList,
@@ -39,9 +43,8 @@ type MessageData = ChatMessageData & {
   }
 }
 
-type ChatSession = {
-  id: string
-  title: string
+type ChatSession = ChatSidebarItemData & {
+  messages?: MessageData[]
 }
 
 const DEMO_SKILLS = [
@@ -116,7 +119,9 @@ export default function ChatExample() {
   const [collapsed, setCollapsed] = useState(false)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [sessions, setSessions] = useState<ChatSession[]>([
-    { id: "1", title: "Welcome chat" },
+    { id: "1", title: "Welcome chat", pinned: true },
+    { id: "2", title: "Ask about AI", status: "idle" },
+    { id: "3", title: "Draft notes", status: "idle" },
   ])
   const [activeId, setActiveId] = useState("1")
   const [messages, setMessages] = useState<MessageData[]>([])
@@ -160,7 +165,7 @@ export default function ChatExample() {
 
   const handleNewChat = () => {
     const id = String(Date.now())
-    setSessions((prev) => [{ id, title: "New chat" }, ...prev])
+    setSessions((prev) => [{ id, title: "New chat", pinned: false }, ...prev])
     setActiveId(id)
     setMessages([])
     clearTimeouts()
@@ -264,73 +269,125 @@ Could you share a bit more detail about what you'd like to explore?`
 
   useEffect(() => () => clearTimeouts(), [])
 
+  const orderedSessions = [
+    ...sessions.filter((s) => s.pinned),
+    ...sessions.filter((s) => !s.pinned),
+  ]
+
   return (
     <div className="flex h-svh overflow-hidden bg-background">
-      <ChatSidebar
-        collapsed={collapsed}
-        onCollapsedChange={setCollapsed}
-        brand={
-          <span
-            className="truncate px-1 text-[15px] font-semibold tracking-tight"
-            style={{ color: "var(--ink)", fontFamily: "var(--lc-body-font)" }}
-          >
-            Chat
-          </span>
-        }
-        nav={
-          <>
-            <SideRow icon={<Pencil className="h-4 w-4" />} onClick={handleNewChat}>
-              New chat
-            </SideRow>
-            <SideRow
-              icon={<Search className="h-4 w-4" />}
-              hint="⌘K"
-              onClick={() => toast.message("Wire search to your app")}
-            >
-              Search
-            </SideRow>
-          </>
-        }
-        rail={
-          <>
-            <SideIconBtn label="New chat" onClick={handleNewChat}>
-              <Pencil className="h-4 w-4" />
-            </SideIconBtn>
-            <SideIconBtn
-              label="Search"
-              onClick={() => toast.message("Wire search to your app")}
-            >
-              <Search className="h-4 w-4" />
-            </SideIconBtn>
-          </>
-        }
+      <ChatSidebarDnd
+        onDrop={(drop) => {
+          if (drop.action === "pin") {
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id === drop.id ? { ...s, pinned: true } : s
+              )
+            )
+          } else if (drop.action === "delete") {
+            setSessions((prev) => {
+              const next = prev.filter((s) => s.id !== drop.id)
+              if (activeId === drop.id) {
+                setActiveId(next[0]?.id ?? "")
+                setMessages([])
+              }
+              return next
+            })
+            toast.message("Chat deleted")
+          }
+        }}
+        renderOverlay={(id) => {
+          const item = sessions.find((s) => s.id === id)
+          if (!item) return null
+          return (
+            <ChatSidebarItemGhost
+              item={item}
+              active={item.id === activeId}
+            />
+          )
+        }}
       >
-        <SidebarCollapsibleSection
-          title="Recent chats"
-          open={chatsOpen}
-          onToggle={() => setChatsOpen((v) => !v)}
-          count={sessions.length}
+        <ChatSidebar
+          collapsed={collapsed}
+          onCollapsedChange={setCollapsed}
+          edgeZones
+          brand={
+            <span
+              className="truncate px-1 text-[15px] font-semibold tracking-tight"
+              style={{
+                color: "var(--ink)",
+                fontFamily: "var(--lc-body-font)",
+              }}
+            >
+              Chat
+            </span>
+          }
+          nav={
+            <>
+              <SideRow
+                icon={<Pencil className="h-4 w-4" />}
+                onClick={handleNewChat}
+              >
+                New chat
+              </SideRow>
+              <SideRow
+                icon={<Search className="h-4 w-4" />}
+                hint="⌘K"
+                onClick={() => toast.message("Wire search to your app")}
+              >
+                Search
+              </SideRow>
+            </>
+          }
+          rail={
+            <>
+              <SideIconBtn label="New chat" onClick={handleNewChat}>
+                <Pencil className="h-4 w-4" />
+              </SideIconBtn>
+              <SideIconBtn
+                label="Search"
+                onClick={() => toast.message("Wire search to your app")}
+              >
+                <Search className="h-4 w-4" />
+              </SideIconBtn>
+            </>
+          }
         >
-          {sessions.length === 0 ? (
-            <SidebarEmptyState>New chats appear here.</SidebarEmptyState>
-          ) : (
-            sessions.map((s) => (
-              <ChatSidebarItemRow
-                key={s.id}
-                title={s.title}
-                active={s.id === activeId}
-                onClick={() => {
-                  setActiveId(s.id)
+          <SidebarSessionSection
+            open={chatsOpen}
+            onToggle={() => setChatsOpen((v) => !v)}
+            sessions={orderedSessions}
+            activeId={activeId}
+            onSelect={(id) => {
+              setActiveId(id)
+              setMessages([])
+              clearTimeouts()
+              setIsGenerating(false)
+              setGenerationStage("idle")
+            }}
+            onRename={(id, title) =>
+              setSessions((prev) =>
+                prev.map((s) => (s.id === id ? { ...s, title } : s))
+              )
+            }
+            onTogglePin={(id, pinned) =>
+              setSessions((prev) =>
+                prev.map((s) => (s.id === id ? { ...s, pinned } : s))
+              )
+            }
+            onDelete={(id) =>
+              setSessions((prev) => {
+                const next = prev.filter((s) => s.id !== id)
+                if (activeId === id) {
+                  setActiveId(next[0]?.id ?? "")
                   setMessages([])
-                  clearTimeouts()
-                  setIsGenerating(false)
-                  setGenerationStage("idle")
-                }}
-              />
-            ))
-          )}
-        </SidebarCollapsibleSection>
-      </ChatSidebar>
+                }
+                return next
+              })
+            }
+          />
+        </ChatSidebar>
+      </ChatSidebarDnd>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <ChatNavbar
@@ -442,6 +499,50 @@ Could you share a bit more detail about what you'd like to explore?`
         />
       </div>
     </div>
+  )
+}
+
+function SidebarSessionSection({
+  open,
+  onToggle,
+  sessions,
+  activeId,
+  onSelect,
+  onRename,
+  onTogglePin,
+  onDelete,
+}: {
+  open: boolean
+  onToggle: () => void
+  sessions: ChatSidebarItemData[]
+  activeId: string
+  onSelect: (id: string) => void
+  onRename: (id: string, title: string) => void
+  onTogglePin: (id: string, pinned: boolean) => void
+  onDelete: (id: string) => void
+}) {
+  const { activeDragId } = useSidebarDnd()
+  return (
+    <SidebarCollapsibleSection
+      title="Recent chats"
+      open={open}
+      onToggle={onToggle}
+      count={sessions.length}
+    >
+      {sessions.length === 0 ? (
+        <SidebarEmptyState>New chats appear here.</SidebarEmptyState>
+      ) : (
+        <ChatSidebarItemList
+          items={sessions}
+          activeId={activeId}
+          activeDragId={activeDragId}
+          onSelect={onSelect}
+          onRename={onRename}
+          onTogglePin={onTogglePin}
+          onDelete={onDelete}
+        />
+      )}
+    </SidebarCollapsibleSection>
   )
 }
 
