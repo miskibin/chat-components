@@ -156,6 +156,7 @@ Here is a concise take, plus the tooling trail and a small code sample below.`,
     content: contentByTopic[topic],
     sender: "assistant",
     reasoning: reasoningByTopic[topic],
+    reasoningDuration: 3,
     tools: [
       {
         id: "tool-search",
@@ -190,13 +191,18 @@ Here is a concise take, plus the tooling trail and a small code sample below.`,
               ? "Reasoning trace"
               : "Reply summary",
         kind: topic === "ai" ? "table" : topic === "think" ? "text" : "file",
-        summary: "Generated for this turn",
+        summary:
+          topic === "ai"
+            ? "3 rows · 2 columns"
+            : topic === "think"
+              ? "4 steps"
+              : "Generated for this turn",
         content:
           topic === "ai"
-            ? "term,definition\nAI,Systems that perform human-like tasks\nML,Learning from data without explicit rules\n"
+            ? "term          definition\nAI            Systems that perform human-like tasks\nML            Learning from data without explicit rules\nDeep learning Neural nets for perception & language"
             : topic === "think"
-              ? "1. Analyze\n2. Break down\n3. Evaluate\n4. Synthesize\n"
-              : `# Summary\n\nQuestion: ${userText.slice(0, 120)}\nModel: ${modelId}\n`,
+              ? "1. Analyze\n2. Break down\n3. Evaluate\n4. Synthesize"
+              : `Question: ${userText.slice(0, 120)}\nModel: ${modelId}`,
         onOpen: () => toast.message("Open artifact in your app"),
       },
     ],

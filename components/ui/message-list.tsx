@@ -23,6 +23,7 @@ export type ChatMessageData = {
   content: string
   sender: "user" | "assistant"
   reasoning?: string | null
+  reasoningDuration?: number
   tools?: MessageToolCallData[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
@@ -109,6 +110,7 @@ export function MessageList({
                 content={message.content}
                 sender={message.sender}
                 reasoning={message.reasoning}
+                reasoningDuration={message.reasoningDuration}
                 tools={message.tools}
                 codeBlocks={message.codeBlocks}
                 artifacts={message.artifacts}

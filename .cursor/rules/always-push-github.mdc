@@ -1,0 +1,15 @@
+---
+description: Always commit-push to GitHub main when shipping work
+alwaysApply: true
+---
+
+# Always push to GitHub
+
+When finishing a unit of work on this repo (or when the user asks to ship / save / done):
+
+1. Commit with conventional commits if there are uncommitted changes (author: `Michał Skibiński <michalskibinski109@gmail.com>` unless git identity is already correct).
+2. **Immediately `git push origin HEAD`** (usually `main`) — do not stop at a local commit.
+3. If push fails on auth, ask for a fresh PAT / credentials; never store PATs in rules or repo files.
+4. Confirm with the remote commit URL or short sha after a successful push.
+
+Do not force-push to `main`/`master` unless the user explicitly requests it.

@@ -42,6 +42,8 @@ export type MessageProps = {
   /** Explicit reasoning (overrides `<think>` parse when set). */
   reasoning?: string | null
   reasoningDefaultOpen?: boolean
+  /** Shown as “Thought for N seconds” when set. */
+  reasoningDuration?: number
   tools?: MessageToolCallData[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
@@ -72,6 +74,7 @@ export function Message({
   contentClassName,
   reasoning: reasoningProp,
   reasoningDefaultOpen = false,
+  reasoningDuration,
   tools = [],
   codeBlocks = [],
   artifacts = [],
@@ -268,21 +271,24 @@ export function Message({
   }
 
   return (
-    <div className={cn("group mb-4", className)}>
+    <div className={cn("group mb-[var(--density-msg-gap)]", className)}>
       <div
         className={cn(
-          "max-w-full text-[15px] leading-relaxed text-foreground",
+          "max-w-full text-[15px] leading-[var(--density-line)] text-foreground",
           contentClassName
         )}
       >
         {reasoning ? (
-          <MessageReasoning defaultOpen={reasoningDefaultOpen}>
+          <MessageReasoning
+            defaultOpen={reasoningDefaultOpen}
+            duration={reasoningDuration}
+          >
             {reasoning}
           </MessageReasoning>
         ) : null}
 
         {tools.length > 0 ? (
-          <div className="mb-3 space-y-0">
+          <div className="mb-3.5">
             {tools.map((tool) => (
               <MessageToolCall key={tool.id} tool={tool} />
             ))}
@@ -290,7 +296,7 @@ export function Message({
         ) : null}
 
         {displayContent ? (
-          <div className="prose prose-neutral dark:prose-invert max-w-none prose-p:my-3 prose-headings:mb-2 prose-headings:mt-4 prose-pre:rounded-lg">
+          <div className="lc-markdown max-w-none">
             <ReactMarkdown components={markdownComponents}>
               {displayContent}
             </ReactMarkdown>

@@ -58,6 +58,13 @@
   --accent-soft: color-mix(in oklab, var(--primary) 12%, white);
   --accent-ink: color-mix(in oklab, var(--primary) 72%, black);
   --user-bubble: var(--muted);
+  --tool-bg: oklch(0.97 0.005 95);
+  --tool-border: oklch(0.91 0.008 95);
+  --code-bg: oklch(0.97 0.005 95);
+  --code-bg-2: oklch(0.94 0.006 95);
+  --code-ink: oklch(0.28 0 0);
+  --density-msg-gap: 28px;
+  --density-line: 1.65;
   --lc-body-font: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -117,6 +124,13 @@
   --accent-soft: color-mix(in oklab, var(--primary) 22%, #1a1a1a);
   --accent-ink: color-mix(in oklab, var(--primary) 55%, white);
   --user-bubble: var(--muted);
+  --tool-bg: oklch(0.24 0 0);
+  --tool-border: oklch(0.32 0 0);
+  --code-bg: oklch(0.24 0 0);
+  --code-bg-2: oklch(0.28 0 0);
+  --code-ink: oklch(0.92 0 0);
+  --density-msg-gap: 28px;
+  --density-line: 1.65;
   --lc-body-font: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -196,7 +210,7 @@
 }
 
 .lc-reveal {
-  animation: lc-fadeUp 0.18s ease both;
+  animation: lc-fadeUp 0.25s ease both;
 }
 
 .lc-sidebar-wrap {
@@ -205,4 +219,107 @@
 
 .lc-scroll {
   scrollbar-width: thin;
+}
+
+.lc-markdown {
+  color: var(--ink);
+  font-size: 15px;
+  line-height: var(--density-line);
+}
+
+.lc-markdown p {
+  margin: 0 0 12px;
+}
+
+.lc-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.lc-markdown h1,
+.lc-markdown h2,
+.lc-markdown h3,
+.lc-markdown h4 {
+  margin: 18px 0 8px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.lc-markdown h1 {
+  font-size: 22px;
+}
+
+.lc-markdown h2 {
+  font-size: 19px;
+}
+
+.lc-markdown h3 {
+  font-size: 16.5px;
+}
+
+.lc-markdown h4 {
+  font-size: 15px;
+}
+
+.lc-markdown a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lc-markdown strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lc-markdown ul,
+.lc-markdown ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.lc-markdown li {
+  margin: 4px 0;
+}
+
+.lc-markdown blockquote {
+  margin: 12px 0;
+  padding: 4px 0 4px 14px;
+  border-left: 3px solid var(--border);
+  color: var(--ink-2);
+}
+
+.lc-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 18px 0;
+}
+
+.lc-markdown code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--code-bg-2);
+  color: var(--code-ink);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.lc-markdown pre {
+  margin: 10px 0 14px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.lc-markdown pre code {
+  display: block;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--code-ink);
+  background: transparent;
+  overflow-x: auto;
+  line-height: 1.55;
 }
