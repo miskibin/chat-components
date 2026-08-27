@@ -70,6 +70,11 @@
       "type": "registry:ui"
     },
     {
+      "path": "components/ui/theme-toggle.tsx",
+      "content": "\"use client\"\n\nimport { Moon, Sun } from \"lucide-react\"\nimport { useTheme } from \"next-themes\"\nimport { useEffect, useState } from \"react\"\n\nimport { cn } from \"@/lib/utils\"\n\nexport type ThemeToggleProps = {\n  className?: string\n  /** Fixed floating chip (default) or inline. */\n  floating?: boolean\n}\n\nexport function ThemeToggle({\n  className,\n  floating = true,\n}: ThemeToggleProps) {\n  const { resolvedTheme, setTheme } = useTheme()\n  const [mounted, setMounted] = useState(false)\n  useEffect(() => setMounted(true), [])\n  const isDark = mounted && resolvedTheme === \"dark\"\n\n  return (\n    <button\n      type=\"button\"\n      aria-label=\"Toggle theme\"\n      onClick={() => setTheme(isDark ? \"light\" : \"dark\")}\n      className={cn(\n        \"grid h-9 w-9 place-items-center rounded-full transition hover:opacity-80\",\n        floating && \"fixed top-3 right-3 z-50\",\n        className\n      )}\n      style={{\n        background: \"var(--bg-soft)\",\n        border: \"1px solid var(--border)\",\n        color: \"var(--ink-2)\",\n      }}\n    >\n      {mounted ? isDark ? <Sun size={16} /> : <Moon size={16} /> : null}\n    </button>\n  )\n}\n",
+      "type": "registry:ui"
+    },
+    {
       "path": "hooks/use-click-outside.ts",
       "content": "import { useEffect, type RefObject } from \"react\"\n\nexport function useClickOutside<T extends HTMLElement>(\n  ref: RefObject<T | null>,\n  handler: () => void,\n  enabled: boolean = true\n): void {\n  useEffect(() => {\n    if (!enabled) return\n    function onMouseDown(e: MouseEvent) {\n      if (ref.current && !ref.current.contains(e.target as Node)) handler()\n    }\n    document.addEventListener(\"mousedown\", onMouseDown)\n    return () => document.removeEventListener(\"mousedown\", onMouseDown)\n  }, [ref, handler, enabled])\n}\n",
       "type": "registry:hook"

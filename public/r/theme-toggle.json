@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "theme-toggle",
+  "title": "Theme Toggle",
+  "description": "Floating circular theme chip (light/dark).",
+  "dependencies": [
+    "lucide-react",
+    "next-themes"
+  ],
+  "files": [
+    {
+      "path": "components/ui/theme-toggle.tsx",
+      "content": "\"use client\"\n\nimport { Moon, Sun } from \"lucide-react\"\nimport { useTheme } from \"next-themes\"\nimport { useEffect, useState } from \"react\"\n\nimport { cn } from \"@/lib/utils\"\n\nexport type ThemeToggleProps = {\n  className?: string\n  /** Fixed floating chip (default) or inline. */\n  floating?: boolean\n}\n\nexport function ThemeToggle({\n  className,\n  floating = true,\n}: ThemeToggleProps) {\n  const { resolvedTheme, setTheme } = useTheme()\n  const [mounted, setMounted] = useState(false)\n  useEffect(() => setMounted(true), [])\n  const isDark = mounted && resolvedTheme === \"dark\"\n\n  return (\n    <button\n      type=\"button\"\n      aria-label=\"Toggle theme\"\n      onClick={() => setTheme(isDark ? \"light\" : \"dark\")}\n      className={cn(\n        \"grid h-9 w-9 place-items-center rounded-full transition hover:opacity-80\",\n        floating && \"fixed top-3 right-3 z-50\",\n        className\n      )}\n      style={{\n        background: \"var(--bg-soft)\",\n        border: \"1px solid var(--border)\",\n        color: \"var(--ink-2)\",\n      }}\n    >\n      {mounted ? isDark ? <Sun size={16} /> : <Moon size={16} /> : null}\n    </button>\n  )\n}\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}

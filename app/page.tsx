@@ -1,7 +1,6 @@
 "use client"
 
-import { Copy, Moon, Pencil, RefreshCw, Search, Sun, Trash2 } from "lucide-react"
-import { useTheme } from "next-themes"
+import { Copy, Pencil, RefreshCw, Search, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -9,9 +8,6 @@ import {
   ChatInput,
   type ChatInputPayload,
 } from "@/components/ui/chat-input"
-import {
-  ChatNavbar,
-} from "@/components/ui/chat-navbar"
 import {
   ChatSidebar,
   ChatSidebarDnd,
@@ -34,6 +30,7 @@ import {
   ModelPicker,
   type ModelOption,
 } from "@/components/ui/model-picker"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 type MessageData = ChatMessageData & {
   metadata?: {
@@ -389,21 +386,8 @@ Could you share a bit more detail about what you'd like to explore?`
         </ChatSidebar>
       </ChatSidebarDnd>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <ChatNavbar
-          title={activeTitle}
-          right={
-            <>
-              <ModelPicker
-                value={selectedModel}
-                onChange={setSelectedModel}
-                options={DEMO_MODELS}
-                align="down"
-              />
-              <ThemeToggleBtn />
-            </>
-          }
-        />
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <ThemeToggle />
 
         <MessageList
           messages={messages}
@@ -417,8 +401,13 @@ Could you share a bit more detail about what you'd like to explore?`
           }
           emptyState={
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-              <p className="text-lg font-medium text-foreground">
-                Start a conversation
+              <p
+                className="text-lg font-medium text-foreground"
+                style={{ fontFamily: "var(--lc-body-font)" }}
+              >
+                {activeTitle === "Welcome chat" || !activeTitle
+                  ? "Start a conversation"
+                  : activeTitle}
               </p>
               <p className="max-w-sm text-sm">
                 Try asking about AI, type{" "}
@@ -543,40 +532,6 @@ function SidebarSessionSection({
         />
       )}
     </SidebarCollapsibleSection>
-  )
-}
-
-function ThemeToggleBtn() {
-  const { resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
-  const isDark = mounted && resolvedTheme === "dark"
-  return (
-    <button
-      type="button"
-      aria-label="Toggle theme"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="grid h-8 w-8 place-items-center rounded-md"
-      style={{
-        background: "transparent",
-        border: 0,
-        color: "var(--ink-2)",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--hover)"
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent"
-      }}
-    >
-      {mounted ? (
-        isDark ? (
-          <Sun className="h-4 w-4" />
-        ) : (
-          <Moon className="h-4 w-4" />
-        )
-      ) : null}
-    </button>
   )
 }
 

@@ -110,10 +110,23 @@
       ]
     },
     {
+      "name": "theme-toggle",
+      "type": "registry:ui",
+      "title": "Theme Toggle",
+      "description": "Floating circular theme chip (light/dark).",
+      "dependencies": ["lucide-react", "next-themes"],
+      "files": [
+        {
+          "path": "components/ui/theme-toggle.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "chat-navbar",
       "type": "registry:ui",
       "title": "Chat Navbar",
-      "description": "Thin top bar with title and action slots.",
+      "description": "Thin top bar with title and action slots (optional; prefer ThemeToggle for minimal chrome).",
       "files": [
         {
           "path": "components/ui/chat-navbar.tsx",
@@ -177,6 +190,10 @@
         },
         {
           "path": "components/ui/chat-navbar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/theme-toggle.tsx",
           "type": "registry:ui"
         },
         {

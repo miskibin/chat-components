@@ -2,7 +2,7 @@
   "$schema": "https://ui.shadcn.com/schema/registry-item.json",
   "name": "chat-navbar",
   "title": "Chat Navbar",
-  "description": "Thin top bar with title and action slots.",
+  "description": "Thin top bar with title and action slots (optional; prefer ThemeToggle for minimal chrome).",
   "files": [
     {
       "path": "components/ui/chat-navbar.tsx",
