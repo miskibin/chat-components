@@ -1,12 +1,13 @@
 {
-  "name": "trener",
+  "name": "chat-components",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "registry:build": "npx shadcn@latest build"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",

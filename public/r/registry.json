@@ -1,0 +1,88 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "chat-components",
+  "homepage": "https://github.com/miskibin/chat-components",
+  "items": [
+    {
+      "name": "chat-input",
+      "type": "registry:ui",
+      "title": "Chat Input",
+      "description": "Composer-style chat input with attachments, optional skills/slash menu, and send/stop.",
+      "dependencies": ["lucide-react"],
+      "files": [
+        {
+          "path": "components/ui/chat-input.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "message",
+      "type": "registry:ui",
+      "title": "Message",
+      "description": "User bubble and assistant markdown message with think-tag reasoning and actions.",
+      "dependencies": ["lucide-react", "react-markdown"],
+      "registryDependencies": ["collapsible"],
+      "files": [
+        {
+          "path": "components/ui/message.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "generation-status",
+      "type": "registry:ui",
+      "title": "Generation Status",
+      "description": "Braille spinner for AI generation status.",
+      "files": [
+        {
+          "path": "components/ui/generation-status.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "message-list",
+      "type": "registry:ui",
+      "title": "Message List",
+      "description": "Scrollable message list with smart auto-scroll and generation status.",
+      "registryDependencies": [
+        "miskibin/chat-components/message",
+        "miskibin/chat-components/generation-status"
+      ],
+      "files": [
+        {
+          "path": "components/ui/message-list.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "type": "registry:ui",
+      "title": "Chat",
+      "description": "All chat UI components: input, message, generation status, and message list.",
+      "dependencies": ["lucide-react", "react-markdown"],
+      "registryDependencies": ["collapsible"],
+      "files": [
+        {
+          "path": "components/ui/chat-input.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/message.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/generation-status.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/message-list.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    }
+  ]
+}

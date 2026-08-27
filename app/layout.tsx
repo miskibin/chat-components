@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chat Example",
-  description: "A demonstration of chat functionality",
+  title: "Chat Components",
+  description: "Reusable chat UI components for React and shadcn/ui",
 };
 
 export default function RootLayout({

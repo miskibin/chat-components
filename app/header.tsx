@@ -1,17 +1,16 @@
-import { Button } from "@/components/ui/button";
-import { Github, FileText } from "lucide-react";
-import { ModeToggle } from "./mode-toggle";
+import { Button } from "@/components/ui/button"
+import { FileText, Github } from "lucide-react"
+import { ModeToggle } from "./mode-toggle"
 
 export function ChatHeader() {
   return (
-    <div className="p-4 flex justify-between items-center border-b bg-background">
-      <h1 className="text-lg font-semibold">Chat Example</h1>
-      <div className="flex gap-2 items-center">
-        {ModeToggle()}
-
-        <Button asChild variant="outline">
+    <div className="flex items-center justify-between border-b border-border bg-background p-4">
+      <h1 className="text-lg font-semibold text-foreground">Chat Components</h1>
+      <div className="flex items-center gap-2">
+        <ModeToggle />
+        <Button asChild variant="outline" size="sm">
           <a
-            href="https://github.com/miskibin/chat-input"
+            href="https://github.com/miskibin/chat-components"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -19,9 +18,9 @@ export function ChatHeader() {
             Repository
           </a>
         </Button>
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" size="sm">
           <a
-            href="https://github.com/miskibin/chat-input/blob/main/README.md"
+            href="https://github.com/miskibin/chat-components#readme"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -31,5 +30,5 @@ export function ChatHeader() {
         </Button>
       </div>
     </div>
-  );
+  )
 }

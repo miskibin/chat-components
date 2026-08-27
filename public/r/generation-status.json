@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "generation-status",
+  "title": "Generation Status",
+  "description": "Braille spinner for AI generation status.",
+  "files": [
+    {
+      "path": "components/ui/generation-status.tsx",
+      "content": "\"use client\"\n\nimport { useEffect, useState } from \"react\"\n\nimport { cn } from \"@/lib/utils\"\n\nconst FRAMES = [\"⠋\", \"⠙\", \"⠹\", \"⠸\", \"⠼\", \"⠴\", \"⠦\", \"⠧\", \"⠇\", \"⠏\"]\nconst FRAME_MS = 80\n\nexport type GenerationStage = \"thinking\" | \"searching\" | \"responding\" | \"idle\"\n\nexport type GenerationStatusProps = {\n  /** When true, shows the spinner. Prefer this over stage for simple UIs. */\n  active?: boolean\n  /** Optional legacy stage. Non-idle stages show the spinner. */\n  stage?: GenerationStage\n  /** Optional label next to the spinner. */\n  label?: string\n  className?: string\n  size?: number\n}\n\nfunction BrailleSpinner({ size = 16 }: { size?: number }) {\n  const [frame, setFrame] = useState(0)\n\n  useEffect(() => {\n    const id = window.setInterval(() => {\n      setFrame((f) => (f + 1) % FRAMES.length)\n    }, FRAME_MS)\n    return () => window.clearInterval(id)\n  }, [])\n\n  return (\n    <span\n      aria-label=\"Loading\"\n      role=\"status\"\n      className=\"font-mono text-muted-foreground\"\n      style={{ fontSize: size, lineHeight: 1 }}\n    >\n      {FRAMES[frame]}\n    </span>\n  )\n}\n\nexport function GenerationStatus({\n  active,\n  stage = \"idle\",\n  label,\n  className,\n  size = 16,\n}: GenerationStatusProps) {\n  const show = active ?? stage !== \"idle\"\n  if (!show) return null\n\n  const defaultLabel =\n    stage === \"searching\"\n      ? \"Searching\"\n      : stage === \"responding\"\n        ? \"Responding\"\n        : stage === \"thinking\"\n          ? \"Thinking\"\n          : undefined\n\n  return (\n    <span\n      aria-live=\"polite\"\n      aria-busy=\"true\"\n      className={cn(\"inline-flex items-center gap-2 text-sm text-muted-foreground\", className)}\n    >\n      <BrailleSpinner size={size} />\n      {(label ?? defaultLabel) && <span>{label ?? defaultLabel}</span>}\n    </span>\n  )\n}\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}

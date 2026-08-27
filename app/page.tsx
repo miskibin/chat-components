@@ -1,32 +1,50 @@
-// ChatExample.tsx - Main Component with Think Tag Demo
-"use client";
+"use client"
 
-import { useState, useRef, useEffect } from "react";
-import { toast } from "sonner";
+import { Bot, Copy, RefreshCw, Trash2 } from "lucide-react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { toast } from "sonner"
+
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ChatHeader } from "./header";
-import { MessageList } from "./message-list";
-import { ChatFooter } from "./footer";
+  ChatInput,
+  type ChatInputPayload,
+} from "@/components/ui/chat-input"
+import {
+  MessageList,
+  type ChatMessageData,
+} from "@/components/ui/message-list"
+import type { GenerationStage } from "@/components/ui/generation-status"
+import type { PatternHandler } from "@/components/ui/message"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ChatHeader } from "./header"
 
-interface MessageData {
-  id: string;
-  content: string;
-  sender: "user" | "assistant";
+type MessageData = ChatMessageData & {
   metadata?: {
-    model?: string;
-    responseTime?: number;
-    tokens?: number;
-  };
+    model?: string
+    responseTime?: number
+    tokens?: number
+  }
 }
 
-type GenerationStage = "idle" | "thinking" | "searching" | "responding";
+const DEMO_SKILLS = [
+  { name: "summarize", description: "Condense long text into key points" },
+  { name: "translate", description: "Translate text into another language" },
+  { name: "explain", description: "Explain a concept simply" },
+]
 
-// Example sources for citations
-const sources = {
+const DEMO_COMMANDS = [
+  { name: "help", description: "Show available commands", argHint: "" },
+  { name: "clear", description: "Clear the conversation", argHint: "" },
+]
+
+const sources: Record<
+  string,
+  { title: string; url: string; author: string; date: string }
+> = {
   "1": {
     title: "Artificial Intelligence Basics",
     url: "https://example.com/ai-basics",
@@ -45,337 +63,273 @@ const sources = {
     author: "Michael Chen",
     date: "2024-01-15",
   },
-};
+}
 
-// Citation reference component to handle [number] patterns
-const CitationReference = ({
-  match,
-  children,
-}: {
-  match: RegExpMatchArray;
-  children: React.ReactNode;
-}) => {
-  const citationNumber = match[1] as keyof typeof sources;
-  const source = sources[citationNumber];
+export default function ChatExample() {
+  const [messages, setMessages] = useState<MessageData[]>([])
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationStage, setGenerationStage] =
+    useState<GenerationStage>("idle")
+  const [selectedModel, setSelectedModel] = useState("gpt-4")
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  if (!source) {
-    return <span>{children}</span>;
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <span className="cursor-pointer text-blue-500 font-medium">
-          {children}
-        </span>
-      </PopoverTrigger>
-      <PopoverContent className="w-80">
-        <div className="space-y-2">
-          <h3 className="font-medium">{source.title}</h3>
-          <p className="text-sm text-muted-foreground">
-            By {source.author} • {source.date}
-          </p>
+  const patternHandlers: PatternHandler[] = [
+    {
+      pattern: /\[(\d+)\]/g,
+      render: (match) => {
+        const citationNumber = match[1]
+        const source = sources[citationNumber]
+        if (!source) return <span>{match[0]}</span>
+        return (
           <a
             href={source.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center text-sm text-blue-500 hover:underline"
+            className="font-semibold text-primary underline-offset-2 hover:underline"
+            title={`${source.title} — ${source.author}`}
           >
-            View source <span className="ml-1">↗</span>
+            {match[0]}
           </a>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-};
-
-export default function ChatExample() {
-  const [messages, setMessages] = useState<MessageData[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [generationStage, setGenerationStage] =
-    useState<GenerationStage>("idle");
-  const [selectedModel] = useState("gpt-4");
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Define pattern handlers
-  const patternHandlers = [
-    {
-      pattern: /\[(\d+)\]/g,
-      render: (match: RegExpMatchArray) => (
-        <CitationReference match={match}>{match[0]}</CitationReference>
-      ),
+        )
+      },
     },
-  ];
+  ]
 
-  const handleSendMessage = (content: string) => {
+  const clearTimeouts = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }
+
+  const handleSend = (payload: ChatInputPayload) => {
+    const skillPrefix =
+      payload.skills.length > 0
+        ? `[skills: ${payload.skills.join(", ")}] `
+        : ""
+    const fileNote =
+      payload.files.length > 0
+        ? `\n\n_Attached: ${payload.files.map((f) => f.name).join(", ")}_`
+        : ""
+    const content = `${skillPrefix}${payload.text}${fileNote}`
+
     const userMessage: MessageData = {
       id: Date.now().toString(),
       content,
       sender: "user",
-    };
+    }
 
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    setGenerationStage("thinking");
+    setMessages((prev) => [...prev, userMessage])
+    setIsGenerating(true)
+    setGenerationStage("thinking")
 
     timeoutRef.current = setTimeout(() => {
-      setGenerationStage("searching");
-
+      setGenerationStage("searching")
       timeoutRef.current = setTimeout(() => {
-        setGenerationStage("responding");
-
+        setGenerationStage("responding")
         timeoutRef.current = setTimeout(() => {
-          let responseContent = "";
+          const lower = payload.text.toLowerCase()
+          let responseContent = ""
 
-          // Generate response with thinking tags for AI-related queries
           if (
-            content.toLowerCase().includes("ai") ||
-            content.toLowerCase().includes("artificial intelligence") ||
-            content.toLowerCase().includes("machine learning")
+            lower.includes("ai") ||
+            lower.includes("artificial intelligence") ||
+            lower.includes("machine learning")
           ) {
             responseContent = `<think>
 Let me break down this question about AI systematically:
 
-1. **Understanding the query**: The user is asking about artificial intelligence and its applications
-2. **Key areas to cover**: 
-   - Definition and core concepts
-   - Machine learning as a subset
-   - Recent developments
-3. **Sources to reference**: I should cite relevant sources [1], [2], and [3]
-4. **Structure**: Start with a clear definition, then expand into ML and recent advances
+1. Understanding the query
+2. Key areas to cover
+3. Sources to reference
 </think>
 
-Artificial Intelligence (AI) is a field of computer science focused on creating systems capable of performing tasks that typically require human intelligence [1]. These include learning, reasoning, problem-solving, perception, and language understanding.
+Artificial Intelligence (AI) is a field of computer science focused on creating systems capable of performing tasks that typically require human intelligence [1].
 
-Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. This approach allows computers to improve their performance on tasks through experience, without being explicitly programmed for every scenario.
-
-Recent advancements in deep learning have significantly improved AI capabilities in areas like:
-- **Image recognition**: Identifying objects, faces, and scenes in photos
-- **Natural language processing**: Understanding and generating human language
-- **Decision making**: Making complex decisions based on large datasets
-
-These developments [3] have enabled AI to be applied across industries, from healthcare diagnostics to autonomous vehicles.`;
-          } else if (
-            content.toLowerCase().includes("think") ||
-            content.toLowerCase().includes("reasoning")
-          ) {
+Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. Recent advancements in deep learning have improved capabilities in image recognition, natural language processing, and decision making [3].`
+          } else if (lower.includes("think") || lower.includes("reasoning")) {
             responseContent = `<think>
-The user is asking about thinking or reasoning. Let me demonstrate the thinking process:
-
-**Step 1**: Identify what they want to know
-**Step 2**: Consider different aspects of reasoning
-**Step 3**: Provide a comprehensive answer
-**Step 4**: Make it clear and actionable
+The user is asking about thinking or reasoning. Demonstrate the thinking process.
 </think>
 
-Great question! When AI systems use extended thinking or reasoning, they break down complex problems into smaller steps. This approach, similar to human problem-solving, involves:
-
-1. **Analyzing the problem** - Understanding what's being asked
-2. **Breaking it down** - Dividing complex questions into manageable parts
-3. **Evaluating options** - Considering different approaches
-4. **Synthesizing** - Combining insights into a coherent answer
-
-This multi-step reasoning process often leads to more accurate and thoughtful responses, especially for complex or nuanced questions.`;
+When AI systems use extended thinking, they break complex problems into smaller steps: analyze, break down, evaluate options, then synthesize a clear answer.`
           } else {
-            responseContent = `<think>
-Processing user query: "${content}"
-- Query type: General question
-- Approach: Provide helpful, concise response
-- Model: ${selectedModel}
-</think>
+            responseContent = `I understand your question: "${payload.text}"
 
-[${
-              selectedModel === "gpt-4"
-                ? "GPT-4"
-                : selectedModel === "gpt-3.5"
-                ? "GPT-3.5"
-                : selectedModel === "claude-3"
-                ? "Claude 3"
-                : selectedModel === "gemini-pro"
-                ? "Gemini Pro"
-                : "Llama 3"
-            }] I understand your question: "${content}"
-
-Let me help you with that. Could you provide more details about what specific aspect you'd like to know more about?`;
+Let me help you with that. Could you provide more details about what specific aspect you'd like to know more about?`
           }
 
-          const assistantMessage: MessageData = {
-            id: (Date.now() + 1).toString(),
-            content: responseContent,
-            sender: "assistant",
-            metadata: {
-              model: selectedModel,
-              responseTime: 4.5,
-              tokens: 256,
-            },
-          };
-
-          setMessages((prev) => [...prev, assistantMessage]);
-          setIsLoading(false);
-          setGenerationStage("idle");
-          timeoutRef.current = null;
-        }, 1500);
-      }, 1500);
-    }, 1500);
-  };
-
-  const handleStopGeneration = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-
-      const stoppedMessage: MessageData = {
-        id: Date.now().toString(),
-        content: "Generation stopped by user",
-        sender: "assistant",
-        metadata: {
-          model: selectedModel,
-          responseTime: 0,
-          tokens: 0,
-        },
-      };
-
-      setMessages((prev) => [...prev, stoppedMessage]);
-      setIsLoading(false);
-      setGenerationStage("idle");
-    }
-  };
-
-  const handleEditMessage = (id: string, content: string) => {
-    setMessages((prev) =>
-      prev.map((msg) => (msg.id === id ? { ...msg, content } : msg))
-    );
-  };
-
-  const handleDeleteMessage = (id: string) => {
-    setMessages((prev) => prev.filter((msg) => msg.id !== id));
-  };
-
-  const handleRegenerateMessage = (id: string) => {
-    const messageIndex = messages.findIndex((msg) => msg.id === id);
-    if (messageIndex < 0) return;
-
-    let userMessageIndex = messageIndex - 1;
-    while (
-      userMessageIndex >= 0 &&
-      messages[userMessageIndex].sender !== "user"
-    ) {
-      userMessageIndex--;
-    }
-
-    if (userMessageIndex >= 0) {
-      const userMessage = messages[userMessageIndex];
-      setMessages((prev) => prev.filter((msg) => msg.id !== id));
-
-      setIsLoading(true);
-      setGenerationStage("thinking");
-
-      timeoutRef.current = setTimeout(() => {
-        setGenerationStage("searching");
-
-        timeoutRef.current = setTimeout(() => {
-          setGenerationStage("responding");
-
-          timeoutRef.current = setTimeout(() => {
-            let responseContent = "";
-
-            if (
-              userMessage.content.toLowerCase().includes("ai") ||
-              userMessage.content
-                .toLowerCase()
-                .includes("artificial intelligence")
-            ) {
-              responseContent = `<think>
-Regenerating response with different approach:
-- Focus on practical applications
-- Include more specific examples
-- Reference different aspects than before
-</think>
-
-Artificial Intelligence is transforming industries across the globe [1]. 
-
-It uses computational models to perform tasks that typically require human cognition [2]. Recent advances have enabled AI systems to demonstrate remarkable capabilities in language understanding and generation [3].
-
-Some key applications include:
-- Healthcare: Diagnostic assistance and drug discovery
-- Finance: Fraud detection and algorithmic trading
-- Transportation: Self-driving vehicles and route optimization`;
-            } else {
-              responseContent = `<think>
-Regenerating with fresh perspective:
-- Original query: "${userMessage.content}"
-- New angle: More detailed explanation
-- Include examples
-</think>
-
-[Regenerated with ${
-                selectedModel === "gpt-4"
-                  ? "GPT-4"
-                  : selectedModel === "gpt-3.5"
-                  ? "GPT-3.5"
-                  : selectedModel === "claude-3"
-                  ? "Claude 3"
-                  : selectedModel === "gemini-pro"
-                  ? "Gemini Pro"
-                  : "Llama 3"
-              }] Here's a different perspective on: "${userMessage.content}"
-
-I've thought through this from a different angle and can provide additional insights...`;
-            }
-
-            const regeneratedMessage: MessageData = {
-              id: Date.now().toString(),
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: (Date.now() + 1).toString(),
               content: responseContent,
               sender: "assistant",
               metadata: {
                 model: selectedModel,
-                responseTime: 3.2,
-                tokens: 215,
+                responseTime: 4.5,
+                tokens: 256,
               },
-            };
+            },
+          ])
+          setIsGenerating(false)
+          setGenerationStage("idle")
+          timeoutRef.current = null
+        }, 900)
+      }, 700)
+    }, 700)
+  }
 
-            setMessages((prev) => [...prev, regeneratedMessage]);
-            setIsLoading(false);
-            setGenerationStage("idle");
-            timeoutRef.current = null;
+  const handleStop = () => {
+    clearTimeouts()
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        content: "Generation stopped by user.",
+        sender: "assistant",
+      },
+    ])
+    setIsGenerating(false)
+    setGenerationStage("idle")
+  }
 
-            toast.success("Response regenerated", {
-              description: "A new response has been generated.",
-              duration: 3000,
-            });
-          }, 1500);
-        }, 1500);
-      }, 1500);
+  const handleEditMessage = (id: string, content: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => (msg.id === id ? { ...msg, content } : msg))
+    )
+  }
+
+  const handleDeleteMessage = (id: string) => {
+    setMessages((prev) => prev.filter((msg) => msg.id !== id))
+  }
+
+  const handleRegenerateMessage = (id: string) => {
+    const messageIndex = messages.findIndex((msg) => msg.id === id)
+    if (messageIndex < 0) return
+    let userMessageIndex = messageIndex - 1
+    while (
+      userMessageIndex >= 0 &&
+      messages[userMessageIndex].sender !== "user"
+    ) {
+      userMessageIndex--
     }
-  };
+    if (userMessageIndex < 0) return
+    const userMessage = messages[userMessageIndex]
+    setMessages((prev) => prev.filter((msg) => msg.id !== id))
+    handleSend({ text: userMessage.content, files: [], skills: [] })
+    toast.success("Regenerating response")
+  }
 
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => () => clearTimeouts(), [])
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="flex h-svh flex-col bg-background">
       <ChatHeader />
-      <div className="container mx-auto min-h-[80vh] flex flex-col flex-1">
-        <MessageList
-          messages={messages}
-          isLoading={isLoading}
-          generationStage={generationStage}
-          patternHandlers={patternHandlers}
-          onEditMessage={handleEditMessage}
-          onDeleteMessage={handleDeleteMessage}
-          onRegenerateMessage={handleRegenerateMessage}
-        />
-        <ChatFooter
-          onSendMessage={handleSendMessage}
-          onStopGeneration={handleStopGeneration}
-          isLoading={isLoading}
-        />
-      </div>
+      <MessageList
+        messages={messages}
+        isGenerating={isGenerating}
+        generationStage={generationStage}
+        patternHandlers={patternHandlers}
+        onEditMessage={handleEditMessage}
+        emptyState={
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+            <p className="text-lg font-medium text-foreground">
+              Chat components demo
+            </p>
+            <p className="max-w-sm text-sm">
+              Try asking about AI, type{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                /summarize
+              </code>{" "}
+              for skills, or attach a file.
+            </p>
+          </div>
+        }
+        renderActions={(message) => {
+          if (message.sender !== "assistant") return null
+          return (
+            <div className="-mt-2 mb-4 flex gap-1 opacity-60 hover:opacity-100">
+              <ActionBtn
+                title="Copy"
+                onClick={() => {
+                  void navigator.clipboard.writeText(message.content)
+                  toast.success("Copied")
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </ActionBtn>
+              <ActionBtn
+                title="Regenerate"
+                onClick={() => handleRegenerateMessage(message.id)}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </ActionBtn>
+              <ActionBtn
+                title="Delete"
+                onClick={() => handleDeleteMessage(message.id)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </ActionBtn>
+            </div>
+          )
+        }}
+      />
+      <ChatInput
+        onSend={handleSend}
+        onStop={handleStop}
+        isGenerating={isGenerating}
+        placeholder="Ask anything — try /summarize or mention AI"
+        skills={DEMO_SKILLS}
+        slashCommands={DEMO_COMMANDS}
+        tools={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title="Model"
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <Bot className="h-4 w-4" />
+                {selectedModel}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {["gpt-4", "gpt-3.5", "claude-3", "gemini-pro", "llama-3"].map(
+                (model) => (
+                  <DropdownMenuItem
+                    key={model}
+                    onClick={() => setSelectedModel(model)}
+                  >
+                    {model}
+                  </DropdownMenuItem>
+                )
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
     </div>
-  );
+  )
+}
+
+function ActionBtn({
+  title,
+  onClick,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      {children}
+    </button>
+  )
 }
