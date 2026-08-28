@@ -7,6 +7,8 @@ import {
   MessageList,
   type ChatMessageData,
 } from "@/components/ui/message-list"
+import { PromptSuggestions } from "@/components/ui/prompt-suggestions"
+import { cn } from "@/lib/utils"
 
 /**
  * Starter chat layout. Wire `onSend` to your API and append assistant
@@ -16,30 +18,49 @@ import {
 export function Chat() {
   const [messages, setMessages] = useState<ChatMessageData[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
+  const isEmpty = messages.length === 0
+
+  const send = (text: string) => {
+    if (!text.trim()) return
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), content: text, sender: "user" },
+    ])
+    setIsGenerating(true)
+  }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <MessageList
-        messages={messages}
-        isGenerating={isGenerating}
-        emptyState={
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Send a message to start
-          </div>
-        }
-      />
-      <ChatInput
-        isGenerating={isGenerating}
-        onStop={() => setIsGenerating(false)}
-        onSend={({ text }) => {
-          if (!text.trim()) return
-          setMessages((prev) => [
-            ...prev,
-            { id: crypto.randomUUID(), content: text, sender: "user" },
-          ])
-          setIsGenerating(true)
-        }}
-      />
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col bg-background",
+        isEmpty && "items-center justify-center"
+      )}
+    >
+      {!isEmpty && (
+        <MessageList messages={messages} isGenerating={isGenerating} />
+      )}
+      {isEmpty && (
+        <p className="mb-5 text-2xl font-medium tracking-tight text-foreground">
+          How can I help?
+        </p>
+      )}
+      <div className="w-full">
+        <ChatInput
+          className={isEmpty ? "pb-1" : undefined}
+          isGenerating={isGenerating}
+          onStop={() => setIsGenerating(false)}
+          onSend={({ text }) => send(text)}
+        />
+        {isEmpty && (
+          <PromptSuggestions
+            items={[
+              { label: "What can you help me with?" },
+              { label: "Summarize the last conversation" },
+            ]}
+            onSelect={(item) => send(item.label)}
+          />
+        )}
+      </div>
     </div>
   )
 }

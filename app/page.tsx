@@ -1,704 +1,94 @@
-"use client"
-
-import { Copy, Pencil, RefreshCw, Search, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState, type ReactNode } from "react"
-import { toast } from "sonner"
-
-import {
-  ChatInput,
-  type ChatInputPayload,
-} from "@/components/ui/chat-input"
-import {
-  ChatSidebar,
-  ChatSidebarDnd,
-  ChatSidebarItemGhost,
-  ChatSidebarItemList,
-  SideIconBtn,
-  SideRow,
-  SidebarCollapsibleSection,
-  SidebarEmptyState,
-  useSidebarDnd,
-  type ChatSidebarItemData,
-} from "@/components/ui/chat-sidebar"
-import {
-  MessageList,
-  type ChatMessageData,
-} from "@/components/ui/message-list"
-import type { GenerationStage } from "@/components/ui/generation-status"
-import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
-import {
-  ModelPicker,
-  type ModelOption,
-} from "@/components/ui/model-picker"
+import { Chat } from "@/components/chat"
+import { CopyCommand } from "@/components/copy-command"
+import { ChatInputExample } from "@/components/examples/chat-input-example"
+import { MessageExample } from "@/components/examples/message-example"
+import { PickersExample } from "@/components/examples/pickers-example"
+import { SidebarExample } from "@/components/examples/sidebar-example"
+import { StatusExample } from "@/components/examples/status-example"
+import { ModeToggle } from "@/app/mode-toggle"
+import { RegistryPreview } from "@/components/registry-preview"
+import { Button } from "@/components/ui/button"
+import { ChatNavbar } from "@/components/ui/chat-navbar"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
-import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
-import { streamCursorChat } from "@/lib/cursor-stream"
+import Link from "next/link"
 
-type MessageData = ChatMessageData & {
-  metadata?: {
-    model?: string
-    responseTime?: number
-    tokens?: number
-  }
-}
-
-type ChatSession = ChatSidebarItemData & {
-  messages?: MessageData[]
-  cursorSessionId?: string
-}
-
-const DEMO_SKILLS = [
-  { name: "summarize", description: "Condense long text into key points" },
-  { name: "translate", description: "Translate text into another language" },
-  { name: "explain", description: "Explain a concept simply" },
-]
-
-const DEMO_COMMANDS = [
-  { name: "help", description: "Show available commands", argHint: "" },
-  { name: "clear", description: "Clear the conversation", argHint: "" },
-]
-
-const FALLBACK_MODELS: ModelOption[] = [
-  {
-    id: "composer-2.5",
-    name: "Composer 2.5",
-    badge: "Cursor",
-    description: "Default Cursor agent",
-  },
-  {
-    id: "auto",
-    name: "Auto",
-    badge: "Router",
-    description: "Lets Cursor pick a model",
-  },
-]
-
-export default function ChatExample() {
-  const [collapsed, setCollapsed] = useState(false)
-  const [chatsOpen, setChatsOpen] = useState(true)
-  const [sessions, setSessions] = useState<ChatSession[]>([
-    { id: "1", title: "Welcome chat", pinned: true },
-  ])
-  const [activeId, setActiveId] = useState("1")
-  const [messages, setMessages] = useState<MessageData[]>([])
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [generationStage, setGenerationStage] =
-    useState<GenerationStage>("idle")
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODELS)
-  const [selectedModel, setSelectedModel] = useState("composer-2.5")
-  const abortRef = useRef<AbortController | null>(null)
-  const activeIdRef = useRef(activeId)
-
-  activeIdRef.current = activeId
-
-  const activeSession = sessions.find((s) => s.id === activeId)
-  const activeTitle = activeSession?.title ?? "Chat"
-
-  useEffect(() => {
-    let cancelled = false
-    fetch("/api/models")
-      .then((res) => res.json())
-      .then((data: { models?: ModelOption[]; error?: string }) => {
-        if (cancelled || !data.models?.length) return
-        setModelOptions(data.models)
-        setSelectedModel((current) =>
-          data.models!.some((m) => m.id === current)
-            ? current
-            : data.models![0].id
-        )
-      })
-      .catch(() => {
-        toast.error("Could not load Cursor models. Is `agent` logged in?")
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const stopGeneration = () => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    setIsGenerating(false)
-    setGenerationStage("idle")
-  }
-
-  const persistSession = (
-    sessionId: string,
-    patch: (session: ChatSession) => ChatSession
-  ) => {
-    setSessions((prev) =>
-      prev.map((session) =>
-        session.id === sessionId ? patch(session) : session
-      )
-    )
-  }
-
-  const handleNewChat = () => {
-    stopGeneration()
-    const id = String(Date.now())
-    setSessions((prev) => [
-      { id, title: "New chat", pinned: false, messages: [] },
-      ...prev,
-    ])
-    setActiveId(id)
-    setMessages([])
-  }
-
-  const selectSession = (id: string) => {
-    stopGeneration()
-    const session = sessions.find((s) => s.id === id)
-    setActiveId(id)
-    setMessages(session?.messages ?? [])
-  }
-
-  const runPrompt = async (
-    prompt: string,
-    sessionId: string,
-    priorMessages: MessageData[],
-    cursorSessionId?: string
-  ) => {
-    const assistantId = crypto.randomUUID()
-    const started = Date.now()
-    const model = selectedModel
-    const controller = new AbortController()
-    abortRef.current = controller
-
-    const seedAssistant: MessageData = {
-      id: assistantId,
-      content: "",
-      sender: "assistant",
-      tools: [],
-      parts: [],
-    }
-
-    const applyMessages = (next: MessageData[], nextSessionId?: string) => {
-      persistSession(sessionId, (session) => ({
-        ...session,
-        messages: next,
-        cursorSessionId: nextSessionId ?? session.cursorSessionId,
-      }))
-      if (activeIdRef.current === sessionId) setMessages(next)
-    }
-
-    applyMessages([...priorMessages, seedAssistant])
-
-    setIsGenerating(true)
-    setGenerationStage("thinking")
-
-    const patchAssistant = (
-      updater: (message: MessageData) => MessageData,
-      cursorSessionId?: string
-    ) => {
-      persistSession(sessionId, (session) => {
-        const current = session.messages ?? []
-        const next = current.map((message) =>
-          message.id === assistantId ? updater(message) : message
-        )
-        if (activeIdRef.current === sessionId) setMessages(next)
-        return {
-          ...session,
-          messages: next,
-          cursorSessionId: cursorSessionId ?? session.cursorSessionId,
-        }
-      })
-    }
-
-    const onEvent = (event: AgentStreamEvent) => {
-      if (event.type === "session") {
-        persistSession(sessionId, (session) => ({
-          ...session,
-          cursorSessionId: event.sessionId,
-        }))
-        return
-      }
-      if (event.type === "thinking") {
-        setGenerationStage("thinking")
-        patchAssistant((message) => ({
-          ...message,
-          reasoning: `${message.reasoning ?? ""}${event.text}`,
-          reasoningDefaultOpen: true,
-        }))
-        return
-      }
-      if (event.type === "text") {
-        setGenerationStage("responding")
-        patchAssistant((message) => {
-          const parts = appendTextPart(message.parts ?? [], event.text)
-          return {
-            ...message,
-            parts,
-            content: textFromParts(parts),
-            tools: toolsFromParts(parts),
-          }
-        })
-        return
-      }
-      if (event.type === "tool") {
-        setGenerationStage("searching")
-        patchAssistant((message) => {
-          const nextTool: MessageToolCallData = {
-            id: event.id,
-            name: event.name,
-            status: event.status,
-            input: event.input,
-            output: event.output,
-          }
-          const parts = upsertToolPart(message.parts ?? [], nextTool)
-          return {
-            ...message,
-            parts,
-            content: textFromParts(parts),
-            tools: toolsFromParts(parts),
-          }
-        })
-        return
-      }
-      if (event.type === "error") {
-        patchAssistant((message) => ({
-          ...message,
-          content:
-            message.content.trim() ||
-            `Cursor agent error: ${event.message}`,
-        }))
-        toast.error(event.message)
-        return
-      }
-      if (event.type === "done") {
-        patchAssistant(
-          (message) => ({
-            ...message,
-            metadata: {
-              model,
-              responseTime: (Date.now() - started) / 1000,
-            },
-          }),
-          event.sessionId
-        )
-      }
-    }
-
-    try {
-      await streamCursorChat(
-        {
-          prompt,
-          model,
-          sessionId: cursorSessionId,
-        },
-        { onEvent, signal: controller.signal }
-      )
-    } catch (err) {
-      if (!controller.signal.aborted) {
-        const message =
-          err instanceof Error ? err.message : "Cursor agent failed"
-        toast.error(message)
-        patchAssistant((item) => ({
-          ...item,
-          content: item.content.trim() || `Cursor agent error: ${message}`,
-        }))
-      }
-    } finally {
-      if (abortRef.current === controller) abortRef.current = null
-      setIsGenerating(false)
-      setGenerationStage("idle")
-    }
-  }
-
-  const handleSend = (payload: ChatInputPayload) => {
-    if (payload.text.trim() === "/clear") {
-      persistSession(activeId, (session) => ({
-        ...session,
-        messages: [],
-        cursorSessionId: undefined,
-      }))
-      setMessages([])
-      return
-    }
-
-    const skillPrefix =
-      payload.skills.length > 0
-        ? `[skills: ${payload.skills.join(", ")}] `
-        : ""
-    const fileNote =
-      payload.files.length > 0
-        ? `\n\nAttached: ${payload.files.map((f) => f.name).join(", ")}`
-        : ""
-    const content = `${skillPrefix}${payload.text}${fileNote}`
-    const sessionId = activeId
-
-    if (messages.length === 0 && payload.text.trim()) {
-      const title =
-        payload.text.trim().slice(0, 42) +
-        (payload.text.trim().length > 42 ? "…" : "")
-      persistSession(sessionId, (session) => ({ ...session, title }))
-    }
-
-    const userMessage: MessageData = {
-      id: crypto.randomUUID(),
-      content,
-      sender: "user",
-    }
-    const next = [...messages, userMessage]
-    persistSession(sessionId, (session) => ({ ...session, messages: next }))
-    setMessages(next)
-    void runPrompt(content, sessionId, next, activeSession?.cursorSessionId)
-  }
-
-  const handleStop = () => {
-    stopGeneration()
-  }
-
-  useEffect(() => () => abortRef.current?.abort(), [])
-
-  const orderedSessions = [
-    ...sessions.filter((s) => s.pinned),
-    ...sessions.filter((s) => !s.pinned),
-  ]
-
+export default function Home() {
   return (
-    <div className="flex h-full min-h-0 overflow-hidden bg-background">
-      <ChatSidebarDnd
-        onDrop={(drop) => {
-          if (drop.action === "pin") {
-            setSessions((prev) =>
-              prev.map((s) =>
-                s.id === drop.id ? { ...s, pinned: true } : s
-              )
-            )
-          } else if (drop.action === "delete") {
-            stopGeneration()
-            setSessions((prev) => {
-              const next = prev.filter((s) => s.id !== drop.id)
-              if (activeId === drop.id) {
-                setActiveId(next[0]?.id ?? "")
-                setMessages(next[0]?.messages ?? [])
-              }
-              return next
-            })
-            toast.message("Chat deleted")
-          }
-        }}
-        renderOverlay={(id) => {
-          const item = sessions.find((s) => s.id === id)
-          if (!item) return null
-          return (
-            <ChatSidebarItemGhost
-              item={item}
-              active={item.id === activeId}
-            />
-          )
-        }}
-      >
-        <ChatSidebar
-          collapsed={collapsed}
-          onCollapsedChange={setCollapsed}
-          edgeZones
-          brand={
-            <span
-              className="truncate px-1 text-[15px] font-semibold tracking-tight"
-              style={{
-                color: "var(--ink)",
-                fontFamily: "var(--lc-body-font)",
-              }}
-            >
-              Chat
-            </span>
-          }
-          nav={
-            <>
-              <SideRow
-                icon={<Pencil className="h-4 w-4" />}
-                onClick={handleNewChat}
-              >
-                New chat
-              </SideRow>
-              <SideRow
-                icon={<Search className="h-4 w-4" />}
-                hint="⌘K"
-                onClick={() => toast.message("Wire search to your app")}
-              >
-                Search
-              </SideRow>
-            </>
-          }
-          rail={
-            <>
-              <SideIconBtn label="New chat" onClick={handleNewChat}>
-                <Pencil className="h-4 w-4" />
-              </SideIconBtn>
-              <SideIconBtn
-                label="Search"
-                onClick={() => toast.message("Wire search to your app")}
-              >
-                <Search className="h-4 w-4" />
-              </SideIconBtn>
-            </>
-          }
+    <div className="mx-auto flex min-h-svh max-w-3xl flex-col gap-8 px-4 py-8">
+      <header className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-3xl font-bold tracking-tight">Chat Components</h1>
+            <p className="text-muted-foreground">
+              A custom registry for distributing chat UI with shadcn.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/demo">Cursor PoC</Link>
+            </Button>
+            <ModeToggle />
+          </div>
+        </div>
+        <CopyCommand command="npx shadcn@latest add miskibin/chat-components/chat" />
+      </header>
+
+      <main className="flex flex-1 flex-col gap-8">
+        <RegistryPreview
+          name="chat"
+          description="Starter chat block: empty state, prompt suggestions, then messages + input."
         >
-          <SidebarSessionSection
-            open={chatsOpen}
-            onToggle={() => setChatsOpen((v) => !v)}
-            sessions={orderedSessions}
-            activeId={activeId}
-            onSelect={selectSession}
-            onRename={(id, title) =>
-              setSessions((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, title } : s))
-              )
-            }
-            onTogglePin={(id, pinned) =>
-              setSessions((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, pinned } : s))
-              )
-            }
-            onDelete={(id) => {
-              if (id === activeId) stopGeneration()
-              setSessions((prev) => {
-                const next = prev.filter((s) => s.id !== id)
-                if (activeId === id) {
-                  setActiveId(next[0]?.id ?? "")
-                  setMessages(next[0]?.messages ?? [])
-                }
-                return next
-              })
-            }}
-          />
-        </ChatSidebar>
-      </ChatSidebarDnd>
+          <div className="h-[480px] overflow-hidden rounded-md border">
+            <Chat />
+          </div>
+        </RegistryPreview>
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ThemeToggle />
+        <RegistryPreview
+          name="chat-input"
+          description="Composer-style input with attachments, skills, and slash commands."
+        >
+          <ChatInputExample />
+        </RegistryPreview>
 
-        <MessageList
-          messages={messages}
-          isGenerating={isGenerating}
-          generationStage={generationStage}
-          onEditMessage={(id, content) =>
-            setMessages((prev) => {
-              const next = prev.map((msg) =>
-                msg.id === id ? { ...msg, content } : msg
-              )
-              persistSession(activeId, (session) => ({
-                ...session,
-                messages: next,
-              }))
-              return next
-            })
-          }
-          emptyState={
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-              <p
-                className="text-lg font-medium text-foreground"
-                style={{ fontFamily: "var(--lc-body-font)" }}
-              >
-                {activeTitle === "Welcome chat" || !activeTitle
-                  ? "Talk to Cursor Agent"
-                  : activeTitle}
-              </p>
-              <p className="max-w-sm text-sm">
-                Real LLM + tool calls via the local{" "}
-                <code className="rounded-sm bg-muted px-1.5 py-0.5 text-xs">
-                  agent
-                </code>{" "}
-                CLI. Try “what files are in this repo?”
-              </p>
-            </div>
-          }
-          renderActions={(message) => {
-            if (message.sender !== "assistant") return null
-            return (
-              <div className="-mt-2 mb-4 flex gap-1 opacity-60 hover:opacity-100">
-                <ActionBtn
-                  title="Copy"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(message.content)
-                    toast.success("Copied")
-                  }}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </ActionBtn>
-                <ActionBtn
-                  title="Regenerate"
-                  onClick={() => {
-                    const idx = messages.findIndex((m) => m.id === message.id)
-                    let userIdx = idx - 1
-                    while (
-                      userIdx >= 0 &&
-                      messages[userIdx].sender !== "user"
-                    ) {
-                      userIdx--
-                    }
-                    if (userIdx < 0) return
-                    const prompt = messages[userIdx].content
-                    const next = messages.filter((m) => m.id !== message.id)
-                    persistSession(activeId, (session) => ({
-                      ...session,
-                      messages: next,
-                    }))
-                    setMessages(next)
-                    void runPrompt(
-                      prompt,
-                      activeId,
-                      next,
-                      activeSession?.cursorSessionId
-                    )
-                  }}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </ActionBtn>
-                <ActionBtn
-                  title="Delete"
-                  onClick={() => {
-                    const next = messages.filter((m) => m.id !== message.id)
-                    persistSession(activeId, (session) => ({
-                      ...session,
-                      messages: next,
-                    }))
-                    setMessages(next)
-                  }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </ActionBtn>
-              </div>
-            )
-          }}
-        />
+        <RegistryPreview
+          name="message-list"
+          description="Message list with user bubbles and assistant markdown."
+        >
+          <MessageExample />
+        </RegistryPreview>
 
-        <ChatInput
-          onSend={handleSend}
-          onStop={handleStop}
-          isGenerating={isGenerating}
-          placeholder="Ask Cursor Agent — try listing files in this repo"
-          skills={DEMO_SKILLS}
-          slashCommands={DEMO_COMMANDS}
-          tools={
-            <ModelPicker
-              value={selectedModel}
-              onChange={setSelectedModel}
-              options={modelOptions}
-              align="up"
-            />
-          }
-        />
-      </div>
+        <RegistryPreview
+          name="model-picker"
+          description="Ask / Plan / Agent mode and a model picker."
+        >
+          <PickersExample />
+        </RegistryPreview>
+
+        <RegistryPreview
+          name="chat-sidebar"
+          description="Collapsible sidebar chrome with slots."
+        >
+          <SidebarExample />
+        </RegistryPreview>
+
+        <RegistryPreview
+          name="generation-status"
+          description="Braille spinner for generation state."
+          minHeight="280px"
+        >
+          <StatusExample />
+        </RegistryPreview>
+
+        <RegistryPreview
+          name="chat-navbar"
+          description="Thin top bar with title and action slots."
+          minHeight="280px"
+        >
+          <div className="overflow-hidden rounded-md border">
+            <ChatNavbar title="Chat" right={<ThemeToggle floating={false} />} />
+          </div>
+        </RegistryPreview>
+      </main>
     </div>
-  )
-}
-
-function SidebarSessionSection({
-  open,
-  onToggle,
-  sessions,
-  activeId,
-  onSelect,
-  onRename,
-  onTogglePin,
-  onDelete,
-}: {
-  open: boolean
-  onToggle: () => void
-  sessions: ChatSidebarItemData[]
-  activeId: string
-  onSelect: (id: string) => void
-  onRename: (id: string, title: string) => void
-  onTogglePin: (id: string, pinned: boolean) => void
-  onDelete: (id: string) => void
-}) {
-  const { activeDragId } = useSidebarDnd()
-  return (
-    <SidebarCollapsibleSection
-      title="Recent chats"
-      open={open}
-      onToggle={onToggle}
-      count={sessions.length}
-    >
-      {sessions.length === 0 ? (
-        <SidebarEmptyState>New chats appear here.</SidebarEmptyState>
-      ) : (
-        <ChatSidebarItemList
-          items={sessions}
-          activeId={activeId}
-          activeDragId={activeDragId}
-          onSelect={onSelect}
-          onRename={onRename}
-          onTogglePin={onTogglePin}
-          onDelete={onDelete}
-        />
-      )}
-    </SidebarCollapsibleSection>
-  )
-}
-
-function textFromParts(parts: MessagePart[]) {
-  return parts
-    .filter(
-      (part): part is Extract<MessagePart, { type: "text" }> =>
-        part.type === "text"
-    )
-    .map((part) => part.text)
-    .join("")
-}
-
-function toolsFromParts(parts: MessagePart[]) {
-  return parts
-    .filter(
-      (part): part is Extract<MessagePart, { type: "tool" }> =>
-        part.type === "tool"
-    )
-    .map((part) => part.tool)
-}
-
-function appendTextPart(parts: MessagePart[], text: string): MessagePart[] {
-  const last = parts.at(-1)
-  if (last?.type === "text") {
-    return [...parts.slice(0, -1), { ...last, text: last.text + text }]
-  }
-  return [...parts, { type: "text", id: crypto.randomUUID(), text }]
-}
-
-function upsertToolPart(
-  parts: MessagePart[],
-  tool: MessageToolCallData
-): MessagePart[] {
-  const index = parts.findIndex(
-    (part) => part.type === "tool" && part.tool.id === tool.id
-  )
-  if (index >= 0) {
-    const next = [...parts]
-    const existing = next[index]
-    if (existing.type === "tool") {
-      next[index] = {
-        type: "tool",
-        id: existing.id,
-        tool: {
-          ...existing.tool,
-          ...tool,
-          input: tool.input ?? existing.tool.input,
-          output: tool.output ?? existing.tool.output,
-        },
-      }
-    }
-    return next
-  }
-  return [...parts, { type: "tool", id: tool.id, tool }]
-}
-
-function ActionBtn({
-  title,
-  onClick,
-  children,
-}: {
-  title: string
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-    >
-      {children}
-    </button>
   )
 }

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "prompt-suggestions",
+  "title": "Prompt Suggestions",
+  "description": "Minimal starter-prompt list for an empty chat.",
+  "files": [
+    {
+      "path": "components/ui/prompt-suggestions.tsx",
+      "content": "\"use client\"\r\n\r\nimport type { ReactNode } from \"react\"\r\n\r\nimport { cn } from \"@/lib/utils\"\r\n\r\nexport type PromptSuggestion = {\r\n  id?: string\r\n  label: string\r\n  icon?: ReactNode\r\n}\r\n\r\nexport type PromptSuggestionsProps = {\r\n  items: PromptSuggestion[]\r\n  onSelect?: (item: PromptSuggestion) => void\r\n  className?: string\r\n}\r\n\r\nexport function PromptSuggestions({\r\n  items,\r\n  onSelect,\r\n  className,\r\n}: PromptSuggestionsProps) {\r\n  if (items.length === 0) return null\r\n\r\n  return (\r\n    <ul\r\n      className={cn(\"mx-auto w-full max-w-4xl px-8 pt-3\", className)}\r\n      role=\"list\"\r\n    >\r\n      {items.map((item, index) => (\r\n        <li key={item.id ?? `${item.label}-${index}`}>\r\n          <button\r\n            type=\"button\"\r\n            onClick={() => onSelect?.(item)}\r\n            className=\"group flex w-full items-start gap-2.5 py-2 text-left text-sm leading-snug text-muted-foreground transition-colors hover:text-foreground\"\r\n          >\r\n            {item.icon ? (\r\n              <span className=\"mt-0.5 grid size-4 shrink-0 place-items-center text-muted-foreground/80 group-hover:text-foreground [&_svg]:size-4\">\r\n                {item.icon}\r\n              </span>\r\n            ) : null}\r\n            <span>{item.label}</span>\r\n          </button>\r\n        </li>\r\n      ))}\r\n    </ul>\r\n  )\r\n}\r\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}

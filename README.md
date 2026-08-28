@@ -18,6 +18,7 @@ Or install only what you need:
 
 ```bash
 npx shadcn@latest add miskibin/chat-components/chat-input
+npx shadcn@latest add miskibin/chat-components/prompt-suggestions
 npx shadcn@latest add miskibin/chat-components/message
 npx shadcn@latest add miskibin/chat-components/message-list
 npx shadcn@latest add miskibin/chat-components/message-parts
@@ -40,8 +41,9 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 
 | Item | What you get |
 | --- | --- |
-| **chat** | Starter `Chat` block: `MessageList` + `ChatInput`. Also installs the kit atoms. |
+| **chat** | Starter `Chat` block: empty-state composer + `PromptSuggestions`, then `MessageList` + `ChatInput`. Also installs the kit atoms. |
 | **chat-input** | Composer textarea with attachments, drag-and-drop, optional skills/slash menu, tools slot, send/stop |
+| **prompt-suggestions** | Minimal starter-prompt list for the empty chat state |
 | **message** | User bubble + assistant turn (reasoning, tools, code, artifacts, think tags, edit) |
 | **message-parts** | `MessageReasoning`, `MessageToolCall`, `MessageCode`, `MessageArtifact` |
 | **message-markdown** | Streamdown renderer (GFM, Shiki code, Mermaid, KaTeX) + styles |
@@ -114,6 +116,15 @@ export function Chat() {
 
 Skills and slash menus mount only when those arrays are non-empty.
 
+### PromptSuggestions props
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `items` | `{ id?, label, icon? }[]` | Starter prompts |
+| `onSelect` | `(item) => void` | Called when a prompt is clicked |
+
+Render under `ChatInput` in the empty state. Clicking a row should send that prompt.
+
 ### Message props
 
 | Prop | Type | Description |
@@ -172,14 +183,15 @@ transpilePackages: [
 - Accessible labels and focus handling
 - Themed with Tailwind CSS + shadcn CSS variables
 
-## Local demo
+## Local docs and PoC
 
 ```bash
 npm install
 npm run dev
 ```
 
-The demo app on `/` is wired to a local Cursor Agent CLI. That backend is **not** part of the registry — you only get the UI.
+- `/` — registry docs (live previews, same layout as the [shadcn registry template](https://github.com/shadcn-ui/registry-template))
+- `/demo` — Cursor Agent CLI proof of concept (not part of the published registry)
 
 ## License
 

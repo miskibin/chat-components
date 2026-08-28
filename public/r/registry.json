@@ -66,6 +66,18 @@
       ]
     },
     {
+      "name": "prompt-suggestions",
+      "type": "registry:ui",
+      "title": "Prompt Suggestions",
+      "description": "Minimal starter-prompt list for an empty chat.",
+      "files": [
+        {
+          "path": "components/ui/prompt-suggestions.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "mode-picker",
       "type": "registry:ui",
       "title": "Mode Picker",
@@ -236,6 +248,7 @@
       "description": "Full chat UI kit composed from atomic components. Starter layout is message list + input.",
       "registryDependencies": [
         "miskibin/chat-components/chat-input",
+        "miskibin/chat-components/prompt-suggestions",
         "miskibin/chat-components/message-list",
         "miskibin/chat-components/model-picker",
         "miskibin/chat-components/mode-picker",
