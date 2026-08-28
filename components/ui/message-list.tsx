@@ -12,6 +12,7 @@ import {
   Message,
   type MessageArtifactData,
   type MessageCodeBlockData,
+  type MessagePart,
   type MessageToolCallData,
   type PatternHandler,
 } from "@/components/ui/message"
@@ -24,7 +25,9 @@ export type ChatMessageData = {
   sender: "user" | "assistant"
   reasoning?: string | null
   reasoningDuration?: number
+  reasoningDefaultOpen?: boolean
   tools?: MessageToolCallData[]
+  parts?: MessagePart[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
 }
@@ -98,41 +101,57 @@ export function MessageList({
     <div
       ref={scrollRef}
       onScroll={handleMessageScroll}
-      className={cn("flex-1 overflow-y-auto px-4 py-4", className)}
+      className={cn("min-h-0 flex-1 overflow-y-auto px-4 py-4", className)}
     >
       <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col">
         {messages.length === 0 ? (
           emptyState ?? <div className="flex flex-1 items-center justify-center" />
         ) : (
-          messages.map((message) => (
-            <div key={message.id}>
-              <Message
-                content={message.content}
-                sender={message.sender}
-                reasoning={message.reasoning}
-                reasoningDuration={message.reasoningDuration}
-                tools={message.tools}
-                codeBlocks={message.codeBlocks}
-                artifacts={message.artifacts}
-                patternHandlers={patternHandlers}
-                editable={message.sender === "user" && !!onEditMessage}
-                onEdit={
-                  onEditMessage
-                    ? (content) => onEditMessage(message.id, content)
-                    : undefined
-                }
-              />
-              {renderActions?.(message)}
-            </div>
-          ))
-        )}
-        {(isGenerating || generationStage !== "idle") && (
-          <div className="mb-4">
-            <GenerationStatus
-              active={isGenerating || generationStage !== "idle"}
-              stage={generationStage}
-            />
-          </div>
+          messages.map((message, index) => {
+            const isStreaming =
+              (isGenerating || generationStage !== "idle") &&
+              index === messages.length - 1 &&
+              message.sender === "assistant"
+            const waiting =
+              isStreaming &&
+              !message.reasoning &&
+              !message.content?.trim() &&
+              !(message.tools && message.tools.length > 0) &&
+              !(message.parts && message.parts.length > 0)
+            return (
+              <div key={message.id}>
+                <Message
+                  content={message.content}
+                  sender={message.sender}
+                  reasoning={message.reasoning}
+                  reasoningDuration={message.reasoningDuration}
+                  reasoningDefaultOpen={message.reasoningDefaultOpen}
+                  tools={message.tools}
+                  parts={message.parts}
+                  codeBlocks={message.codeBlocks}
+                  artifacts={message.artifacts}
+                  patternHandlers={patternHandlers}
+                  isAnimating={isStreaming}
+                  editable={message.sender === "user" && !!onEditMessage}
+                  onEdit={
+                    onEditMessage
+                      ? (content) => onEditMessage(message.id, content)
+                      : undefined
+                  }
+                />
+                {waiting ? (
+                  <div className="mb-4">
+                    <GenerationStatus
+                      active
+                      stage={generationStage}
+                    />
+                  </div>
+                ) : isStreaming ? null : (
+                  renderActions?.(message)
+                )}
+              </div>
+            )
+          })
         )}
         {children}
       </div>

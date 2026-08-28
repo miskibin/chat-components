@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "use-click-outside",
+  "title": "useClickOutside",
+  "description": "Close a popover or menu when the pointer lands outside its root.",
+  "files": [
+    {
+      "path": "hooks/use-click-outside.ts",
+      "content": "import { useEffect, type RefObject } from \"react\"\r\n\r\nexport function useClickOutside<T extends HTMLElement>(\r\n  ref: RefObject<T | null>,\r\n  handler: () => void,\r\n  enabled: boolean = true\r\n): void {\r\n  useEffect(() => {\r\n    if (!enabled) return\r\n    function onMouseDown(e: MouseEvent) {\r\n      if (ref.current && !ref.current.contains(e.target as Node)) handler()\r\n    }\r\n    document.addEventListener(\"mousedown\", onMouseDown)\r\n    return () => document.removeEventListener(\"mousedown\", onMouseDown)\r\n  }, [ref, handler, enabled])\r\n}\r\n",
+      "type": "registry:hook"
+    }
+  ],
+  "type": "registry:hook"
+}

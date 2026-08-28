@@ -59,7 +59,7 @@ function statusChrome(
   }
   const resolved = status ?? (active ? "active" : "idle")
   if (resolved === "fault") {
-    const fill = "color-mix(in oklab, var(--destructive) 82%, var(--bg-sidebar))"
+    const fill = "color-mix(in oklab, var(--destructive) 82%, var(--sidebar))"
     return {
       variant: "fault",
       dotStyle: { ...baseDot, background: fill },
@@ -81,14 +81,14 @@ function statusChrome(
     }
   }
   if (resolved === "active" || active) {
-    const fill = "color-mix(in oklab, var(--ink-3) 58%, var(--bg-sidebar))"
+    const fill = "color-mix(in oklab, var(--muted-foreground) 58%, var(--sidebar))"
     return {
       variant: "active",
       dotStyle: { ...baseDot, background: fill },
       iconColor: fill,
     }
   }
-  const fill = "color-mix(in oklab, var(--ink-3) 88%, var(--bg-sidebar))"
+  const fill = "color-mix(in oklab, var(--muted-foreground) 88%, var(--sidebar))"
   return {
     variant: "idle",
     dotStyle: { ...baseDot, background: fill },
@@ -198,8 +198,8 @@ function ItemRow({
           }}
           className="mb-px block w-full truncate py-1.5 pr-2.5 pl-2.5 text-left outline-none"
           style={{
-            background: "var(--hover)",
-            color: "var(--ink)",
+            background: "var(--muted)",
+            color: "var(--foreground)",
             border: 0,
             borderLeft: "2px solid var(--primary)",
             fontSize: 13.5,
@@ -252,7 +252,7 @@ function ItemRow({
         className="mb-px flex w-full items-center gap-1.5 truncate py-1.5 pr-2.5 pl-2.5 text-left"
         style={{
           background: "transparent",
-          color: "var(--ink)",
+          color: "var(--foreground)",
           border: 0,
           borderLeft: active
             ? "2px solid var(--primary)"
@@ -262,7 +262,7 @@ function ItemRow({
           cursor: dragListeners ? "grab" : "pointer",
         }}
         onMouseEnter={(e) => {
-          if (!active) e.currentTarget.style.background = "var(--hover)"
+          if (!active) e.currentTarget.style.background = "var(--muted)"
         }}
         onMouseLeave={(e) => {
           if (!active) e.currentTarget.style.background = "transparent"
@@ -430,8 +430,8 @@ export function ChatSidebarItemGhost({
     <div
       className="flex items-center gap-1.5 truncate rounded-md py-1.5 pr-3 pl-2.5"
       style={{
-        background: "var(--bg-sidebar)",
-        color: "var(--ink)",
+        background: "var(--sidebar)",
+        color: "var(--foreground)",
         border: "1px solid var(--primary)",
         boxShadow: "0 8px 18px -8px rgba(0,0,0,.35)",
         fontSize: 13.5,

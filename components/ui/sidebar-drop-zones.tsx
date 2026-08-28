@@ -20,8 +20,8 @@ export function SidebarEdgeDropZone({
   const color = tone === "danger" ? "var(--destructive)" : "var(--primary)"
   const tint =
     tone === "danger"
-      ? "color-mix(in oklab, var(--bg-sidebar) 72%, var(--destructive))"
-      : "color-mix(in oklab, var(--bg-sidebar) 72%, var(--primary))"
+      ? "color-mix(in oklab, var(--sidebar) 72%, var(--destructive))"
+      : "color-mix(in oklab, var(--sidebar) 72%, var(--primary))"
   const positionClass =
     edge === "top"
       ? "top-0 right-0 left-0 min-h-[92px] h-[16%]"

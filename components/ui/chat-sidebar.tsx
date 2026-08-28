@@ -34,24 +34,24 @@ export const SideRow = forwardRef<HTMLButtonElement, SideRowProps>(
         style={{
           background: "transparent",
           border: 0,
-          color: "var(--ink)",
+          color: "var(--foreground)",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--hover)"
+          e.currentTarget.style.background = "var(--muted)"
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = "transparent"
         }}
         {...rest}
       >
-        <span className="inline-flex" style={{ color: "var(--ink-2)" }}>
+        <span className="inline-flex" style={{ color: "var(--muted-foreground)" }}>
           {icon}
         </span>
         <span className="min-w-0 flex-1">{children}</span>
         {hint ? (
           <span
             className="shrink-0 text-[11px]"
-            style={{ color: "var(--ink-3)" }}
+            style={{ color: "var(--muted-foreground)" }}
           >
             {hint}
           </span>
@@ -79,9 +79,9 @@ export const SideIconBtn = forwardRef<HTMLButtonElement, SideIconBtnProps>(
         title={label}
         aria-label={label}
         className={className ?? "rounded-md p-2"}
-        style={{ background: "transparent", border: 0, color: "var(--ink-2)" }}
+        style={{ background: "transparent", border: 0, color: "var(--muted-foreground)" }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--hover)"
+          e.currentTarget.style.background = "var(--muted)"
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = "transparent"
@@ -120,7 +120,7 @@ export function SidebarCollapsibleSection({
         style={{
           background: "transparent",
           border: 0,
-          color: "var(--ink-3)",
+          color: "var(--muted-foreground)",
           fontSize: 11,
           fontWeight: 500,
           letterSpacing: ".04em",
@@ -140,7 +140,7 @@ export function SidebarCollapsibleSection({
       {open && description ? (
         <div
           className="px-2.5 pb-1.5"
-          style={{ fontSize: 12, color: "var(--ink-3)" }}
+          style={{ fontSize: 12, color: "var(--muted-foreground)" }}
         >
           {description}
         </div>
@@ -154,7 +154,7 @@ export function SidebarEmptyState({ children }: { children: ReactNode }) {
   return (
     <div
       className="px-2.5 py-2"
-      style={{ fontSize: 12, color: "var(--ink-3)" }}
+      style={{ fontSize: 12, color: "var(--muted-foreground)" }}
     >
       {children}
     </div>
@@ -206,7 +206,7 @@ export function ChatSidebar({
       )}
       style={{
         width: collapsed ? widthCollapsed : widthExpanded,
-        background: "var(--bg-sidebar)",
+        background: "var(--sidebar)",
         borderRight: "1px solid var(--border)",
       }}
     >
@@ -234,7 +234,7 @@ export function ChatSidebar({
         <div
           className="flex items-center justify-between gap-2 px-3 pb-2 pt-3"
           style={{
-            background: "var(--bg-sidebar)",
+            background: "var(--sidebar)",
             borderBottom: "1px solid var(--border)",
           }}
         >
@@ -247,10 +247,10 @@ export function ChatSidebar({
             style={{
               background: "transparent",
               border: 0,
-              color: "var(--ink-2)",
+              color: "var(--muted-foreground)",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--bg-soft)"
+              e.currentTarget.style.background = "var(--muted)"
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "transparent"
@@ -262,7 +262,7 @@ export function ChatSidebar({
 
         {nav ? <div className="px-2 pb-0.5 pt-2">{nav}</div> : null}
 
-        <div className="lc-scroll flex-1 overflow-y-auto px-2 pb-2 pt-3">
+        <div className="flex-1 overflow-y-auto px-2 pb-2 pt-3 [scrollbar-width:thin]">
           {children}
         </div>
 
@@ -315,16 +315,16 @@ export function ChatSidebarItemRow({
       onClick={onClick}
       className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[13px]"
       style={{
-        background: active ? "var(--hover)" : "transparent",
+        background: active ? "var(--muted)" : "transparent",
         border: 0,
-        color: "var(--ink)",
+        color: "var(--foreground)",
       }}
       onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = "var(--hover)"
+        if (!active) e.currentTarget.style.background = "var(--muted)"
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = active
-          ? "var(--hover)"
+          ? "var(--muted)"
           : "transparent"
       }}
     >

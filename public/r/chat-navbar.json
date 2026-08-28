@@ -2,11 +2,11 @@
   "$schema": "https://ui.shadcn.com/schema/registry-item.json",
   "name": "chat-navbar",
   "title": "Chat Navbar",
-  "description": "Thin top bar with title and action slots (optional; prefer ThemeToggle for minimal chrome).",
+  "description": "Thin top bar with title and action slots.",
   "files": [
     {
       "path": "components/ui/chat-navbar.tsx",
-      "content": "\"use client\"\n\nimport type { ReactNode } from \"react\"\n\nimport { cn } from \"@/lib/utils\"\n\nexport type ChatNavbarProps = {\n  title?: ReactNode\n  left?: ReactNode\n  right?: ReactNode\n  className?: string\n}\n\nexport function ChatNavbar({\n  title,\n  left,\n  right,\n  className,\n}: ChatNavbarProps) {\n  return (\n    <div\n      className={cn(\n        \"flex h-12 shrink-0 items-center justify-between gap-3 px-4\",\n        className\n      )}\n      style={{\n        background: \"var(--background)\",\n        borderBottom: \"1px solid var(--border)\",\n      }}\n    >\n      <div className=\"flex min-w-0 items-center gap-2\">\n        {left}\n        {title ? (\n          typeof title === \"string\" ? (\n            <h1\n              className=\"truncate text-[14px] font-medium\"\n              style={{\n                color: \"var(--ink)\",\n                fontFamily: \"var(--lc-body-font)\",\n              }}\n            >\n              {title}\n            </h1>\n          ) : (\n            title\n          )\n        ) : null}\n      </div>\n      <div className=\"flex shrink-0 items-center gap-1\">{right}</div>\n    </div>\n  )\n}\n",
+      "content": "\"use client\"\r\n\r\nimport type { ReactNode } from \"react\"\r\n\r\nimport { cn } from \"@/lib/utils\"\r\n\r\nexport type ChatNavbarProps = {\r\n  title?: ReactNode\r\n  left?: ReactNode\r\n  right?: ReactNode\r\n  className?: string\r\n}\r\n\r\nexport function ChatNavbar({\r\n  title,\r\n  left,\r\n  right,\r\n  className,\r\n}: ChatNavbarProps) {\r\n  return (\r\n    <div\r\n      className={cn(\r\n        \"flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4\",\r\n        className\r\n      )}\r\n    >\r\n      <div className=\"flex min-w-0 items-center gap-2\">\r\n        {left}\r\n        {title ? (\r\n          typeof title === \"string\" ? (\r\n            <h1 className=\"truncate text-[14px] font-medium text-foreground\">\r\n              {title}\r\n            </h1>\r\n          ) : (\r\n            title\r\n          )\r\n        ) : null}\r\n      </div>\r\n      <div className=\"flex shrink-0 items-center gap-1\">{right}</div>\r\n    </div>\r\n  )\r\n}\r\n",
       "type": "registry:ui"
     }
   ],

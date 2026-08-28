@@ -12,7 +12,6 @@ import {
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
-import ReactMarkdown from "react-markdown"
 import { codeToHtml } from "shiki"
 
 import {
@@ -21,6 +20,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
+import { MessageMarkdown } from "@/components/ui/message-markdown"
 
 export type MessageToolCallData = {
   id: string
@@ -66,15 +66,15 @@ export function MessageReasoning({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn("lc-reveal mb-2", className)}
+      className={cn("animate-in fade-in duration-150 mb-2", className)}
     >
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex w-full items-center gap-1.5 py-0.5 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+          className="inline-flex max-w-full items-center gap-1 py-0.5 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
         >
           <Brain className="h-3.5 w-3.5 shrink-0 opacity-70" />
-          <span className="min-w-0 flex-1">{label}</span>
+          <span className="min-w-0 truncate">{label}</span>
           <ChevronDown
             className={cn(
               "h-3.5 w-3.5 shrink-0 opacity-50 transition-transform",
@@ -88,17 +88,120 @@ export function MessageReasoning({
           className="mt-2 border-l pl-3 text-[13px] leading-relaxed text-muted-foreground"
           style={{ borderColor: "var(--border)" }}
         >
-          <ReactMarkdown>{children}</ReactMarkdown>
+          <MessageMarkdown>{children}</MessageMarkdown>
         </div>
       </CollapsibleContent>
     </Collapsible>
   )
 }
 
-function toolVerb(status: NonNullable<MessageToolCallData["status"]>) {
-  if (status === "running" || status === "pending") return "Running"
-  if (status === "error") return "Failed"
-  return "Ran"
+function parseToolArgs(input?: string): Record<string, unknown> {
+  if (!input?.trim()) return {}
+  try {
+    const value = JSON.parse(input) as unknown
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>
+    }
+  } catch {
+    /* raw string */
+  }
+  return {}
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : undefined
+}
+
+function fileName(path: string) {
+  const trimmed = path.replace(/[\\/]+$/, "")
+  return trimmed.split(/[\\/]/).pop() || path
+}
+
+function clip(text: string, max = 48) {
+  const oneLine = text.replace(/\s+/g, " ").trim()
+  return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1)}…`
+}
+
+function toolHeadline(tool: MessageToolCallData) {
+  const args = parseToolArgs(tool.input)
+  const kind = tool.name.replace(/\s+/g, "").toLowerCase()
+  const running = tool.status === "running" || tool.status === "pending"
+  const failed = tool.status === "error"
+  const path =
+    asString(args.path) ??
+    asString(args.filePath) ??
+    asString(args.target_file) ??
+    asString(args.file)
+  const command =
+    asString(args.command) ?? asString(args.cmd) ?? asString(args.script)
+  const query =
+    asString(args.query) ??
+    asString(args.pattern) ??
+    asString(args.glob) ??
+    asString(args.search)
+
+  if (kind.includes("shell") || kind === "bash" || kind === "command") {
+    return {
+      label: failed
+        ? "Command failed"
+        : running
+          ? "Running command"
+          : "Ran command",
+      detail: command ? clip(command) : undefined,
+    }
+  }
+  if (kind.includes("read")) {
+    return {
+      label: failed ? "Couldn’t read" : running ? "Reading file" : "Read file",
+      detail: path ? fileName(path) : undefined,
+    }
+  }
+  if (kind.includes("write") || kind.includes("createfile")) {
+    return {
+      label: failed ? "Couldn’t write" : running ? "Writing file" : "Wrote file",
+      detail: path ? fileName(path) : undefined,
+    }
+  }
+  if (
+    kind.includes("edit") ||
+    kind.includes("applypatch") ||
+    kind.includes("searchreplace")
+  ) {
+    return {
+      label: failed ? "Couldn’t edit" : running ? "Editing file" : "Edited file",
+      detail: path ? fileName(path) : undefined,
+    }
+  }
+  if (kind.includes("grep") || kind.includes("search") || kind.includes("glob")) {
+    return {
+      label: failed
+        ? "Search failed"
+        : running
+          ? "Searching files"
+          : "Searched files",
+      detail: query ? clip(query, 40) : path ? fileName(path) : undefined,
+    }
+  }
+  if (kind.includes("delete") || kind.includes("remove")) {
+    return {
+      label: failed ? "Couldn’t delete" : running ? "Deleting" : "Deleted",
+      detail: path ? fileName(path) : undefined,
+    }
+  }
+  if (kind.includes("list") || kind === "ls" || kind.includes("dir")) {
+    return {
+      label: failed
+        ? "Couldn’t list files"
+        : running
+          ? "Listing files"
+          : "Listed files",
+      detail: path ? fileName(path) : undefined,
+    }
+  }
+  return {
+    label: failed ? "Failed" : running ? "Working" : "Done",
+    detail: tool.name,
+  }
 }
 
 /** Single Cursor-style tool row — no card chrome. */
@@ -117,18 +220,20 @@ export function MessageToolCall({
   const errored = status === "error"
   const hasBody = !!(tool.input || tool.output)
 
+  const headline = toolHeadline(tool)
+
   return (
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn("lc-reveal group", className)}
+      className={cn("animate-in fade-in duration-150 group", className)}
     >
       <CollapsibleTrigger asChild>
         <button
           type="button"
           disabled={!hasBody}
           className={cn(
-            "flex w-full items-center gap-1.5 py-[3px] text-left text-[13px] leading-snug",
+            "inline-flex max-w-full items-center gap-1.5 py-[3px] text-left text-[13px] leading-snug",
             hasBody
               ? "cursor-pointer text-muted-foreground hover:text-foreground"
               : "cursor-default text-muted-foreground"
@@ -139,16 +244,21 @@ export function MessageToolCall({
           ) : errored ? (
             <TriangleAlert className="h-3 w-3 shrink-0 text-destructive" />
           ) : null}
-          <span className="shrink-0">{toolVerb(status)}</span>
-          <span
-            className="min-w-0 truncate font-medium"
-            style={{
-              color: errored ? "var(--destructive)" : "var(--ink)",
-              opacity: 0.88,
-            }}
-          >
-            {tool.name}
-          </span>
+          <span className="shrink-0">{headline.label}</span>
+          {headline.detail ? (
+            <span
+              className="min-w-0 truncate font-medium"
+              style={{
+                color: errored ? "var(--destructive)" : "var(--foreground)",
+                opacity: 0.88,
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+              }}
+              title={headline.detail}
+            >
+              {headline.detail}
+            </span>
+          ) : null}
           {!open &&
           tool.output &&
           tool.output.length < 28 &&
@@ -158,7 +268,7 @@ export function MessageToolCall({
               style={{
                 color: tool.output.startsWith("+")
                   ? "oklch(0.62 0.15 155)"
-                  : "var(--ink-3)",
+                  : "var(--muted-foreground)",
               }}
             >
               {tool.output}
@@ -167,7 +277,7 @@ export function MessageToolCall({
           {hasBody ? (
             <ChevronDown
               className={cn(
-                "ml-auto h-3 w-3 shrink-0 opacity-0 transition group-hover:opacity-40",
+                "h-3 w-3 shrink-0 opacity-0 transition group-hover:opacity-40",
                 open && "rotate-180 opacity-40"
               )}
             />
@@ -190,7 +300,7 @@ export function MessageToolCall({
                 className="m-0 overflow-x-auto py-1 text-[12px] leading-relaxed whitespace-pre-wrap break-words"
                 style={{
                   fontFamily: "var(--font-mono)",
-                  color: "var(--ink-2)",
+                  color: "var(--muted-foreground)",
                 }}
               >
                 {tool.output}
@@ -237,7 +347,7 @@ export function MessageToolCalls({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn("lc-reveal mb-3", className)}
+      className={cn("animate-in fade-in duration-150 mb-3", className)}
     >
       <CollapsibleTrigger asChild>
         <button
@@ -331,8 +441,8 @@ function HighlightedCode({
       <pre
         className="m-0 overflow-x-auto px-3.5 py-3 text-[12.5px] leading-[1.55]"
         style={{
-          background: "var(--code-bg)",
-          color: "var(--code-ink)",
+          background: "var(--muted)",
+          color: "var(--foreground)",
           fontFamily: "var(--font-mono)",
         }}
       >
@@ -344,7 +454,7 @@ function HighlightedCode({
   return (
     <div
       className="lc-code-shiki overflow-x-auto text-[12.5px] leading-[1.55] [&_pre]:m-0 [&_pre]:!bg-transparent [&_pre]:px-3.5 [&_pre]:py-3 [&_code]:font-mono"
-      style={{ background: "var(--code-bg)" }}
+      style={{ background: "var(--muted)" }}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
@@ -367,29 +477,35 @@ export function MessageCode({
       /* ignore */
     }
   }
-  const lang = normalizeLang(block.language)
-  const langLabel = (block.language ?? lang).toLowerCase()
+  const langLabel = (block.language ?? "text").toLowerCase()
+  if (langLabel === "mermaid") {
+    return (
+      <div className={cn("my-3", className)}>
+        <MessageMarkdown>{`\`\`\`mermaid\n${block.code}\n\`\`\``}</MessageMarkdown>
+      </div>
+    )
+  }
 
   return (
     <div
-      className={cn("lc-reveal my-3 overflow-hidden rounded-lg", className)}
+      className={cn("animate-in fade-in duration-150 my-3 overflow-hidden rounded-lg", className)}
       style={{
         border: "1px solid var(--border)",
-        background: "var(--code-bg)",
+        background: "var(--muted)",
       }}
     >
       <div
         className="flex items-center gap-2 px-3 py-1.5"
         style={{
           borderBottom: "1px solid var(--border)",
-          background: "color-mix(in oklab, var(--code-bg) 70%, var(--bg-soft))",
+          background: "var(--muted)",
         }}
       >
         <span
           className="rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide"
           style={{
-            color: "var(--ink-2)",
-            background: "var(--bg-soft)",
+            color: "var(--muted-foreground)",
+            background: "var(--muted)",
             border: "1px solid var(--border)",
             fontFamily: "var(--font-mono)",
           }}
@@ -400,7 +516,7 @@ export function MessageCode({
           <span
             className="min-w-0 flex-1 truncate text-[12px]"
             style={{
-              color: "var(--ink-3)",
+              color: "var(--muted-foreground)",
               fontFamily: "var(--font-mono)",
             }}
           >
@@ -443,10 +559,10 @@ export function MessageArtifact({
 
   return (
     <div
-      className={cn("lc-reveal my-3 overflow-hidden rounded-xl", className)}
+      className={cn("animate-in fade-in duration-150 my-3 overflow-hidden rounded-xl", className)}
       style={{
         border: "1px solid var(--border)",
-        background: "var(--surface)",
+        background: "var(--card)",
       }}
     >
       <button
@@ -454,7 +570,7 @@ export function MessageArtifact({
         onClick={artifact.onOpen}
         className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition hover:opacity-90"
         style={{
-          background: "var(--bg-soft)",
+          background: "var(--muted)",
           borderBottom: artifact.content ? "1px solid var(--border)" : undefined,
           cursor: artifact.onOpen ? "pointer" : "default",
         }}
@@ -468,14 +584,14 @@ export function MessageArtifact({
         <div className="min-w-0 flex-1">
           <div
             className="truncate text-[13px] font-medium"
-            style={{ color: "var(--ink)" }}
+            style={{ color: "var(--foreground)" }}
           >
             {artifact.title}
           </div>
           {meta ? (
             <div
               className="mt-0.5 truncate text-[11.5px]"
-              style={{ color: "var(--ink-3)" }}
+              style={{ color: "var(--muted-foreground)" }}
             >
               {meta}
             </div>
@@ -486,8 +602,8 @@ export function MessageArtifact({
         <div
           className="max-h-[min(14rem,40vh)] overflow-auto px-3.5 py-2.5 text-[12.5px] leading-relaxed whitespace-pre-wrap break-words"
           style={{
-            background: "var(--code-bg)",
-            color: "var(--code-ink)",
+            background: "var(--muted)",
+            color: "var(--foreground)",
             fontFamily: "var(--font-mono)",
           }}
         >

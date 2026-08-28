@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "sidebar-dnd",
+  "title": "Sidebar DnD",
+  "description": "Drag-and-drop context for pinning and deleting sidebar items.",
+  "dependencies": [
+    "@dnd-kit/core",
+    "@dnd-kit/utilities"
+  ],
+  "files": [
+    {
+      "path": "components/ui/sidebar-dnd.tsx",
+      "content": "\"use client\"\r\n\r\nimport {\r\n  DndContext,\r\n  DragOverlay,\r\n  KeyboardSensor,\r\n  PointerSensor,\r\n  useSensor,\r\n  useSensors,\r\n  type DragEndEvent,\r\n  type DragStartEvent,\r\n} from \"@dnd-kit/core\"\r\nimport {\r\n  createContext,\r\n  useContext,\r\n  useMemo,\r\n  useState,\r\n  type ReactNode,\r\n} from \"react\"\r\n\r\nexport type SidebarDndDrop =\r\n  | { action: \"pin\"; id: string }\r\n  | { action: \"delete\"; id: string }\r\n  | { action: \"custom\"; id: string; overId: string }\r\n\r\ntype SidebarDndContextValue = {\r\n  activeDragId: string | null\r\n  pinZoneId: string\r\n  trashZoneId: string\r\n}\r\n\r\nconst SidebarDndCtx = createContext<SidebarDndContextValue>({\r\n  activeDragId: null,\r\n  pinZoneId: \"pin-zone\",\r\n  trashZoneId: \"trash-zone\",\r\n})\r\n\r\nexport function useSidebarDnd() {\r\n  return useContext(SidebarDndCtx)\r\n}\r\n\r\nexport type ChatSidebarDndProps = {\r\n  children: ReactNode\r\n  renderOverlay?: (id: string) => ReactNode\r\n  onDrop?: (drop: SidebarDndDrop) => void\r\n  pinZoneId?: string\r\n  trashZoneId?: string\r\n}\r\n\r\nexport function ChatSidebarDnd({\r\n  children,\r\n  renderOverlay,\r\n  onDrop,\r\n  pinZoneId = \"pin-zone\",\r\n  trashZoneId = \"trash-zone\",\r\n}: ChatSidebarDndProps) {\r\n  const [activeDragId, setActiveDragId] = useState<string | null>(null)\r\n  const sensors = useSensors(\r\n    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),\r\n    useSensor(KeyboardSensor)\r\n  )\r\n\r\n  const value = useMemo(\r\n    () => ({ activeDragId, pinZoneId, trashZoneId }),\r\n    [activeDragId, pinZoneId, trashZoneId]\r\n  )\r\n\r\n  const handleDragStart = (e: DragStartEvent) =>\r\n    setActiveDragId(String(e.active.id))\r\n  const handleDragCancel = () => setActiveDragId(null)\r\n  const handleDragEnd = (e: DragEndEvent) => {\r\n    const id = String(e.active.id)\r\n    const overId = e.over?.id ? String(e.over.id) : null\r\n    setActiveDragId(null)\r\n    if (!overId || !onDrop) return\r\n    if (overId === pinZoneId) onDrop({ action: \"pin\", id })\r\n    else if (overId === trashZoneId) onDrop({ action: \"delete\", id })\r\n    else onDrop({ action: \"custom\", id, overId })\r\n  }\r\n\r\n  return (\r\n    <DndContext\r\n      sensors={sensors}\r\n      onDragStart={handleDragStart}\r\n      onDragEnd={handleDragEnd}\r\n      onDragCancel={handleDragCancel}\r\n    >\r\n      <SidebarDndCtx.Provider value={value}>{children}</SidebarDndCtx.Provider>\r\n      <DragOverlay dropAnimation={null}>\r\n        {activeDragId && renderOverlay ? renderOverlay(activeDragId) : null}\r\n      </DragOverlay>\r\n    </DndContext>\r\n  )\r\n}\r\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}

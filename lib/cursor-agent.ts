@@ -1,0 +1,382 @@
+import "server-only"
+
+import { spawn, type ChildProcess } from "child_process"
+import { createInterface } from "readline"
+import { existsSync, readdirSync } from "fs"
+import path from "path"
+
+import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
+
+export type { AgentStreamEvent }
+
+export type AgentRunOptions = {
+  prompt: string
+  model: string
+  sessionId?: string
+  workspace?: string
+  signal?: AbortSignal
+}
+
+type CliEvent = {
+  type?: string
+  subtype?: string
+  session_id?: string
+  call_id?: string
+  timestamp_ms?: number
+  model_call_id?: string
+  duration_ms?: number
+  result?: unknown
+  is_error?: boolean
+  message?: {
+    content?: Array<{ type?: string; text?: string }>
+  }
+  tool_call?: Record<string, unknown>
+  text?: string
+}
+
+const MAX_FIELD = 4000
+
+export async function* runCursorAgent(
+  options: AgentRunOptions
+): AsyncGenerator<AgentStreamEvent> {
+  const workspace = options.workspace ?? process.cwd()
+  const { cmd, args: prefix } = resolveAgentCommand()
+  const args = [
+    ...prefix,
+    "-p",
+    "--output-format",
+    "stream-json",
+    "--stream-partial-output",
+    "--trust",
+    "--force",
+    "--approve-mcps",
+    "--workspace",
+    workspace,
+    "--model",
+    options.model,
+  ]
+
+  if (process.platform !== "win32") {
+    args.splice(args.indexOf("--approve-mcps"), 0, "--sandbox", "enabled")
+  }
+
+  if (options.sessionId) {
+    args.push("--resume", options.sessionId)
+  }
+
+  args.push("--", options.prompt)
+
+  const child = spawn(cmd, args, {
+    cwd: workspace,
+    env: process.env,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+
+  const stderrChunks: string[] = []
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    stderrChunks.push(String(chunk))
+  })
+
+  const onAbort = () => killAgent(child)
+  options.signal?.addEventListener("abort", onAbort)
+
+  try {
+    if (!child.stdout) {
+      yield { type: "error", message: "Cursor agent produced no stdout" }
+      return
+    }
+
+    const rl = createInterface({ input: child.stdout })
+    let emittedSession = false
+    let sawStreamingDelta = false
+    let gotText = false
+    let gotResult = false
+
+    for await (const line of rl) {
+      if (options.signal?.aborted) break
+      const trimmed = line.trim()
+      if (!trimmed.startsWith("{")) continue
+
+      let event: CliEvent
+      try {
+        event = JSON.parse(trimmed) as CliEvent
+      } catch {
+        continue
+      }
+
+      if (event.session_id && !emittedSession) {
+        emittedSession = true
+        yield { type: "session", sessionId: event.session_id }
+      }
+
+      if (event.type === "thinking" && typeof event.text === "string") {
+        yield { type: "thinking", text: event.text }
+        continue
+      }
+
+      if (event.type === "assistant") {
+        const text = assistantText(event, sawStreamingDelta)
+        if (typeof event.timestamp_ms === "number" && !event.model_call_id) {
+          sawStreamingDelta = true
+        }
+        if (text) {
+          gotText = true
+          yield { type: "text", text }
+        }
+        continue
+      }
+
+      if (event.type === "tool_call" && event.call_id) {
+        yield mapToolEvent(event)
+        continue
+      }
+
+      if (event.type === "result") {
+        gotResult = true
+        if (event.is_error) {
+          yield {
+            type: "error",
+            message: stringifyField(event.result) || "Cursor agent failed",
+          }
+        } else if (
+          !gotText &&
+          typeof event.result === "string" &&
+          event.result
+        ) {
+          yield { type: "text", text: event.result }
+        }
+        yield {
+          type: "done",
+          sessionId:
+            typeof event.session_id === "string" ? event.session_id : undefined,
+          durationMs:
+            typeof event.duration_ms === "number" ? event.duration_ms : undefined,
+        }
+      }
+    }
+
+    const exitCode: number = await new Promise((resolve) => {
+      if (child.exitCode != null) {
+        resolve(child.exitCode)
+        return
+      }
+      child.once("close", (code) => resolve(code ?? 1))
+    })
+
+    if (options.signal?.aborted) return
+
+    if (exitCode !== 0 && !gotResult) {
+      const err =
+        cleanStderr(stderrChunks.join("")) ||
+        `agent exited with code ${exitCode}`
+      yield { type: "error", message: err.slice(0, MAX_FIELD) }
+    }
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort)
+    killAgent(child)
+  }
+}
+
+export async function listCursorModels(): Promise<
+  { id: string; name: string }[]
+> {
+  const { cmd, args: prefix } = resolveAgentCommand()
+  const child = spawn(cmd, [...prefix, "models"], {
+    cwd: process.cwd(),
+    env: process.env,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+
+  let stdout = ""
+  let stderr = ""
+  child.stdout?.on("data", (chunk: Buffer | string) => {
+    stdout += String(chunk)
+  })
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    stderr += String(chunk)
+  })
+
+  const code: number = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      killAgent(child)
+      reject(new Error("Timed out listing Cursor models"))
+    }, 20000)
+    child.once("error", (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+    child.once("close", (exit) => {
+      clearTimeout(timer)
+      resolve(exit ?? 1)
+    })
+  })
+
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `agent models failed (${code})`)
+  }
+
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map((line) => line.match(/^(\S+)\s+-\s+(.+)$/))
+    .filter((m): m is RegExpMatchArray => Boolean(m))
+    .map((m) => ({ id: m[1], name: m[2] }))
+}
+
+function assistantText(event: CliEvent, sawStreamingDelta: boolean): string {
+  const hasTimestamp = typeof event.timestamp_ms === "number"
+  const hasCallId = Boolean(event.model_call_id)
+  if (hasCallId) return ""
+  if (sawStreamingDelta && !hasTimestamp) return ""
+  return (
+    event.message?.content
+      ?.filter((block) => block.type === "text" && block.text)
+      .map((block) => block.text as string)
+      .join("") ?? ""
+  )
+}
+
+function mapToolEvent(event: CliEvent): AgentStreamEvent {
+  const parsed = parseToolPayload(event.tool_call)
+  const running = event.subtype === "started"
+  const failed = !running && isToolFailure(parsed.result)
+  return {
+    type: "tool",
+    id: event.call_id as string,
+    name: parsed.name,
+    status: running ? "running" : failed ? "error" : "done",
+    input: stringifyField(parsed.args),
+    output: running ? undefined : formatToolResult(parsed.result),
+  }
+}
+
+function parseToolPayload(toolCall: Record<string, unknown> | undefined): {
+  name: string
+  args?: unknown
+  result?: unknown
+} {
+  if (!toolCall || typeof toolCall !== "object") return { name: "tool" }
+
+  const fn = toolCall.function
+  if (fn && typeof fn === "object") {
+    const record = fn as {
+      name?: string
+      arguments?: unknown
+      result?: unknown
+    }
+    return {
+      name: record.name || "function",
+      args: parseMaybeJson(record.arguments),
+      result: record.result,
+    }
+  }
+
+  const key = Object.keys(toolCall)[0]
+  if (!key) return { name: "tool" }
+  const payload = toolCall[key] as { args?: unknown; result?: unknown } | undefined
+  return {
+    name: humanizeToolKey(key),
+    args: payload?.args,
+    result: payload?.result,
+  }
+}
+
+function humanizeToolKey(key: string) {
+  const base = key.replace(/ToolCall$/, "")
+  return base
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase())
+}
+
+function parseMaybeJson(value: unknown) {
+  if (typeof value !== "string") return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
+
+function isToolFailure(result: unknown) {
+  if (!result || typeof result !== "object") return false
+  const record = result as Record<string, unknown>
+  if ("success" in record) return false
+  return "failure" in record || "error" in record
+}
+
+function formatToolResult(result: unknown): string | undefined {
+  if (result == null) return undefined
+  if (typeof result !== "object") return String(result).slice(0, MAX_FIELD)
+  const record = result as Record<string, unknown>
+  const success = record.success
+  if (success && typeof success === "object") {
+    const s = success as Record<string, unknown>
+    if (typeof s.totalLines === "number") {
+      const body = typeof s.content === "string" ? s.content.slice(0, 3000) : ""
+      return body ? `${s.totalLines} lines\n${body}` : `${s.totalLines} lines`
+    }
+    if (typeof s.linesCreated === "number") return `+${s.linesCreated}`
+    if (typeof s.path === "string") {
+      const size = typeof s.fileSize === "number" ? ` · ${s.fileSize} B` : ""
+      return `${s.path}${size}`
+    }
+  }
+  return stringifyField(result)
+}
+
+function cleanStderr(raw: string) {
+  return raw
+    .split(/\r?\n/)
+    .filter((line) => !/cursor-retrieval:\s*tracing/i.test(line))
+    .join("\n")
+    .trim()
+}
+
+function stringifyField(value: unknown): string | undefined {
+  if (value == null) return undefined
+  if (typeof value === "string") return value.slice(0, MAX_FIELD)
+  try {
+    return JSON.stringify(value, null, 2).slice(0, MAX_FIELD)
+  } catch {
+    return String(value).slice(0, MAX_FIELD)
+  }
+}
+
+function resolveAgentCommand(): { cmd: string; args: string[] } {
+  if (process.env.CURSOR_AGENT_BIN) {
+    return { cmd: process.env.CURSOR_AGENT_BIN, args: [] }
+  }
+
+  if (process.platform === "win32") {
+    const root = path.join(process.env.LOCALAPPDATA ?? "", "cursor-agent")
+    const bundled = resolveWindowsBundle(root)
+    if (bundled) return bundled
+  }
+
+  return { cmd: process.platform === "win32" ? "agent.cmd" : "agent", args: [] }
+}
+
+function resolveWindowsBundle(root: string): { cmd: string; args: string[] } | null {
+  const versionsRoot = path.join(root, "versions")
+  if (!existsSync(versionsRoot)) return null
+  const latest = readdirSync(versionsRoot)
+    .filter((name) => /^\d{4}\.\d{1,2}\.\d{1,2}/.test(name))
+    .sort()
+    .at(-1)
+  if (!latest) return null
+  const cmd = path.join(versionsRoot, latest, "node.exe")
+  const entry = path.join(versionsRoot, latest, "index.js")
+  if (!existsSync(cmd) || !existsSync(entry)) return null
+  return { cmd, args: [entry] }
+}
+
+function killAgent(child: ChildProcess) {
+  if (child.killed || child.exitCode != null) return
+  try {
+    child.kill()
+  } catch {
+    /* already gone */
+  }
+}

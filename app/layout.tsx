@@ -29,9 +29,9 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontSansUi.variable, fontMono.variable)}
+      className={cn("h-full overflow-hidden antialiased", fontSansUi.variable, fontMono.variable)}
     >
-      <body suppressHydrationWarning>
+      <body className="h-full overflow-hidden" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

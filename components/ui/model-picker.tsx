@@ -76,13 +76,13 @@ export function ModelPicker({
         style={{
           background: "transparent",
           border: 0,
-          color: "var(--ink-2)",
-          fontFamily: "var(--lc-body-font)",
+          color: "var(--muted-foreground)",
+          fontFamily: "inherit",
           fontSize: 12,
         }}
         onMouseEnter={(e) => {
           if (disabled) return
-          e.currentTarget.style.background = "var(--hover)"
+          e.currentTarget.style.background = "var(--muted)"
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = "transparent"
@@ -98,7 +98,7 @@ export function ModelPicker({
       </button>
       {open && (
         <div
-          className="lc-reveal absolute left-0 z-30 min-w-[280px] rounded-xl p-1"
+          className="animate-in fade-in zoom-in-95 duration-150 absolute left-0 z-30 min-w-[280px] rounded-xl p-1"
           style={{
             ...(align === "up"
               ? { bottom: "calc(100% + 8px)" }
@@ -114,7 +114,7 @@ export function ModelPicker({
             style={{
               fontSize: 11,
               fontWeight: 500,
-              color: "var(--ink-3)",
+              color: "var(--muted-foreground)",
               letterSpacing: ".04em",
             }}
           >
@@ -137,7 +137,7 @@ export function ModelPicker({
                 }}
                 onMouseEnter={(e) => {
                   if (!selectable) return
-                  e.currentTarget.style.background = "var(--hover)"
+                  e.currentTarget.style.background = "var(--muted)"
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = "transparent"
@@ -146,9 +146,9 @@ export function ModelPicker({
                 <div
                   className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md"
                   style={{
-                    background: "var(--bg-soft)",
+                    background: "var(--muted)",
                     border: "1px solid var(--border)",
-                    color: "var(--ink-2)",
+                    color: "var(--muted-foreground)",
                   }}
                 >
                   <Cpu className="h-3 w-3" />
@@ -157,9 +157,9 @@ export function ModelPicker({
                   <div className="flex items-center gap-1.5">
                     <span
                       style={{
-                        fontFamily: "var(--lc-body-font)",
+                        fontFamily: "inherit",
                         fontSize: 13,
-                        color: "var(--ink)",
+                        color: "var(--foreground)",
                       }}
                     >
                       {m.name}
@@ -169,7 +169,7 @@ export function ModelPicker({
                   {(m.description || m.meta) && (
                     <div
                       className="mt-0.5"
-                      style={{ fontSize: 11, color: "var(--ink-3)" }}
+                      style={{ fontSize: 11, color: "var(--muted-foreground)" }}
                     >
                       {[m.description, m.meta].filter(Boolean).join(" · ")}
                     </div>
@@ -177,7 +177,7 @@ export function ModelPicker({
                   {m.disabledReason ? (
                     <div
                       className="mt-1"
-                      style={{ fontSize: 11, color: "var(--ink-3)" }}
+                      style={{ fontSize: 11, color: "var(--muted-foreground)" }}
                     >
                       {m.disabledReason}
                     </div>
@@ -201,12 +201,12 @@ export function ModelPicker({
 function ModelBadge({ children }: { children: ReactNode }) {
   return (
     <span
-      className="rounded"
+      className="rounded-sm"
       style={{
         fontSize: 9.5,
         padding: "1px 5px",
-        background: "var(--accent-soft)",
-        color: "var(--accent-ink)",
+        background: "color-mix(in oklab, var(--primary) 12%, var(--background))",
+        color: "var(--primary)",
         fontWeight: 600,
         letterSpacing: ".02em",
         textTransform: "uppercase",

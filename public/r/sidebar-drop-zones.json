@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "sidebar-drop-zones",
+  "title": "Sidebar Drop Zones",
+  "description": "Pin and trash edge drop zones for the chat sidebar.",
+  "dependencies": [
+    "@dnd-kit/core"
+  ],
+  "registryDependencies": [
+    "miskibin/chat-components/sidebar-dnd"
+  ],
+  "files": [
+    {
+      "path": "components/ui/sidebar-drop-zones.tsx",
+      "content": "\"use client\"\r\n\r\nimport { useDroppable } from \"@dnd-kit/core\"\r\nimport type { ReactNode } from \"react\"\r\n\r\nexport function SidebarEdgeDropZone({\r\n  id,\r\n  edge,\r\n  icon,\r\n  label,\r\n  tone,\r\n}: {\r\n  id: string\r\n  edge: \"top\" | \"bottom\"\r\n  icon: ReactNode\r\n  label: string\r\n  tone: \"accent\" | \"danger\"\r\n}) {\r\n  const { setNodeRef, isOver } = useDroppable({ id })\r\n  const color = tone === \"danger\" ? \"var(--destructive)\" : \"var(--primary)\"\r\n  const tint =\r\n    tone === \"danger\"\r\n      ? \"color-mix(in oklab, var(--sidebar) 72%, var(--destructive))\"\r\n      : \"color-mix(in oklab, var(--sidebar) 72%, var(--primary))\"\r\n  const positionClass =\r\n    edge === \"top\"\r\n      ? \"top-0 right-0 left-0 min-h-[92px] h-[16%]\"\r\n      : \"right-0 bottom-0 left-0 min-h-[92px] h-[16%]\"\r\n\r\n  return (\r\n    <div\r\n      ref={setNodeRef}\r\n      className={`pointer-events-auto absolute z-[35] flex items-center justify-center px-3 py-4 ${positionClass}`}\r\n      style={{\r\n        background: isOver ? color : tint,\r\n        border: `1px dashed ${color}`,\r\n        transition: \"background 120ms ease, color 120ms ease\",\r\n      }}\r\n    >\r\n      <div\r\n        className=\"flex max-w-full items-center justify-center gap-1.5\"\r\n        style={{\r\n          fontSize: 12,\r\n          fontWeight: 600,\r\n          color: isOver ? \"var(--primary-foreground)\" : color,\r\n        }}\r\n      >\r\n        {icon}\r\n        <span className=\"truncate\">{label}</span>\r\n      </div>\r\n    </div>\r\n  )\r\n}\r\n\r\nexport function SidebarDropZone({\r\n  id,\r\n  icon,\r\n  label,\r\n  tone,\r\n  visible,\r\n}: {\r\n  id: string\r\n  icon: ReactNode\r\n  label: string\r\n  tone: \"accent\" | \"danger\"\r\n  visible: boolean\r\n}) {\r\n  const { setNodeRef, isOver } = useDroppable({ id })\r\n  const color = tone === \"danger\" ? \"var(--destructive)\" : \"var(--primary)\"\r\n\r\n  return (\r\n    <div\r\n      ref={setNodeRef}\r\n      aria-hidden={!visible}\r\n      className=\"overflow-hidden\"\r\n      style={{\r\n        maxHeight: visible ? 38 : 0,\r\n        marginTop: visible ? 4 : 0,\r\n        marginBottom: visible ? 4 : 0,\r\n        opacity: visible ? 1 : 0,\r\n        transition:\r\n          \"max-height 160ms ease, opacity 160ms ease, margin 160ms ease\",\r\n        pointerEvents: visible ? \"auto\" : \"none\",\r\n      }}\r\n    >\r\n      <div\r\n        className=\"mx-1 flex items-center justify-center gap-1.5 rounded-md py-1.5\"\r\n        style={{\r\n          fontSize: 12,\r\n          fontWeight: 500,\r\n          color: isOver ? \"var(--primary-foreground)\" : color,\r\n          background: isOver ? color : \"transparent\",\r\n          border: `1px dashed ${color}`,\r\n          transition: \"background 120ms ease, color 120ms ease\",\r\n        }}\r\n      >\r\n        {icon}\r\n        <span>{label}</span>\r\n      </div>\r\n    </div>\r\n  )\r\n}\r\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}

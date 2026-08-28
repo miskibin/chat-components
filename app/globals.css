@@ -1,7 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "streamdown/styles.css";
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:is(.dark *));
+
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
 
 :root {
   --background: oklch(1.00 0 0);
@@ -172,10 +178,13 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 3);
+  --radius-3xl: calc(var(--radius) * 4);
+  --radius-4xl: calc(var(--radius) * 5.5);
 
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
@@ -192,134 +201,18 @@
     @apply border-border outline-ring/50;
   }
 
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--lc-body-font);
   }
 }
 
-@keyframes lc-fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.lc-reveal {
-  animation: lc-fadeUp 0.25s ease both;
-}
-
 .lc-sidebar-wrap {
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.lc-scroll {
-  scrollbar-width: thin;
-}
-
-.lc-markdown {
-  color: var(--ink);
-  font-size: 15px;
-  line-height: var(--density-line);
-}
-
-.lc-markdown p {
-  margin: 0 0 12px;
-}
-
-.lc-markdown p:last-child {
-  margin-bottom: 0;
-}
-
-.lc-markdown h1,
-.lc-markdown h2,
-.lc-markdown h3,
-.lc-markdown h4 {
-  margin: 18px 0 8px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-
-.lc-markdown h1 {
-  font-size: 22px;
-}
-
-.lc-markdown h2 {
-  font-size: 19px;
-}
-
-.lc-markdown h3 {
-  font-size: 16.5px;
-}
-
-.lc-markdown h4 {
-  font-size: 15px;
-}
-
-.lc-markdown a {
-  color: var(--accent-ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.lc-markdown strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.lc-markdown ul,
-.lc-markdown ol {
-  margin: 0 0 12px;
-  padding-left: 22px;
-}
-
-.lc-markdown li {
-  margin: 4px 0;
-}
-
-.lc-markdown blockquote {
-  margin: 12px 0;
-  padding: 4px 0 4px 14px;
-  border-left: 3px solid var(--border);
-  color: var(--ink-2);
-}
-
-.lc-markdown hr {
-  border: 0;
-  border-top: 1px solid var(--border);
-  margin: 18px 0;
-}
-
-.lc-markdown code:not(pre code) {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  background: var(--code-bg-2);
-  color: var(--code-ink);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
-.lc-markdown pre {
-  margin: 10px 0 14px;
-  background: var(--code-bg);
-  color: var(--code-ink);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.lc-markdown pre code {
-  display: block;
-  padding: 14px 16px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--code-ink);
-  background: transparent;
-  overflow-x: auto;
-  line-height: 1.55;
 }

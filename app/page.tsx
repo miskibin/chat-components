@@ -25,12 +25,14 @@ import {
   type ChatMessageData,
 } from "@/components/ui/message-list"
 import type { GenerationStage } from "@/components/ui/generation-status"
-import type { PatternHandler } from "@/components/ui/message"
+import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
 import {
   ModelPicker,
   type ModelOption,
 } from "@/components/ui/model-picker"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
+import { streamCursorChat } from "@/lib/cursor-stream"
 
 type MessageData = ChatMessageData & {
   metadata?: {
@@ -42,6 +44,7 @@ type MessageData = ChatMessageData & {
 
 type ChatSession = ChatSidebarItemData & {
   messages?: MessageData[]
+  cursorSessionId?: string
 }
 
 const DEMO_SKILLS = [
@@ -55,325 +58,296 @@ const DEMO_COMMANDS = [
   { name: "clear", description: "Clear the conversation", argHint: "" },
 ]
 
-const DEMO_MODELS: ModelOption[] = [
+const FALLBACK_MODELS: ModelOption[] = [
   {
-    id: "gpt-4",
-    name: "GPT-4",
-    badge: "OpenAI",
-    description: "Strong general reasoning",
-    meta: "128k",
+    id: "composer-2.5",
+    name: "Composer 2.5",
+    badge: "Cursor",
+    description: "Default Cursor agent",
   },
   {
-    id: "gpt-4o-mini",
-    name: "GPT-4o mini",
-    badge: "Fast",
-    description: "Quick replies",
-    meta: "128k",
-  },
-  {
-    id: "claude-3",
-    name: "Claude 3",
-    badge: "Anthropic",
-    description: "Long-context writing",
-    meta: "200k",
-  },
-  {
-    id: "gemini-pro",
-    name: "Gemini Pro",
-    badge: "Google",
-    description: "Multimodal",
-    meta: "1M",
-    disabled: true,
-    disabledReason: "Coming soon",
+    id: "auto",
+    name: "Auto",
+    badge: "Router",
+    description: "Lets Cursor pick a model",
   },
 ]
-
-function buildDemoAssistantReply(
-  userText: string,
-  modelId: string
-): Omit<MessageData, "id"> {
-  const lower = userText.toLowerCase()
-  const topic =
-    lower.includes("ai") ||
-    lower.includes("artificial intelligence") ||
-    lower.includes("machine learning")
-      ? "ai"
-      : lower.includes("think") || lower.includes("reasoning")
-        ? "think"
-        : "default"
-
-  const reasoningByTopic: Record<string, string> = {
-    ai: "User asked about AI. Pull a short definition, cite sources, then show a tiny code sample and a summary artifact.",
-    think: "User wants to see extended thinking. Keep the chain short, then illustrate with a tool call and a code snippet.",
-    default: `Parse the question (“${userText.slice(0, 80)}”), gather context via a tool, then answer with a code example and optional artifact.`,
-  }
-
-  const contentByTopic: Record<string, string> = {
-    ai: `Artificial Intelligence (AI) is a field of computer science focused on creating systems capable of performing tasks that typically require human intelligence [1].
-
-Machine learning, a subset of AI, uses algorithms to enable systems to learn from data [2]. Recent advancements in deep learning have improved capabilities across perception and language [3].`,
-    think: `When models use extended thinking, they break complex problems into smaller steps: analyze, break down, evaluate options, then synthesize a clear answer.`,
-    default: `I understand your question: “${userText}”
-
-Here is a concise take, plus the tooling trail and a small code sample below.`,
-  }
-
-  const codeByTopic: Record<string, { language: string; title: string; code: string }> = {
-    ai: {
-      language: "python",
-      title: "train_step.py",
-      code: `def train_step(model, batch, optimizer):
-    optimizer.zero_grad()
-    loss = model(batch).loss
-    loss.backward()
-    optimizer.step()
-    return float(loss)`,
-    },
-    think: {
-      language: "typescript",
-      title: "reason.ts",
-      code: `async function reason(prompt: string) {
-  const plan = await planSteps(prompt)
-  const results = []
-  for (const step of plan) {
-    results.push(await runStep(step))
-  }
-  return synthesize(results)
-}`,
-    },
-    default: {
-      language: "tsx",
-      title: "Reply.tsx",
-      code: `export function Reply({ text }: { text: string }) {
-  return <p className="text-sm leading-relaxed">{text}</p>
-}`,
-    },
-  }
-
-  const code = codeByTopic[topic]
-
-  return {
-    content: contentByTopic[topic],
-    sender: "assistant",
-    reasoning: reasoningByTopic[topic],
-    reasoningDuration: 3,
-    tools: [
-      {
-        id: "tool-search",
-        name: "web_search",
-        status: "done",
-        input: JSON.stringify({ query: userText.slice(0, 60) }, null, 2),
-        output: JSON.stringify(
-          {
-            hits: 3,
-            top: topic === "ai" ? "AI basics overview" : "Relevant docs",
-          },
-          null,
-          2
-        ),
-      },
-      {
-        id: "tool-read",
-        name: "read_file",
-        status: "done",
-        input: JSON.stringify({ path: code.title }, null, 2),
-        output: "OK · 24 lines",
-      },
-      {
-        id: "tool-edit",
-        name: "edit_file",
-        status: "done",
-        input: JSON.stringify({ path: code.title, edits: 1 }, null, 2),
-        output: "+12 −3",
-      },
-    ],
-    codeBlocks: [
-      {
-        ...code,
-        language: code.language,
-        title: code.title,
-      },
-    ],
-    artifacts: [
-      {
-        id: "artifact-1",
-        title:
-          topic === "ai"
-            ? "AI overview notes"
-            : topic === "think"
-              ? "Reasoning trace"
-              : "Reply summary",
-        kind: topic === "ai" ? "table" : topic === "think" ? "text" : "file",
-        summary:
-          topic === "ai"
-            ? "3 rows · 2 columns"
-            : topic === "think"
-              ? "4 steps"
-              : "Generated for this turn",
-        content:
-          topic === "ai"
-            ? "term          definition\nAI            Systems that perform human-like tasks\nML            Learning from data without explicit rules\nDeep learning Neural nets for perception & language"
-            : topic === "think"
-              ? "1. Analyze\n2. Break down\n3. Evaluate\n4. Synthesize"
-              : `Question: ${userText.slice(0, 120)}\nModel: ${modelId}`,
-        onOpen: () => toast.message("Open artifact in your app"),
-      },
-    ],
-    metadata: {
-      model: modelId,
-      responseTime: 4.5,
-      tokens: 256,
-    },
-  }
-}
-
-const sources: Record<
-  string,
-  { title: string; url: string; author: string; date: string }
-> = {
-  "1": {
-    title: "Artificial Intelligence Basics",
-    url: "https://example.com/ai-basics",
-    author: "John Smith",
-    date: "2023-05-10",
-  },
-  "2": {
-    title: "Machine Learning Fundamentals",
-    url: "https://example.com/ml-fundamentals",
-    author: "Sarah Johnson",
-    date: "2022-11-22",
-  },
-  "3": {
-    title: "Deep Learning Applications",
-    url: "https://example.com/deep-learning",
-    author: "Michael Chen",
-    date: "2024-01-15",
-  },
-}
 
 export default function ChatExample() {
   const [collapsed, setCollapsed] = useState(false)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [sessions, setSessions] = useState<ChatSession[]>([
     { id: "1", title: "Welcome chat", pinned: true },
-    { id: "2", title: "Ask about AI", status: "idle" },
-    { id: "3", title: "Draft notes", status: "idle" },
   ])
   const [activeId, setActiveId] = useState("1")
   const [messages, setMessages] = useState<MessageData[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStage, setGenerationStage] =
     useState<GenerationStage>("idle")
-  const [selectedModel, setSelectedModel] = useState("gpt-4")
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODELS)
+  const [selectedModel, setSelectedModel] = useState("composer-2.5")
+  const abortRef = useRef<AbortController | null>(null)
+  const activeIdRef = useRef(activeId)
 
-  const activeTitle =
-    sessions.find((s) => s.id === activeId)?.title ?? "Chat"
+  activeIdRef.current = activeId
 
-  const patternHandlers: PatternHandler[] = [
-    {
-      pattern: /\[(\d+)\]/g,
-      render: (match) => {
-        const citationNumber = match[1]
-        const source = sources[citationNumber]
-        if (!source) return <span>{match[0]}</span>
-        return (
-          <a
-            href={source.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-primary underline-offset-2 hover:underline"
-            title={`${source.title} — ${source.author}`}
-          >
-            {match[0]}
-          </a>
+  const activeSession = sessions.find((s) => s.id === activeId)
+  const activeTitle = activeSession?.title ?? "Chat"
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/models")
+      .then((res) => res.json())
+      .then((data: { models?: ModelOption[]; error?: string }) => {
+        if (cancelled || !data.models?.length) return
+        setModelOptions(data.models)
+        setSelectedModel((current) =>
+          data.models!.some((m) => m.id === current)
+            ? current
+            : data.models![0].id
         )
-      },
-    },
-  ]
-
-  const clearTimeouts = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
+      })
+      .catch(() => {
+        toast.error("Could not load Cursor models. Is `agent` logged in?")
+      })
+    return () => {
+      cancelled = true
     }
-  }
+  }, [])
 
-  const handleNewChat = () => {
-    const id = String(Date.now())
-    setSessions((prev) => [{ id, title: "New chat", pinned: false }, ...prev])
-    setActiveId(id)
-    setMessages([])
-    clearTimeouts()
+  const stopGeneration = () => {
+    abortRef.current?.abort()
+    abortRef.current = null
     setIsGenerating(false)
     setGenerationStage("idle")
   }
 
+  const persistSession = (
+    sessionId: string,
+    patch: (session: ChatSession) => ChatSession
+  ) => {
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === sessionId ? patch(session) : session
+      )
+    )
+  }
+
+  const handleNewChat = () => {
+    stopGeneration()
+    const id = String(Date.now())
+    setSessions((prev) => [
+      { id, title: "New chat", pinned: false, messages: [] },
+      ...prev,
+    ])
+    setActiveId(id)
+    setMessages([])
+  }
+
+  const selectSession = (id: string) => {
+    stopGeneration()
+    const session = sessions.find((s) => s.id === id)
+    setActiveId(id)
+    setMessages(session?.messages ?? [])
+  }
+
+  const runPrompt = async (
+    prompt: string,
+    sessionId: string,
+    priorMessages: MessageData[],
+    cursorSessionId?: string
+  ) => {
+    const assistantId = crypto.randomUUID()
+    const started = Date.now()
+    const model = selectedModel
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const seedAssistant: MessageData = {
+      id: assistantId,
+      content: "",
+      sender: "assistant",
+      tools: [],
+      parts: [],
+    }
+
+    const applyMessages = (next: MessageData[], nextSessionId?: string) => {
+      persistSession(sessionId, (session) => ({
+        ...session,
+        messages: next,
+        cursorSessionId: nextSessionId ?? session.cursorSessionId,
+      }))
+      if (activeIdRef.current === sessionId) setMessages(next)
+    }
+
+    applyMessages([...priorMessages, seedAssistant])
+
+    setIsGenerating(true)
+    setGenerationStage("thinking")
+
+    const patchAssistant = (
+      updater: (message: MessageData) => MessageData,
+      cursorSessionId?: string
+    ) => {
+      persistSession(sessionId, (session) => {
+        const current = session.messages ?? []
+        const next = current.map((message) =>
+          message.id === assistantId ? updater(message) : message
+        )
+        if (activeIdRef.current === sessionId) setMessages(next)
+        return {
+          ...session,
+          messages: next,
+          cursorSessionId: cursorSessionId ?? session.cursorSessionId,
+        }
+      })
+    }
+
+    const onEvent = (event: AgentStreamEvent) => {
+      if (event.type === "session") {
+        persistSession(sessionId, (session) => ({
+          ...session,
+          cursorSessionId: event.sessionId,
+        }))
+        return
+      }
+      if (event.type === "thinking") {
+        setGenerationStage("thinking")
+        patchAssistant((message) => ({
+          ...message,
+          reasoning: `${message.reasoning ?? ""}${event.text}`,
+          reasoningDefaultOpen: true,
+        }))
+        return
+      }
+      if (event.type === "text") {
+        setGenerationStage("responding")
+        patchAssistant((message) => {
+          const parts = appendTextPart(message.parts ?? [], event.text)
+          return {
+            ...message,
+            parts,
+            content: textFromParts(parts),
+            tools: toolsFromParts(parts),
+          }
+        })
+        return
+      }
+      if (event.type === "tool") {
+        setGenerationStage("searching")
+        patchAssistant((message) => {
+          const nextTool: MessageToolCallData = {
+            id: event.id,
+            name: event.name,
+            status: event.status,
+            input: event.input,
+            output: event.output,
+          }
+          const parts = upsertToolPart(message.parts ?? [], nextTool)
+          return {
+            ...message,
+            parts,
+            content: textFromParts(parts),
+            tools: toolsFromParts(parts),
+          }
+        })
+        return
+      }
+      if (event.type === "error") {
+        patchAssistant((message) => ({
+          ...message,
+          content:
+            message.content.trim() ||
+            `Cursor agent error: ${event.message}`,
+        }))
+        toast.error(event.message)
+        return
+      }
+      if (event.type === "done") {
+        patchAssistant(
+          (message) => ({
+            ...message,
+            metadata: {
+              model,
+              responseTime: (Date.now() - started) / 1000,
+            },
+          }),
+          event.sessionId
+        )
+      }
+    }
+
+    try {
+      await streamCursorChat(
+        {
+          prompt,
+          model,
+          sessionId: cursorSessionId,
+        },
+        { onEvent, signal: controller.signal }
+      )
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        const message =
+          err instanceof Error ? err.message : "Cursor agent failed"
+        toast.error(message)
+        patchAssistant((item) => ({
+          ...item,
+          content: item.content.trim() || `Cursor agent error: ${message}`,
+        }))
+      }
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
+      setIsGenerating(false)
+      setGenerationStage("idle")
+    }
+  }
+
   const handleSend = (payload: ChatInputPayload) => {
+    if (payload.text.trim() === "/clear") {
+      persistSession(activeId, (session) => ({
+        ...session,
+        messages: [],
+        cursorSessionId: undefined,
+      }))
+      setMessages([])
+      return
+    }
+
     const skillPrefix =
       payload.skills.length > 0
         ? `[skills: ${payload.skills.join(", ")}] `
         : ""
     const fileNote =
       payload.files.length > 0
-        ? `\n\n_Attached: ${payload.files.map((f) => f.name).join(", ")}_`
+        ? `\n\nAttached: ${payload.files.map((f) => f.name).join(", ")}`
         : ""
     const content = `${skillPrefix}${payload.text}${fileNote}`
+    const sessionId = activeId
 
     if (messages.length === 0 && payload.text.trim()) {
       const title =
         payload.text.trim().slice(0, 42) +
         (payload.text.trim().length > 42 ? "…" : "")
-      setSessions((prev) =>
-        prev.map((s) => (s.id === activeId ? { ...s, title } : s))
-      )
+      persistSession(sessionId, (session) => ({ ...session, title }))
     }
 
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now().toString(), content, sender: "user" },
-    ])
-    setIsGenerating(true)
-    setGenerationStage("thinking")
-
-    timeoutRef.current = setTimeout(() => {
-      setGenerationStage("searching")
-      timeoutRef.current = setTimeout(() => {
-        setGenerationStage("responding")
-        timeoutRef.current = setTimeout(() => {
-          const reply = buildDemoAssistantReply(payload.text, selectedModel)
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: (Date.now() + 1).toString(),
-              ...reply,
-            },
-          ])
-          setIsGenerating(false)
-          setGenerationStage("idle")
-          timeoutRef.current = null
-        }, 900)
-      }, 700)
-    }, 700)
+    const userMessage: MessageData = {
+      id: crypto.randomUUID(),
+      content,
+      sender: "user",
+    }
+    const next = [...messages, userMessage]
+    persistSession(sessionId, (session) => ({ ...session, messages: next }))
+    setMessages(next)
+    void runPrompt(content, sessionId, next, activeSession?.cursorSessionId)
   }
 
   const handleStop = () => {
-    clearTimeouts()
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        ...buildDemoAssistantReply("Generation stopped by user.", selectedModel),
-        content: "Generation stopped by user.",
-        reasoning:
-          "User hit stop. Surface a short acknowledgement with the usual demo parts so the UI still shows the full message shape.",
-      },
-    ])
-    setIsGenerating(false)
-    setGenerationStage("idle")
+    stopGeneration()
   }
 
-  useEffect(() => () => clearTimeouts(), [])
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   const orderedSessions = [
     ...sessions.filter((s) => s.pinned),
@@ -381,7 +355,7 @@ export default function ChatExample() {
   ]
 
   return (
-    <div className="flex h-svh overflow-hidden bg-background">
+    <div className="flex h-full min-h-0 overflow-hidden bg-background">
       <ChatSidebarDnd
         onDrop={(drop) => {
           if (drop.action === "pin") {
@@ -391,11 +365,12 @@ export default function ChatExample() {
               )
             )
           } else if (drop.action === "delete") {
+            stopGeneration()
             setSessions((prev) => {
               const next = prev.filter((s) => s.id !== drop.id)
               if (activeId === drop.id) {
                 setActiveId(next[0]?.id ?? "")
-                setMessages([])
+                setMessages(next[0]?.messages ?? [])
               }
               return next
             })
@@ -464,13 +439,7 @@ export default function ChatExample() {
             onToggle={() => setChatsOpen((v) => !v)}
             sessions={orderedSessions}
             activeId={activeId}
-            onSelect={(id) => {
-              setActiveId(id)
-              setMessages([])
-              clearTimeouts()
-              setIsGenerating(false)
-              setGenerationStage("idle")
-            }}
+            onSelect={selectSession}
             onRename={(id, title) =>
               setSessions((prev) =>
                 prev.map((s) => (s.id === id ? { ...s, title } : s))
@@ -481,32 +450,39 @@ export default function ChatExample() {
                 prev.map((s) => (s.id === id ? { ...s, pinned } : s))
               )
             }
-            onDelete={(id) =>
+            onDelete={(id) => {
+              if (id === activeId) stopGeneration()
               setSessions((prev) => {
                 const next = prev.filter((s) => s.id !== id)
                 if (activeId === id) {
                   setActiveId(next[0]?.id ?? "")
-                  setMessages([])
+                  setMessages(next[0]?.messages ?? [])
                 }
                 return next
               })
-            }
+            }}
           />
         </ChatSidebar>
       </ChatSidebarDnd>
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <ThemeToggle />
 
         <MessageList
           messages={messages}
           isGenerating={isGenerating}
           generationStage={generationStage}
-          patternHandlers={patternHandlers}
           onEditMessage={(id, content) =>
-            setMessages((prev) =>
-              prev.map((msg) => (msg.id === id ? { ...msg, content } : msg))
-            )
+            setMessages((prev) => {
+              const next = prev.map((msg) =>
+                msg.id === id ? { ...msg, content } : msg
+              )
+              persistSession(activeId, (session) => ({
+                ...session,
+                messages: next,
+              }))
+              return next
+            })
           }
           emptyState={
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
@@ -515,15 +491,15 @@ export default function ChatExample() {
                 style={{ fontFamily: "var(--lc-body-font)" }}
               >
                 {activeTitle === "Welcome chat" || !activeTitle
-                  ? "Start a conversation"
+                  ? "Talk to Cursor Agent"
                   : activeTitle}
               </p>
               <p className="max-w-sm text-sm">
-                Try asking about AI, type{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                  /summarize
-                </code>
-                , or attach a file.
+                Real LLM + tool calls via the local{" "}
+                <code className="rounded-sm bg-muted px-1.5 py-0.5 text-xs">
+                  agent
+                </code>{" "}
+                CLI. Try “what files are in this repo?”
               </p>
             </div>
           }
@@ -552,25 +528,33 @@ export default function ChatExample() {
                       userIdx--
                     }
                     if (userIdx < 0) return
-                    setMessages((prev) =>
-                      prev.filter((m) => m.id !== message.id)
+                    const prompt = messages[userIdx].content
+                    const next = messages.filter((m) => m.id !== message.id)
+                    persistSession(activeId, (session) => ({
+                      ...session,
+                      messages: next,
+                    }))
+                    setMessages(next)
+                    void runPrompt(
+                      prompt,
+                      activeId,
+                      next,
+                      activeSession?.cursorSessionId
                     )
-                    handleSend({
-                      text: messages[userIdx].content,
-                      files: [],
-                      skills: [],
-                    })
                   }}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </ActionBtn>
                 <ActionBtn
                   title="Delete"
-                  onClick={() =>
-                    setMessages((prev) =>
-                      prev.filter((m) => m.id !== message.id)
-                    )
-                  }
+                  onClick={() => {
+                    const next = messages.filter((m) => m.id !== message.id)
+                    persistSession(activeId, (session) => ({
+                      ...session,
+                      messages: next,
+                    }))
+                    setMessages(next)
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </ActionBtn>
@@ -583,14 +567,14 @@ export default function ChatExample() {
           onSend={handleSend}
           onStop={handleStop}
           isGenerating={isGenerating}
-          placeholder="Ask anything — try /summarize or mention AI"
+          placeholder="Ask Cursor Agent — try listing files in this repo"
           skills={DEMO_SKILLS}
           slashCommands={DEMO_COMMANDS}
           tools={
             <ModelPicker
               value={selectedModel}
               onChange={setSelectedModel}
-              options={DEMO_MODELS}
+              options={modelOptions}
               align="up"
             />
           }
@@ -642,6 +626,60 @@ function SidebarSessionSection({
       )}
     </SidebarCollapsibleSection>
   )
+}
+
+function textFromParts(parts: MessagePart[]) {
+  return parts
+    .filter(
+      (part): part is Extract<MessagePart, { type: "text" }> =>
+        part.type === "text"
+    )
+    .map((part) => part.text)
+    .join("")
+}
+
+function toolsFromParts(parts: MessagePart[]) {
+  return parts
+    .filter(
+      (part): part is Extract<MessagePart, { type: "tool" }> =>
+        part.type === "tool"
+    )
+    .map((part) => part.tool)
+}
+
+function appendTextPart(parts: MessagePart[], text: string): MessagePart[] {
+  const last = parts.at(-1)
+  if (last?.type === "text") {
+    return [...parts.slice(0, -1), { ...last, text: last.text + text }]
+  }
+  return [...parts, { type: "text", id: crypto.randomUUID(), text }]
+}
+
+function upsertToolPart(
+  parts: MessagePart[],
+  tool: MessageToolCallData
+): MessagePart[] {
+  const index = parts.findIndex(
+    (part) => part.type === "tool" && part.tool.id === tool.id
+  )
+  if (index >= 0) {
+    const next = [...parts]
+    const existing = next[index]
+    if (existing.type === "tool") {
+      next[index] = {
+        type: "tool",
+        id: existing.id,
+        tool: {
+          ...existing.tool,
+          ...tool,
+          input: tool.input ?? existing.tool.input,
+          output: tool.output ?? existing.tool.output,
+        },
+      }
+    }
+    return next
+  }
+  return [...parts, { type: "tool", id: tool.id, tool }]
 }
 
 function ActionBtn({

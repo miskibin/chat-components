@@ -3,7 +3,6 @@
 import { Pencil, Save, Undo2 } from "lucide-react"
 import * as React from "react"
 import { useMemo, useState } from "react"
-import ReactMarkdown from "react-markdown"
 
 import {
   MessageArtifact,
@@ -16,6 +15,7 @@ import {
   type MessageToolCallData,
 } from "@/components/ui/message-parts"
 import { cn } from "@/lib/utils"
+import { MessageMarkdown } from "@/components/ui/message-markdown"
 
 export type PatternHandler = {
   pattern: RegExp
@@ -30,6 +30,10 @@ export type ActionButton = {
   className?: string
   position?: "inside" | "outside"
 }
+
+export type MessagePart =
+  | { type: "text"; id: string; text: string }
+  | { type: "tool"; id: string; tool: MessageToolCallData }
 
 export type MessageProps = {
   content: string
@@ -46,8 +50,12 @@ export type MessageProps = {
   /** Shown as “Thought for N seconds” when set. */
   reasoningDuration?: number
   tools?: MessageToolCallData[]
+  /** Chronological text/tool segments. When set, replaces the tools-then-content layout. */
+  parts?: MessagePart[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
+  /** True while this assistant message is still streaming. */
+  isAnimating?: boolean
 }
 
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
@@ -77,8 +85,10 @@ export function Message({
   reasoningDefaultOpen = false,
   reasoningDuration,
   tools = [],
+  parts,
   codeBlocks = [],
   artifacts = [],
+  isAnimating = false,
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(content)
@@ -100,73 +110,6 @@ export function Message({
     setEditedContent(content)
   }, [content])
 
-  const processContent = React.useCallback(
-    (text: string): React.ReactNode => {
-      if (!text || patternHandlers.length === 0) return text
-      const segments: React.ReactNode[] = []
-      let cursor = 0
-      while (cursor < text.length) {
-        let earliest: {
-          handler: PatternHandler
-          match: RegExpExecArray
-          index: number
-        } | null = null
-        for (const handler of patternHandlers) {
-          handler.pattern.lastIndex = cursor
-          const match = handler.pattern.exec(text)
-          if (match && (!earliest || match.index < earliest.index)) {
-            earliest = { handler, match, index: match.index }
-          }
-        }
-        if (!earliest) {
-          segments.push(text.slice(cursor))
-          break
-        }
-        if (earliest.index > cursor) {
-          segments.push(text.slice(cursor, earliest.index))
-        }
-        let rendered: React.ReactNode
-        try {
-          rendered = earliest.handler.render(earliest.match) ?? earliest.match[0]
-        } catch {
-          rendered = earliest.match[0]
-        }
-        segments.push(
-          <React.Fragment key={`${earliest.index}-${cursor}`}>
-            {rendered}
-          </React.Fragment>
-        )
-        cursor = earliest.index + earliest.match[0].length
-      }
-      return <>{segments}</>
-    },
-    [patternHandlers]
-  )
-
-  const markdownComponents = useMemo(() => {
-    if (patternHandlers.length === 0) return undefined
-    const processChildren = (children: React.ReactNode) => {
-      if (Array.isArray(children)) {
-        return children.map((c, index) =>
-          typeof c === "string" ? (
-            <React.Fragment key={index}>{processContent(c)}</React.Fragment>
-          ) : (
-            <React.Fragment key={index}>{c}</React.Fragment>
-          )
-        )
-      }
-      return typeof children === "string" ? processContent(children) : children
-    }
-    return {
-      p: ({ children }: { children?: React.ReactNode }) => (
-        <p className="mb-3 last:mb-0">{processChildren(children)}</p>
-      ),
-      li: ({ children }: { children?: React.ReactNode }) => (
-        <li>{processChildren(children)}</li>
-      ),
-    }
-  }, [patternHandlers, processContent])
-
   const { insideButtons, outsideButtons } = useMemo(() => {
     const inside = actionButtons.filter((btn) => btn.position !== "outside")
     const outside = actionButtons.filter((btn) => btn.position === "outside")
@@ -184,7 +127,7 @@ export function Message({
         <div
           className={cn("mb-4 flex w-full justify-end", className)}
         >
-          <div className="w-full max-w-[70%] rounded-[18px] border border-border bg-muted px-4 py-2.5">
+          <div className="w-full max-w-[70%] rounded-2xl border border-border bg-muted px-4 py-2.5">
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
@@ -250,10 +193,10 @@ export function Message({
         )}
         <div
           className={cn(
-            "max-w-[70%] min-w-0 rounded-[18px] px-4 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground",
+            "max-w-[70%] min-w-0 rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground",
             contentClassName
           )}
-          style={{ background: "var(--user-bubble)" }}
+          style={{ background: "var(--muted)" }}
         >
           {remainder && !longPromptExpanded ? preview : displayContent}
           {remainder ? (
@@ -272,10 +215,10 @@ export function Message({
   }
 
   return (
-    <div className={cn("group mb-[var(--density-msg-gap)]", className)}>
+    <div className={cn("group mb-7", className)}>
       <div
         className={cn(
-          "max-w-full text-[15px] leading-[var(--density-line)] text-foreground",
+          "max-w-full text-[15px] leading-[1.65] text-foreground",
           contentClassName
         )}
       >
@@ -288,15 +231,33 @@ export function Message({
           </MessageReasoning>
         ) : null}
 
-        {tools.length > 0 ? <MessageToolCalls tools={tools} /> : null}
-
-        {displayContent ? (
-          <div className="lc-markdown max-w-none">
-            <ReactMarkdown components={markdownComponents}>
-              {displayContent}
-            </ReactMarkdown>
-          </div>
-        ) : null}
+        {parts && parts.length > 0 ? (
+          parts.map((part) =>
+            part.type === "tool" ? (
+              <MessageToolCall key={part.id} tool={part.tool} />
+            ) : part.text ? (
+              <MessageMarkdown
+                key={part.id}
+                isAnimating={isAnimating}
+                patternHandlers={patternHandlers}
+              >
+                {part.text}
+              </MessageMarkdown>
+            ) : null
+          )
+        ) : (
+          <>
+            {tools.length > 0 ? <MessageToolCalls tools={tools} /> : null}
+            {displayContent ? (
+              <MessageMarkdown
+                isAnimating={isAnimating}
+                patternHandlers={patternHandlers}
+              >
+                {displayContent}
+              </MessageMarkdown>
+            ) : null}
+          </>
+        )}
 
         {codeBlocks.map((block, i) => (
           <MessageCode key={`${block.language ?? "code"}-${i}`} block={block} />

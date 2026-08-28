@@ -4,33 +4,14 @@
   "homepage": "https://github.com/miskibin/chat-components",
   "items": [
     {
-      "name": "chat-input",
-      "type": "registry:ui",
-      "title": "Chat Input",
-      "description": "Composer-style chat input with attachments, optional skills/slash menu, and send/stop.",
-      "dependencies": ["lucide-react"],
+      "name": "use-click-outside",
+      "type": "registry:hook",
+      "title": "useClickOutside",
+      "description": "Close a popover or menu when the pointer lands outside its root.",
       "files": [
         {
-          "path": "components/ui/chat-input.tsx",
-          "type": "registry:ui"
-        }
-      ]
-    },
-    {
-      "name": "message",
-      "type": "registry:ui",
-      "title": "Message",
-      "description": "User bubble and assistant markdown with collapsed reasoning, tool calls, code blocks, and artifacts.",
-      "dependencies": ["lucide-react", "react-markdown", "shiki", "next-themes"],
-      "registryDependencies": ["collapsible"],
-      "files": [
-        {
-          "path": "components/ui/message.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/message-parts.tsx",
-          "type": "registry:ui"
+          "path": "hooks/use-click-outside.ts",
+          "type": "registry:hook"
         }
       ]
     },
@@ -42,73 +23,6 @@
       "files": [
         {
           "path": "components/ui/generation-status.tsx",
-          "type": "registry:ui"
-        }
-      ]
-    },
-    {
-      "name": "message-list",
-      "type": "registry:ui",
-      "title": "Message List",
-      "description": "Scrollable message list with smart auto-scroll and generation status.",
-      "registryDependencies": [
-        "miskibin/chat-components/message",
-        "miskibin/chat-components/generation-status"
-      ],
-      "files": [
-        {
-          "path": "components/ui/message-list.tsx",
-          "type": "registry:ui"
-        }
-      ]
-    },
-    {
-      "name": "model-picker",
-      "type": "registry:ui",
-      "title": "Model Picker",
-      "description": "Dropdown model selector with badge, description, and optional disabled options.",
-      "dependencies": ["lucide-react"],
-      "files": [
-        {
-          "path": "components/ui/model-picker.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "hooks/use-click-outside.ts",
-          "type": "registry:hook"
-        }
-      ]
-    },
-    {
-      "name": "chat-sidebar",
-      "type": "registry:ui",
-      "title": "Chat Sidebar",
-      "description": "Collapsible sidebar chrome with DnD pin/trash zones, polished items, and slot-based composition.",
-      "dependencies": [
-        "lucide-react",
-        "@dnd-kit/core",
-        "@dnd-kit/utilities",
-        "@radix-ui/react-context-menu"
-      ],
-      "files": [
-        {
-          "path": "components/ui/chat-sidebar.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/sidebar-item.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/sidebar-dnd.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/sidebar-drop-zones.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/context-menu.tsx",
           "type": "registry:ui"
         }
       ]
@@ -130,7 +44,7 @@
       "name": "chat-navbar",
       "type": "registry:ui",
       "title": "Chat Navbar",
-      "description": "Thin top bar with title and action slots (optional; prefer ThemeToggle for minimal chrome).",
+      "description": "Thin top bar with title and action slots.",
       "files": [
         {
           "path": "components/ui/chat-navbar.tsx",
@@ -139,76 +53,200 @@
       ]
     },
     {
-      "name": "chat",
+      "name": "chat-input",
       "type": "registry:ui",
-      "title": "Chat",
-      "description": "Full chat UI kit: input, messages, sidebar, navbar, and model picker.",
-      "dependencies": [
-        "lucide-react",
-        "react-markdown",
-        "shiki",
-        "next-themes",
-        "@dnd-kit/core",
-        "@dnd-kit/utilities",
-        "@radix-ui/react-context-menu"
-      ],
-      "registryDependencies": ["collapsible"],
+      "title": "Chat Input",
+      "description": "Composer-style chat input with attachments, optional skills/slash menu, and send/stop.",
+      "dependencies": ["lucide-react"],
       "files": [
         {
           "path": "components/ui/chat-input.tsx",
           "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "mode-picker",
+      "type": "registry:ui",
+      "title": "Mode Picker",
+      "description": "Ask / Plan / Agent mode switch for a chat composer.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["miskibin/chat-components/use-click-outside"],
+      "files": [
         {
-          "path": "components/ui/message.tsx",
+          "path": "components/ui/mode-picker.tsx",
           "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/message-parts.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/generation-status.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "components/ui/message-list.tsx",
-          "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "model-picker",
+      "type": "registry:ui",
+      "title": "Model Picker",
+      "description": "Dropdown model selector with badge, description, and optional disabled options.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["miskibin/chat-components/use-click-outside"],
+      "files": [
         {
           "path": "components/ui/model-picker.tsx",
           "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "message-markdown",
+      "type": "registry:ui",
+      "title": "Message Markdown",
+      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, and KaTeX.",
+      "dependencies": [
+        "streamdown",
+        "@streamdown/code",
+        "@streamdown/mermaid",
+        "@streamdown/math",
+        "katex",
+        "shiki",
+        "next-themes"
+      ],
+      "files": [
         {
-          "path": "components/ui/chat-sidebar.tsx",
+          "path": "components/ui/message-markdown.tsx",
           "type": "registry:ui"
         },
         {
-          "path": "components/ui/sidebar-item.tsx",
+          "path": "components/ui/message-markdown.css",
+          "type": "registry:file",
+          "target": "@ui/message-markdown.css"
+        }
+      ],
+      "css": {
+        "@import \"streamdown/styles.css\"": {}
+      },
+      "docs": "Add Tailwind v4 sources so Streamdown utilities are generated, then transpile the packages in Next.js.\n\n```css\n@source \"../node_modules/streamdown/dist/*.js\";\n@source \"../node_modules/@streamdown/code/dist/*.js\";\n@source \"../node_modules/@streamdown/mermaid/dist/*.js\";\n@source \"../node_modules/@streamdown/math/dist/*.js\";\n```\n\n```js\ntranspilePackages: [\"streamdown\", \"@streamdown/code\", \"@streamdown/mermaid\", \"@streamdown/math\", \"mermaid\"]\n```"
+    },
+    {
+      "name": "message-parts",
+      "type": "registry:ui",
+      "title": "Message Parts",
+      "description": "Atomic assistant parts: reasoning, tool calls, code blocks, and artifacts.",
+      "dependencies": ["lucide-react", "shiki", "next-themes"],
+      "registryDependencies": [
+        "collapsible",
+        "miskibin/chat-components/message-markdown"
+      ],
+      "files": [
+        {
+          "path": "components/ui/message-parts.tsx",
           "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "message",
+      "type": "registry:ui",
+      "title": "Message",
+      "description": "User bubble and assistant message with reasoning, tools, code, and artifacts.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["miskibin/chat-components/message-parts"],
+      "files": [
+        {
+          "path": "components/ui/message.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "message-list",
+      "type": "registry:ui",
+      "title": "Message List",
+      "description": "Scrollable message list with smart auto-scroll and generation status.",
+      "registryDependencies": [
+        "miskibin/chat-components/message",
+        "miskibin/chat-components/generation-status"
+      ],
+      "files": [
+        {
+          "path": "components/ui/message-list.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "sidebar-dnd",
+      "type": "registry:ui",
+      "title": "Sidebar DnD",
+      "description": "Drag-and-drop context for pinning and deleting sidebar items.",
+      "dependencies": ["@dnd-kit/core", "@dnd-kit/utilities"],
+      "files": [
         {
           "path": "components/ui/sidebar-dnd.tsx",
           "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "sidebar-drop-zones",
+      "type": "registry:ui",
+      "title": "Sidebar Drop Zones",
+      "description": "Pin and trash edge drop zones for the chat sidebar.",
+      "dependencies": ["@dnd-kit/core"],
+      "registryDependencies": ["miskibin/chat-components/sidebar-dnd"],
+      "files": [
         {
           "path": "components/ui/sidebar-drop-zones.tsx",
           "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "sidebar-item",
+      "type": "registry:ui",
+      "title": "Sidebar Item",
+      "description": "Session row with rename, pin, delete, status dots, context menu, and drag.",
+      "dependencies": ["lucide-react", "@dnd-kit/core"],
+      "registryDependencies": ["context-menu"],
+      "files": [
         {
-          "path": "components/ui/context-menu.tsx",
+          "path": "components/ui/sidebar-item.tsx",
           "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "chat-sidebar",
+      "type": "registry:ui",
+      "title": "Chat Sidebar",
+      "description": "Collapsible sidebar chrome with DnD pin/trash zones and slot-based composition.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "miskibin/chat-components/sidebar-item",
+        "miskibin/chat-components/sidebar-dnd",
+        "miskibin/chat-components/sidebar-drop-zones"
+      ],
+      "files": [
         {
-          "path": "components/ui/chat-navbar.tsx",
+          "path": "components/ui/chat-sidebar.tsx",
           "type": "registry:ui"
-        },
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "type": "registry:block",
+      "title": "Chat",
+      "description": "Full chat UI kit composed from atomic components. Starter layout is message list + input.",
+      "registryDependencies": [
+        "miskibin/chat-components/chat-input",
+        "miskibin/chat-components/message-list",
+        "miskibin/chat-components/model-picker",
+        "miskibin/chat-components/mode-picker",
+        "miskibin/chat-components/chat-sidebar",
+        "miskibin/chat-components/chat-navbar",
+        "miskibin/chat-components/theme-toggle"
+      ],
+      "files": [
         {
-          "path": "components/ui/theme-toggle.tsx",
-          "type": "registry:ui"
-        },
-        {
-          "path": "hooks/use-click-outside.ts",
-          "type": "registry:hook"
+          "path": "components/chat.tsx",
+          "type": "registry:block"
         }
       ]
     }
