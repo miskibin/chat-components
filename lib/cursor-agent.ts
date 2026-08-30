@@ -2,9 +2,8 @@ import "server-only"
 
 import { spawn, type ChildProcess } from "child_process"
 import { createInterface } from "readline"
-import { existsSync, readdirSync } from "fs"
-import path from "path"
 
+import { resolveAgentCommand } from "@/lib/agent-runtime"
 import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
 
 export type { AgentStreamEvent }
@@ -346,34 +345,6 @@ function stringifyField(value: unknown): string | undefined {
   } catch {
     return String(value).slice(0, MAX_FIELD)
   }
-}
-
-function resolveAgentCommand(): { cmd: string; args: string[] } {
-  if (process.env.CURSOR_AGENT_BIN) {
-    return { cmd: process.env.CURSOR_AGENT_BIN, args: [] }
-  }
-
-  if (process.platform === "win32") {
-    const root = path.join(process.env.LOCALAPPDATA ?? "", "cursor-agent")
-    const bundled = resolveWindowsBundle(root)
-    if (bundled) return bundled
-  }
-
-  return { cmd: process.platform === "win32" ? "agent.cmd" : "agent", args: [] }
-}
-
-function resolveWindowsBundle(root: string): { cmd: string; args: string[] } | null {
-  const versionsRoot = path.join(root, "versions")
-  if (!existsSync(versionsRoot)) return null
-  const latest = readdirSync(versionsRoot)
-    .filter((name) => /^\d{4}\.\d{1,2}\.\d{1,2}/.test(name))
-    .sort()
-    .at(-1)
-  if (!latest) return null
-  const cmd = path.join(versionsRoot, latest, "node.exe")
-  const entry = path.join(versionsRoot, latest, "index.js")
-  if (!existsSync(cmd) || !existsSync(entry)) return null
-  return { cmd, args: [entry] }
 }
 
 function killAgent(child: ChildProcess) {
