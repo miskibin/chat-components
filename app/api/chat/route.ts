@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 import { runCursorAgent, type AgentStreamEvent } from "@/lib/cursor-agent"
 
 export const runtime = "nodejs"
-export const maxDuration = 300
+// Vercel hobby plan caps serverless maxDuration at 60s
+export const maxDuration = 60
 export const dynamic = "force-dynamic"
 
 type ChatBody = {
