@@ -81,30 +81,6 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
   return { scrollRef, handleMessageScroll }
 }
 
-/**
- * Per-message edit callbacks that keep a stable identity, so `Message`
- * (memoized) only re-renders when the message itself changes.
- */
-function useStableEditHandlers(
-  onEditMessage?: (id: string, content: string) => void
-) {
-  const latest = React.useRef(onEditMessage)
-  latest.current = onEditMessage
-  const cache = React.useRef(new Map<string, (content: string) => void>())
-
-  return React.useCallback(
-    (id: string) => {
-      if (!onEditMessage) return undefined
-      const existing = cache.current.get(id)
-      if (existing) return existing
-      const handler = (content: string) => latest.current?.(id, content)
-      cache.current.set(id, handler)
-      return handler
-    },
-    [onEditMessage]
-  )
-}
-
 export function MessageList({
   messages,
   isGenerating = false,
@@ -119,7 +95,6 @@ export function MessageList({
   ...props
 }: MessageListProps) {
   const { scrollRef, handleMessageScroll } = useChatAutoScroll(messages)
-  const getEditHandler = useStableEditHandlers(onEditMessage)
   const lastIndex = messages.length - 1
 
   return (
@@ -140,6 +115,7 @@ export function MessageList({
         {messages.length === 0
           ? (emptyState ?? <div className="flex flex-1 items-center justify-center" />)
           : messages.map((message, index) => {
+              const isUser = message.sender === "user"
               const isStreaming =
                 (isGenerating || generationStage !== "idle") &&
                 index === lastIndex &&
@@ -165,8 +141,14 @@ export function MessageList({
                     artifacts={message.artifacts}
                     patternHandlers={patternHandlers}
                     isAnimating={isStreaming}
-                    editable={message.sender === "user" && !!onEditMessage}
-                    onEdit={getEditHandler(message.id)}
+                    editable={isUser && !!onEditMessage}
+                    /* Assistant rows never take a callback prop, so the
+                       memoized Message keeps its render between updates. */
+                    onEdit={
+                      isUser && onEditMessage
+                        ? (content) => onEditMessage(message.id, content)
+                        : undefined
+                    }
                   />
                   {waiting ? (
                     <div className="mb-4">

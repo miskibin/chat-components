@@ -143,12 +143,6 @@ export function ChatInput({
     ta.style.overflowY = capped ? "auto" : "hidden"
   }, [text, maxHeight])
 
-  React.useEffect(() => {
-    if (slashDismissedText !== null && slashDismissedText !== text) {
-      setSlashDismissedText(null)
-    }
-  }, [slashDismissedText, text])
-
   const addFiles = React.useCallback((files: FileList | File[] | null) => {
     if (!files) return
     const list = Array.from(files)

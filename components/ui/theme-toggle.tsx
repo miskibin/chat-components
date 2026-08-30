@@ -6,6 +6,17 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+const subscribe = () => () => {}
+
+/** True only after hydration, so the icon never mismatches the server HTML. */
+function useHydrated() {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false
+  )
+}
+
 export type ThemeToggleProps = React.ComponentProps<"button"> & {
   /** Fixed floating chip (default) or inline. */
   floating?: boolean
@@ -18,8 +29,7 @@ export function ThemeToggle({
   ...props
 }: ThemeToggleProps) {
   const { resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
   const isDark = mounted && resolvedTheme === "dark"
 
   return (

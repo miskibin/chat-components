@@ -19,7 +19,6 @@ import {
   SideRow,
   SidebarCollapsibleSection,
   SidebarEmptyState,
-  useSidebarDnd,
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
 import {
@@ -38,6 +37,11 @@ import { streamCursorChat } from "@/lib/cursor-stream"
 import { cn } from "@/lib/utils"
 
 const DESKTOP_QUERY = "(min-width: 768px)"
+
+/** Wall clock read, hoisted out of the component so render stays pure. */
+function nowMs() {
+  return Date.now()
+}
 
 /** Desktop-first so SSR and the first paint agree on the wide layout. */
 function useIsDesktop() {
@@ -111,10 +115,14 @@ export default function ChatExample() {
   const abortRef = useRef<AbortController | null>(null)
   const activeIdRef = useRef(activeId)
 
-  activeIdRef.current = activeId
+  useEffect(() => {
+    activeIdRef.current = activeId
+  }, [activeId])
 
   const activeSession = sessions.find((s) => s.id === activeId)
   const activeTitle = activeSession?.title ?? "Chat"
+  // The drawer only exists below md; derive it so a resize can't strand it open.
+  const drawerOpen = mobileNavOpen && !isDesktop
 
   useEffect(() => {
     let cancelled = false
@@ -158,7 +166,7 @@ export default function ChatExample() {
   const handleNewChat = () => {
     stopGeneration()
     setMobileNavOpen(false)
-    const id = String(Date.now())
+    const id = String(nowMs())
     setSessions((prev) => [
       { id, title: "New chat", pinned: false, messages: [] },
       ...prev,
@@ -182,7 +190,7 @@ export default function ChatExample() {
     cursorSessionId?: string
   ) => {
     const assistantId = crypto.randomUUID()
-    const started = Date.now()
+    const started = nowMs()
     const model = selectedModel
     const controller = new AbortController()
     abortRef.current = controller
@@ -293,7 +301,7 @@ export default function ChatExample() {
             ...message,
             metadata: {
               model,
-              responseTime: (Date.now() - started) / 1000,
+              responseTime: (nowMs() - started) / 1000,
             },
           }),
           event.sessionId
@@ -373,20 +381,15 @@ export default function ChatExample() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  // The drawer only exists on narrow viewports.
-  useEffect(() => {
-    if (isDesktop) setMobileNavOpen(false)
-  }, [isDesktop])
-
   // Escape closes the drawer.
   useEffect(() => {
-    if (!mobileNavOpen) return
+    if (!drawerOpen) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMobileNavOpen(false)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [mobileNavOpen])
+  }, [drawerOpen])
 
   const orderedSessions = [
     ...sessions.filter((s) => s.pinned),
@@ -397,19 +400,17 @@ export default function ChatExample() {
     <div className="relative flex h-full min-h-0 overflow-hidden bg-background">
       {/* Mobile: the sidebar slides over the conversation instead of squeezing it. */}
       <div
-        aria-hidden={!mobileNavOpen}
+        aria-hidden={!drawerOpen}
         onClick={() => setMobileNavOpen(false)}
         className={cn(
           "absolute inset-0 z-40 bg-foreground/20 backdrop-blur-[1px] transition-opacity duration-200 md:hidden",
-          mobileNavOpen
-            ? "opacity-100"
-            : "pointer-events-none opacity-0"
+          drawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
         )}
       />
       <div
         className={cn(
           "z-50 h-full shrink-0 max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:shadow-xl max-md:transition-transform max-md:duration-200 md:relative",
-          !mobileNavOpen && "max-md:-translate-x-full"
+          !drawerOpen && "max-md:-translate-x-full"
         )}
       >
       <ChatSidebarDnd
@@ -417,14 +418,14 @@ export default function ChatExample() {
           if (drop.action === "pin") {
             setSessions((prev) =>
               prev.map((s) =>
-                s.id === drop.id ? { ...s, pinned: true } : s
+                s.id === drop.itemId ? { ...s, pinned: true } : s
               )
             )
           } else if (drop.action === "delete") {
             stopGeneration()
             setSessions((prev) => {
-              const next = prev.filter((s) => s.id !== drop.id)
-              if (activeId === drop.id) {
+              const next = prev.filter((s) => s.id !== drop.itemId)
+              if (activeId === drop.itemId) {
                 setActiveId(next[0]?.id ?? "")
                 setMessages(next[0]?.messages ?? [])
               }
@@ -677,7 +678,6 @@ function SidebarSessionSection({
   onTogglePin: (id: string, pinned: boolean) => void
   onDelete: (id: string) => void
 }) {
-  const { activeDragId } = useSidebarDnd()
   return (
     <SidebarCollapsibleSection
       title="Recent chats"
@@ -685,19 +685,19 @@ function SidebarSessionSection({
       onToggle={onToggle}
       count={sessions.length}
     >
-      {sessions.length === 0 ? (
-        <SidebarEmptyState>New chats appear here.</SidebarEmptyState>
-      ) : (
-        <ChatSidebarItemList
-          items={sessions}
-          activeId={activeId}
-          activeDragId={activeDragId}
-          onSelect={onSelect}
-          onRename={onRename}
-          onTogglePin={onTogglePin}
-          onDelete={onDelete}
-        />
-      )}
+      <ChatSidebarItemList
+        items={sessions}
+        activeId={activeId}
+        listId="recent"
+        draggable
+        emptyState={
+          <SidebarEmptyState>New chats appear here.</SidebarEmptyState>
+        }
+        onSelect={onSelect}
+        onRename={onRename}
+        onTogglePin={onTogglePin}
+        onDelete={onDelete}
+      />
     </SidebarCollapsibleSection>
   )
 }
