@@ -2,6 +2,8 @@
 
 A shadcn/ui registry of chat primitives. Install one atom, or pull the whole kit. Components use standard shadcn CSS variables (`--background`, `--foreground`, `--muted`, `--border`, `--primary`, `--sidebar`, `--radius`) — no custom theme required.
 
+[![CI](https://github.com/miskibin/chat-components/actions/workflows/ci.yml/badge.svg)](https://github.com/miskibin/chat-components/actions/workflows/ci.yml)
+
 [Demo](https://chat-input-azure.vercel.app/)
 
 ## Install

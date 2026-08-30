@@ -66,7 +66,10 @@ export async function* runCursorAgent(
 
   args.push("--", options.prompt)
 
-  const child = spawn(cmd, args, {
+  // The binary is resolved at runtime from PATH / CURSOR_AGENT_BIN, so there is
+  // nothing for the bundler to trace. Without this hint Turbopack gives up on
+  // static analysis and pulls the entire project into the serverless output.
+  const child = spawn(/*turbopackIgnore: true*/ cmd, args, {
     cwd: workspace,
     env: process.env,
     windowsHide: true,
@@ -182,7 +185,8 @@ export async function listCursorModels(): Promise<
   { id: string; name: string }[]
 > {
   const { cmd, args: prefix } = resolveAgentCommand()
-  const child = spawn(cmd, [...prefix, "models"], {
+  // See the note in runCursorAgent(): keep this out of Turbopack's tracing.
+  const child = spawn(/*turbopackIgnore: true*/ cmd, [...prefix, "models"], {
     cwd: process.cwd(),
     env: process.env,
     windowsHide: true,
