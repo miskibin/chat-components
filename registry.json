@@ -186,8 +186,13 @@
       "name": "sidebar-dnd",
       "type": "registry:ui",
       "title": "Sidebar DnD",
-      "description": "Drag-and-drop context for pinning and deleting sidebar items.",
-      "dependencies": ["@dnd-kit/core", "@dnd-kit/utilities"],
+      "description": "Declarative drag-and-drop context for sidebar items: generic drop zones (pin/trash presets) plus drag-to-reorder events.",
+      "dependencies": [
+        "@dnd-kit/core",
+        "@dnd-kit/utilities",
+        "@dnd-kit/sortable",
+        "lucide-react"
+      ],
       "files": [
         {
           "path": "components/ui/sidebar-dnd.tsx",
@@ -199,8 +204,8 @@
       "name": "sidebar-drop-zones",
       "type": "registry:ui",
       "title": "Sidebar Drop Zones",
-      "description": "Pin and trash edge drop zones for the chat sidebar.",
-      "dependencies": ["@dnd-kit/core"],
+      "description": "Edge and inline drop zones rendered from a zone definition, with tone variants and drag-over highlighting.",
+      "dependencies": ["@dnd-kit/core", "class-variance-authority"],
       "registryDependencies": ["miskibin/chat-components/sidebar-dnd"],
       "files": [
         {
@@ -213,9 +218,18 @@
       "name": "sidebar-item",
       "type": "registry:ui",
       "title": "Sidebar Item",
-      "description": "Session row with rename, pin, delete, status dots, context menu, and drag.",
-      "dependencies": ["lucide-react", "@dnd-kit/core"],
-      "registryDependencies": ["context-menu"],
+      "description": "Memoized session row plus sortable list: rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
+      "dependencies": [
+        "lucide-react",
+        "@dnd-kit/core",
+        "@dnd-kit/sortable",
+        "@dnd-kit/utilities",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "context-menu",
+        "miskibin/chat-components/sidebar-dnd"
+      ],
       "files": [
         {
           "path": "components/ui/sidebar-item.tsx",
@@ -227,7 +241,7 @@
       "name": "chat-sidebar",
       "type": "registry:ui",
       "title": "Chat Sidebar",
-      "description": "Collapsible sidebar chrome with DnD pin/trash zones and slot-based composition.",
+      "description": "Collapsible sidebar chrome with slot-based composition and generic drag-and-drop zones (pin, trash, custom).",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/sidebar-item",

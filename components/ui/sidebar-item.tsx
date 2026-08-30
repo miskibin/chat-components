@@ -573,15 +573,15 @@ export function ChatSidebarItemList({
       data-list-id={resolvedListId}
       className={cn("flex flex-col gap-px", className)}
     >
-      {items.length === 0
-        ? emptyState
-        : sortable
-          ? (
-              <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-                {rows}
-              </SortableContext>
-            )
-          : rows}
+      {items.length === 0 ? (
+        emptyState
+      ) : sortable ? (
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {rows}
+        </SortableContext>
+      ) : (
+        rows
+      )}
     </div>
   )
 }

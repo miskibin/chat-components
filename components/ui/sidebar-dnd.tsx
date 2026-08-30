@@ -4,12 +4,14 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
   pointerWithin,
   useSensor,
   useSensors,
   type CollisionDetection,
+  type DndContextProps,
   type DragEndEvent,
   type DragStartEvent,
   type Modifier,
@@ -194,9 +196,13 @@ export type ChatSidebarDndProps = {
   onDragCancel?: () => void
   /** Rendered inside the dnd-kit `DragOverlay` while dragging. */
   renderOverlay?: (itemId: string) => ReactNode
-  /** Pixels the pointer must travel before a drag starts. Keeps taps/clicks working on touch. */
+  /** Pixels the mouse must travel before a drag starts — keeps clicks working. */
   activationDistance?: number
+  /** Long-press duration (ms) before a touch drag starts — keeps the list scrollable. */
+  touchDelay?: number
   modifiers?: Modifier[]
+  /** Replace the default mouse + touch + keyboard sensors entirely. */
+  sensors?: DndContextProps["sensors"]
 }
 
 export function ChatSidebarDnd({
@@ -208,13 +214,20 @@ export function ChatSidebarDnd({
   onDragCancel,
   renderOverlay,
   activationDistance = 6,
+  touchDelay = 220,
   modifiers,
+  sensors,
 }: ChatSidebarDndProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
+  // Mouse drags start after a few px; touch drags after a short press, so the
+  // sidebar keeps scrolling normally on small screens.
+  const defaultSensors = useSensors(
+    useSensor(MouseSensor, {
       activationConstraint: { distance: activationDistance },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: touchDelay, tolerance: 8 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
@@ -351,7 +364,7 @@ export function ChatSidebarDnd({
 
   return (
     <DndContext
-      sensors={sensors}
+      sensors={sensors ?? defaultSensors}
       modifiers={modifiers}
       collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
