@@ -172,7 +172,7 @@ export function SidebarExample() {
   )
 
   return (
-    <div className="flex h-[440px] overflow-hidden rounded-md border">
+    <div className="flex h-[440px] w-full overflow-hidden">
       <ChatSidebarDnd
         zones={zones}
         onDrop={handleDrop}

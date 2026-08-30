@@ -1,93 +1,42 @@
-import { Chat } from "@/components/chat"
-import { CopyCommand } from "@/components/copy-command"
-import { ChatInputExample } from "@/components/examples/chat-input-example"
-import { MessageExample } from "@/components/examples/message-example"
-import { PickersExample } from "@/components/examples/pickers-example"
-import { SidebarExample } from "@/components/examples/sidebar-example"
-import { StatusExample } from "@/components/examples/status-example"
-import { ModeToggle } from "@/app/mode-toggle"
-import { RegistryPreview } from "@/components/registry-preview"
-import { Button } from "@/components/ui/button"
-import { ChatNavbar } from "@/components/ui/chat-navbar"
-import { ThemeToggle } from "@/components/ui/theme-toggle"
 import Link from "next/link"
+
+import { Chat } from "@/components/chat"
+import { CommandBlock } from "@/components/docs/command-block"
+import { installCommand } from "@/components/docs/nav"
+import { SiteHeader } from "@/components/docs/site-header"
+import { Button } from "@/components/ui/button"
 
 export default function Home() {
   return (
-    <div className="mx-auto flex min-h-svh max-w-3xl flex-col gap-8 px-4 py-8">
-      <header className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-3xl font-bold tracking-tight">Chat Components</h1>
-            <p className="text-muted-foreground">
-              A custom registry for distributing chat UI with shadcn.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/demo">Cursor PoC</Link>
+    <div className="min-h-svh bg-background">
+      <SiteHeader />
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-12 px-4 py-16 md:px-8 md:py-20">
+        <div className="flex flex-col items-start gap-6">
+          <h1 className="text-4xl font-semibold tracking-tight text-balance text-foreground sm:text-5xl">
+            Chat UI you own
+          </h1>
+          <p className="max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
+            A shadcn/ui registry of chat primitives — composer, message list,
+            streaming markdown, sortable sidebar, model and mode pickers. The
+            code is copied into your repo, themed with your tokens.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild>
+              <Link href="/docs">Get started</Link>
             </Button>
-            <ModeToggle />
+            <Button variant="outline" asChild>
+              <Link href="/demo">Open the playground</Link>
+            </Button>
           </div>
+          <CommandBlock
+            command={`npx ${installCommand("chat")}`}
+            className="w-full max-w-xl"
+          />
         </div>
-        <CopyCommand command="npx shadcn@latest add miskibin/chat-components/chat" />
-      </header>
 
-      <main className="flex flex-1 flex-col gap-8">
-        <RegistryPreview
-          name="chat"
-          description="Starter chat block: empty state, prompt suggestions, then messages + input."
-        >
-          <div className="h-[480px] overflow-hidden rounded-md border">
-            <Chat />
-          </div>
-        </RegistryPreview>
-
-        <RegistryPreview
-          name="chat-input"
-          description="Composer-style input with attachments, skills, and slash commands."
-        >
-          <ChatInputExample />
-        </RegistryPreview>
-
-        <RegistryPreview
-          name="message-list"
-          description="Message list with user bubbles and assistant markdown."
-        >
-          <MessageExample />
-        </RegistryPreview>
-
-        <RegistryPreview
-          name="model-picker"
-          description="Ask / Plan / Agent mode and a model picker."
-        >
-          <PickersExample />
-        </RegistryPreview>
-
-        <RegistryPreview
-          name="chat-sidebar"
-          description="Collapsible sidebar chrome with slots."
-        >
-          <SidebarExample />
-        </RegistryPreview>
-
-        <RegistryPreview
-          name="generation-status"
-          description="Braille spinner for generation state."
-          minHeight="280px"
-        >
-          <StatusExample />
-        </RegistryPreview>
-
-        <RegistryPreview
-          name="chat-navbar"
-          description="Thin top bar with title and action slots."
-          minHeight="280px"
-        >
-          <div className="overflow-hidden rounded-md border">
-            <ChatNavbar title="Chat" right={<ThemeToggle floating={false} />} />
-          </div>
-        </RegistryPreview>
+        <div className="h-[560px] overflow-hidden rounded-xl border bg-background shadow-xs">
+          <Chat />
+        </div>
       </main>
     </div>
   )

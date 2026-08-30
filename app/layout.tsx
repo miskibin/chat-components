@@ -16,8 +16,12 @@ const fontMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Chat Components",
-  description: "Reusable chat UI components for React and shadcn/ui",
+  title: {
+    default: "Chat Components",
+    template: "%s — Chat Components",
+  },
+  description:
+    "A shadcn/ui registry of chat primitives: composer, message list, streaming markdown, sortable sidebar, and pickers.",
 }
 
 export default function RootLayout({

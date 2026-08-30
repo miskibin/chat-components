@@ -2,7 +2,7 @@
   "$schema": "https://ui.shadcn.com/schema/registry-item.json",
   "name": "theme-toggle",
   "title": "Theme Toggle",
-  "description": "Floating circular theme chip (light/dark).",
+  "description": "Circular light/dark toggle — floating by default, inline via `floating={false}`.",
   "dependencies": [
     "lucide-react",
     "next-themes"
@@ -10,7 +10,7 @@
   "files": [
     {
       "path": "components/ui/theme-toggle.tsx",
-      "content": "\"use client\"\r\n\r\nimport { Moon, Sun } from \"lucide-react\"\r\nimport { useTheme } from \"next-themes\"\r\nimport { useEffect, useState } from \"react\"\r\n\r\nimport { cn } from \"@/lib/utils\"\r\n\r\nexport type ThemeToggleProps = {\r\n  className?: string\r\n  /** Fixed floating chip (default) or inline. */\r\n  floating?: boolean\r\n}\r\n\r\nexport function ThemeToggle({\r\n  className,\r\n  floating = true,\r\n}: ThemeToggleProps) {\r\n  const { resolvedTheme, setTheme } = useTheme()\r\n  const [mounted, setMounted] = useState(false)\r\n  useEffect(() => setMounted(true), [])\r\n  const isDark = mounted && resolvedTheme === \"dark\"\r\n\r\n  return (\r\n    <button\r\n      type=\"button\"\r\n      aria-label=\"Toggle theme\"\r\n      onClick={() => setTheme(isDark ? \"light\" : \"dark\")}\r\n      className={cn(\r\n        \"grid h-9 w-9 place-items-center rounded-full border border-border bg-muted text-muted-foreground transition hover:opacity-80\",\r\n        floating && \"fixed top-3 right-3 z-50\",\r\n        className\r\n      )}\r\n    >\r\n      {mounted ? isDark ? <Sun size={16} /> : <Moon size={16} /> : null}\r\n    </button>\r\n  )\r\n}\r\n",
+      "content": "\"use client\"\n\nimport { Moon, Sun } from \"lucide-react\"\nimport { useTheme } from \"next-themes\"\nimport * as React from \"react\"\n\nimport { cn } from \"@/lib/utils\"\n\nconst subscribe = () => () => {}\n\n/** True only after hydration, so the icon never mismatches the server HTML. */\nfunction useHydrated() {\n  return React.useSyncExternalStore(\n    subscribe,\n    () => true,\n    () => false\n  )\n}\n\nexport type ThemeToggleProps = React.ComponentProps<\"button\"> & {\n  /** Fixed floating chip (default) or inline. */\n  floating?: boolean\n}\n\nexport function ThemeToggle({\n  className,\n  floating = true,\n  onClick,\n  ...props\n}: ThemeToggleProps) {\n  const { resolvedTheme, setTheme } = useTheme()\n  const mounted = useHydrated()\n  const isDark = mounted && resolvedTheme === \"dark\"\n\n  return (\n    <button\n      type=\"button\"\n      data-slot=\"theme-toggle\"\n      aria-label=\"Toggle theme\"\n      title={isDark ? \"Switch to light\" : \"Switch to dark\"}\n      onClick={(event) => {\n        onClick?.(event)\n        if (event.defaultPrevented) return\n        setTheme(isDark ? \"light\" : \"dark\")\n      }}\n      className={cn(\n        \"inline-grid size-8 shrink-0 place-items-center rounded-full border bg-background text-muted-foreground shadow-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0\",\n        floating && \"fixed top-3 right-3 z-50\",\n        className\n      )}\n      {...props}\n    >\n      {mounted ? isDark ? <Sun /> : <Moon /> : null}\n    </button>\n  )\n}\n",
       "type": "registry:ui"
     }
   ],
