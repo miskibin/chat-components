@@ -1,14 +1,15 @@
 "use client"
 
 import { Check, ChevronDown, Cpu } from "lucide-react"
-import {
-  useCallback,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react"
+import * as React from "react"
 
-import { useClickOutside } from "@/hooks/use-click-outside"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
 export type ModelOption = {
@@ -28,8 +29,9 @@ export type ModelPickerProps = {
   options: ModelOption[]
   placeholder?: string
   disabled?: boolean
-  /** Composer opens upward; navbar opens downward. */
-  align?: "up" | "down"
+  /** Which way the menu opens. Composers open "top", navbars open "bottom". */
+  side?: "top" | "bottom"
+  label?: string
   className?: string
 }
 
@@ -40,177 +42,99 @@ export function ModelPicker({
   options,
   placeholder = "Model",
   disabled = false,
-  align = "up",
+  side = "top",
+  label = "Models",
   className,
 }: ModelPickerProps) {
-  const [open, setOpen] = useState(false)
-  const [internal, setInternal] = useState(
+  const [internal, setInternal] = React.useState(
     defaultValue ?? options[0]?.id ?? ""
   )
   const selectedId = value ?? internal
-  const ref = useRef<HTMLDivElement | null>(null)
-  const current =
-    options.find((m) => m.id === selectedId) ?? options[0] ?? null
+  const current = options.find((m) => m.id === selectedId) ?? options[0] ?? null
 
-  const pick = (option: ModelOption) => {
-    if (option.disabled) return
-    setInternal(option.id)
-    onChange?.(option.id)
-    setOpen(false)
-  }
-
-  useClickOutside(
-    ref,
-    useCallback(() => setOpen(false), []),
-    open
+  const pick = React.useCallback(
+    (option: ModelOption) => {
+      if (option.disabled) return
+      setInternal(option.id)
+      onChange?.(option.id)
+    },
+    [onChange]
   )
 
   return (
-    <div ref={ref} className={cn("relative", className)}>
-      <button
-        type="button"
-        disabled={disabled || options.length === 0}
-        onClick={() => setOpen((o) => !o)}
-        title="Change model"
-        className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
-        style={{
-          background: "transparent",
-          border: 0,
-          color: "var(--muted-foreground)",
-          fontFamily: "inherit",
-          fontSize: 12,
-        }}
-        onMouseEnter={(e) => {
-          if (disabled) return
-          e.currentTarget.style.background = "var(--muted)"
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent"
-        }}
-      >
-        <Cpu className="h-3.5 w-3.5" />
-        <span>{current?.name ?? placeholder}</span>
-        {current?.badge ? <ModelBadge>{current.badge}</ModelBadge> : null}
-        <ChevronDown
-          className="h-3 w-3 transition-transform"
-          style={{ transform: open ? "rotate(180deg)" : "none" }}
-        />
-      </button>
-      {open && (
-        <div
-          className="animate-in fade-in zoom-in-95 duration-150 absolute left-0 z-30 min-w-[280px] rounded-xl p-1"
-          style={{
-            ...(align === "up"
-              ? { bottom: "calc(100% + 8px)" }
-              : { top: "calc(100% + 8px)" }),
-            background: "var(--popover)",
-            border: "1px solid var(--border)",
-            boxShadow:
-              "0 12px 32px -8px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.04)",
-          }}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          data-slot="model-picker-trigger"
+          disabled={disabled || options.length === 0}
+          title="Change model"
+          className={cn(
+            "group inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-[12px] text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-muted data-[state=open]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0",
+            className
+          )}
         >
-          <div
-            className="px-3 pb-1 pt-2 uppercase"
-            style={{
-              fontSize: 11,
-              fontWeight: 500,
-              color: "var(--muted-foreground)",
-              letterSpacing: ".04em",
-            }}
+          <Cpu className="size-3.5" />
+          <span className="truncate">{current?.name ?? placeholder}</span>
+          {current?.badge ? <ModelBadge>{current.badge}</ModelBadge> : null}
+          <ChevronDown className="size-3 opacity-60 transition-transform duration-150 group-data-[state=open]:rotate-180" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        data-slot="model-picker-content"
+        side={side}
+        align="start"
+        sideOffset={8}
+        collisionPadding={12}
+        className="w-[min(20rem,calc(100vw-1.5rem))]"
+      >
+        <DropdownMenuLabel className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          {label}
+        </DropdownMenuLabel>
+        {options.map((model) => (
+          <DropdownMenuItem
+            key={model.id}
+            data-slot="model-picker-item"
+            disabled={model.disabled}
+            onSelect={() => pick(model)}
+            className="items-start gap-2.5 py-2"
           >
-            Models
-          </div>
-          {options.map((m) => {
-            const selectable = !m.disabled
-            return (
-              <button
-                key={m.id}
-                type="button"
-                disabled={!selectable}
-                onClick={() => pick(m)}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left"
-                style={{
-                  background: "transparent",
-                  border: 0,
-                  opacity: selectable ? 1 : 0.55,
-                  cursor: selectable ? "pointer" : "not-allowed",
-                }}
-                onMouseEnter={(e) => {
-                  if (!selectable) return
-                  e.currentTarget.style.background = "var(--muted)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent"
-                }}
-              >
-                <div
-                  className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md"
-                  style={{
-                    background: "var(--muted)",
-                    border: "1px solid var(--border)",
-                    color: "var(--muted-foreground)",
-                  }}
-                >
-                  <Cpu className="h-3 w-3" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      style={{
-                        fontFamily: "inherit",
-                        fontSize: 13,
-                        color: "var(--foreground)",
-                      }}
-                    >
-                      {m.name}
-                    </span>
-                    {m.badge ? <ModelBadge>{m.badge}</ModelBadge> : null}
-                  </div>
-                  {(m.description || m.meta) && (
-                    <div
-                      className="mt-0.5"
-                      style={{ fontSize: 11, color: "var(--muted-foreground)" }}
-                    >
-                      {[m.description, m.meta].filter(Boolean).join(" · ")}
-                    </div>
-                  )}
-                  {m.disabledReason ? (
-                    <div
-                      className="mt-1"
-                      style={{ fontSize: 11, color: "var(--muted-foreground)" }}
-                    >
-                      {m.disabledReason}
-                    </div>
-                  ) : null}
-                </div>
-                {m.id === selectedId && selectable ? (
-                  <Check
-                    className="h-3.5 w-3.5"
-                    style={{ color: "var(--primary)" }}
-                  />
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
+            <span className="mt-px grid size-6 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground">
+              <Cpu className="size-3" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5">
+                <span className="truncate text-[13px] text-foreground">
+                  {model.name}
+                </span>
+                {model.badge ? <ModelBadge>{model.badge}</ModelBadge> : null}
+              </span>
+              {model.description || model.meta ? (
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                  {[model.description, model.meta].filter(Boolean).join(" · ")}
+                </span>
+              ) : null}
+              {model.disabledReason ? (
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  {model.disabledReason}
+                </span>
+              ) : null}
+            </span>
+            {model.id === selectedId && !model.disabled ? (
+              <Check className="mt-1 size-3.5 shrink-0 !text-primary" />
+            ) : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
-function ModelBadge({ children }: { children: ReactNode }) {
+function ModelBadge({ children }: { children: React.ReactNode }) {
   return (
     <span
-      className="rounded-sm"
-      style={{
-        fontSize: 9.5,
-        padding: "1px 5px",
-        background: "color-mix(in oklab, var(--primary) 12%, var(--background))",
-        color: "var(--primary)",
-        fontWeight: 600,
-        letterSpacing: ".02em",
-        textTransform: "uppercase",
-      }}
+      data-slot="model-picker-badge"
+      className="shrink-0 rounded-sm bg-primary/10 px-1 py-px text-[9.5px] font-semibold tracking-wide text-primary uppercase"
     >
       {children}
     </span>

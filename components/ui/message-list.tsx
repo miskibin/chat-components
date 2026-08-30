@@ -1,7 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { useEffect, useRef } from "react"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 import {
@@ -18,6 +17,7 @@ import {
 } from "@/components/ui/message"
 
 const BOTTOM_SCROLL_THRESHOLD_PX = 48
+const EMPTY_PATTERNS: PatternHandler[] = []
 
 export type ChatMessageData = {
   id: string
@@ -32,41 +32,38 @@ export type ChatMessageData = {
   artifacts?: MessageArtifactData[]
 }
 
-export type MessageListProps = {
+export type MessageListProps = React.ComponentProps<"div"> & {
   messages: ChatMessageData[]
   isGenerating?: boolean
   generationStage?: GenerationStage
   patternHandlers?: PatternHandler[]
   onEditMessage?: (id: string, content: string) => void
-  renderActions?: (message: ChatMessageData) => ReactNode
-  emptyState?: ReactNode
-  className?: string
-  children?: ReactNode
+  renderActions?: (message: ChatMessageData) => React.ReactNode
+  emptyState?: React.ReactNode
 }
 
 export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const autoScrollRef = useRef(true)
-  const programmaticScrollUntilRef = useRef(0)
-  const prevMessageCountRef = useRef(0)
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const autoScrollRef = React.useRef(true)
+  const programmaticScrollUntilRef = React.useRef(0)
+  const prevMessageCountRef = React.useRef(0)
 
-  const isScrolledNearBottom = (el: HTMLDivElement) =>
-    el.scrollHeight - el.scrollTop - el.clientHeight <=
-    BOTTOM_SCROLL_THRESHOLD_PX
-
-  const handleMessageScroll = () => {
+  const handleMessageScroll = React.useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    if (isScrolledNearBottom(el)) {
+    const nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight <=
+      BOTTOM_SCROLL_THRESHOLD_PX
+    if (nearBottom) {
       autoScrollRef.current = true
       return
     }
     if (Date.now() > programmaticScrollUntilRef.current) {
       autoScrollRef.current = false
     }
-  }
+  }, [])
 
-  useEffect(() => {
+  React.useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     const prev = prevMessageCountRef.current
@@ -88,71 +85,81 @@ export function MessageList({
   messages,
   isGenerating = false,
   generationStage = "idle",
-  patternHandlers = [],
+  patternHandlers = EMPTY_PATTERNS,
   onEditMessage,
   renderActions,
   emptyState,
   className,
   children,
+  onScroll,
+  ...props
 }: MessageListProps) {
   const { scrollRef, handleMessageScroll } = useChatAutoScroll(messages)
+  const lastIndex = messages.length - 1
 
   return (
     <div
       ref={scrollRef}
-      onScroll={handleMessageScroll}
-      className={cn("min-h-0 flex-1 overflow-y-auto px-4 py-4", className)}
+      data-slot="message-list"
+      onScroll={(event) => {
+        onScroll?.(event)
+        handleMessageScroll()
+      }}
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-4 md:px-6",
+        className
+      )}
+      {...props}
     >
-      <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col">
-        {messages.length === 0 ? (
-          emptyState ?? <div className="flex flex-1 items-center justify-center" />
-        ) : (
-          messages.map((message, index) => {
-            const isStreaming =
-              (isGenerating || generationStage !== "idle") &&
-              index === messages.length - 1 &&
-              message.sender === "assistant"
-            const waiting =
-              isStreaming &&
-              !message.reasoning &&
-              !message.content?.trim() &&
-              !(message.tools && message.tools.length > 0) &&
-              !(message.parts && message.parts.length > 0)
-            return (
-              <div key={message.id}>
-                <Message
-                  content={message.content}
-                  sender={message.sender}
-                  reasoning={message.reasoning}
-                  reasoningDuration={message.reasoningDuration}
-                  reasoningDefaultOpen={message.reasoningDefaultOpen}
-                  tools={message.tools}
-                  parts={message.parts}
-                  codeBlocks={message.codeBlocks}
-                  artifacts={message.artifacts}
-                  patternHandlers={patternHandlers}
-                  isAnimating={isStreaming}
-                  editable={message.sender === "user" && !!onEditMessage}
-                  onEdit={
-                    onEditMessage
-                      ? (content) => onEditMessage(message.id, content)
-                      : undefined
-                  }
-                />
-                {waiting ? (
-                  <div className="mb-4">
-                    <GenerationStatus
-                      active
-                      stage={generationStage}
-                    />
-                  </div>
-                ) : isStreaming ? null : (
-                  renderActions?.(message)
-                )}
-              </div>
-            )
-          })
-        )}
+      <div className="mx-auto flex min-h-full w-full max-w-3xl min-w-0 flex-col">
+        {messages.length === 0
+          ? (emptyState ?? <div className="flex flex-1 items-center justify-center" />)
+          : messages.map((message, index) => {
+              const isUser = message.sender === "user"
+              const isStreaming =
+                (isGenerating || generationStage !== "idle") &&
+                index === lastIndex &&
+                message.sender === "assistant"
+              const waiting =
+                isStreaming &&
+                !message.reasoning &&
+                !message.content?.trim() &&
+                !message.tools?.length &&
+                !message.parts?.length
+
+              return (
+                <div key={message.id} data-slot="message-list-item">
+                  <Message
+                    content={message.content}
+                    sender={message.sender}
+                    reasoning={message.reasoning}
+                    reasoningDuration={message.reasoningDuration}
+                    reasoningDefaultOpen={message.reasoningDefaultOpen}
+                    tools={message.tools}
+                    parts={message.parts}
+                    codeBlocks={message.codeBlocks}
+                    artifacts={message.artifacts}
+                    patternHandlers={patternHandlers}
+                    isAnimating={isStreaming}
+                    editable={isUser && !!onEditMessage}
+                    /* Assistant rows never take a callback prop, so the
+                       memoized Message keeps its render between updates. */
+                    onEdit={
+                      isUser && onEditMessage
+                        ? (content) => onEditMessage(message.id, content)
+                        : undefined
+                    }
+                  />
+                  {waiting ? (
+                    <div className="mb-4">
+                      <GenerationStatus active stage={generationStage} />
+                    </div>
+                  ) : isStreaming ? null : (
+                    renderActions?.(message)
+                  )}
+                </div>
+              )
+            })}
         {children}
       </div>
     </div>

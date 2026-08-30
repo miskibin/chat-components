@@ -2,6 +2,16 @@
   color: var(--foreground);
   font-size: 15px;
   line-height: 1.65;
+  min-width: 0;
+  /* Long URLs and identifiers must never push the page sideways. */
+  overflow-wrap: anywhere;
+}
+
+/* Wide content scrolls inside its own box instead of the page. */
+.lc-markdown [data-streamdown="table-wrapper"] {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .lc-markdown img,
@@ -28,6 +38,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  overflow-wrap: normal;
 }
 
 .lc-markdown th,

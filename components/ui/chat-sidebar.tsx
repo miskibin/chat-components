@@ -1,11 +1,7 @@
 "use client"
 
-import { ChevronRight, PanelLeft, Pin, Trash2 } from "lucide-react"
-import {
-  forwardRef,
-  type ButtonHTMLAttributes,
-  type ReactNode,
-} from "react"
+import { ChevronRight, PanelLeft } from "lucide-react"
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react"
 
 import { useSidebarDnd } from "@/components/ui/sidebar-dnd"
 import { SidebarEdgeDropZone } from "@/components/ui/sidebar-drop-zones"
@@ -14,85 +10,101 @@ import { cn } from "@/lib/utils"
 export const SIDEBAR_WIDTH_EXPANDED = 290
 export const SIDEBAR_WIDTH_COLLAPSED = 60
 
-type SideRowProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  icon: ReactNode
-  children: ReactNode
+/* -------------------------------------------------------------------------------------------------
+ * Buttons
+ * -----------------------------------------------------------------------------------------------*/
+
+export type SideRowProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon?: ReactNode
   hint?: ReactNode
+  ref?: Ref<HTMLButtonElement>
 }
 
-export const SideRow = forwardRef<HTMLButtonElement, SideRowProps>(
-  function SideRow({ icon, children, hint, onClick, className, ...rest }, ref) {
-    return (
-      <button
-        ref={ref}
-        type="button"
-        onClick={onClick}
-        className={
-          className ??
-          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13.5px]"
-        }
-        style={{
-          background: "transparent",
-          border: 0,
-          color: "var(--foreground)",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--muted)"
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent"
-        }}
-        {...rest}
-      >
-        <span className="inline-flex" style={{ color: "var(--muted-foreground)" }}>
+/** Full-width navigation row (new chat, search, …). */
+export function SideRow({
+  icon,
+  hint,
+  children,
+  className,
+  ...props
+}: SideRowProps) {
+  return (
+    <button
+      type="button"
+      data-slot="sidebar-row"
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] leading-5",
+        "text-sidebar-foreground outline-none transition-colors",
+        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
+        "disabled:pointer-events-none disabled:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      {icon ? (
+        <span className="inline-flex shrink-0 text-muted-foreground">
           {icon}
         </span>
-        <span className="min-w-0 flex-1">{children}</span>
-        {hint ? (
-          <span
-            className="shrink-0 text-[11px]"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            {hint}
-          </span>
-        ) : null}
-      </button>
-    )
-  }
-)
-
-type SideIconBtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  label: string
-  children: ReactNode
+      ) : null}
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {hint ? (
+        <span className="shrink-0 text-[11px] text-muted-foreground">
+          {hint}
+        </span>
+      ) : null}
+    </button>
+  )
 }
 
-export const SideIconBtn = forwardRef<HTMLButtonElement, SideIconBtnProps>(
-  function SideIconBtn(
-    { label, onClick, children, className, ...rest },
-    ref
-  ) {
-    return (
-      <button
-        ref={ref}
-        type="button"
-        onClick={onClick}
-        title={label}
-        aria-label={label}
-        className={className ?? "rounded-md p-2"}
-        style={{ background: "transparent", border: 0, color: "var(--muted-foreground)" }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--muted)"
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent"
-        }}
-        {...rest}
-      >
-        {children}
-      </button>
-    )
-  }
-)
+export type SideIconBtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  label: string
+  ref?: Ref<HTMLButtonElement>
+}
+
+/** Square icon button used by the collapsed rail and the header. */
+export function SideIconBtn({
+  label,
+  children,
+  className,
+  ...props
+}: SideIconBtnProps) {
+  return (
+    <button
+      type="button"
+      data-slot="sidebar-icon-button"
+      title={label}
+      aria-label={label}
+      className={cn(
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-md",
+        "text-muted-foreground outline-none transition-colors",
+        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
+        "disabled:pointer-events-none disabled:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  )
+}
+
+/* -------------------------------------------------------------------------------------------------
+ * Sections
+ * -----------------------------------------------------------------------------------------------*/
+
+export type SidebarCollapsibleSectionProps = {
+  title: ReactNode
+  open: boolean
+  onToggle: () => void
+  count?: number
+  description?: ReactNode
+  /** Rendered at the right edge of the header, before the count. */
+  action?: ReactNode
+  className?: string
+  children: ReactNode
+}
 
 export function SidebarCollapsibleSection({
   title,
@@ -100,84 +112,105 @@ export function SidebarCollapsibleSection({
   onToggle,
   count,
   description,
+  action,
   className,
   children,
-}: {
-  title: string
-  open: boolean
-  onToggle: () => void
-  count: number
-  description?: ReactNode
-  className?: string
-  children: ReactNode
-}) {
+}: SidebarCollapsibleSectionProps) {
   return (
-    <div className={className}>
+    <div
+      data-slot="sidebar-section"
+      data-state={open ? "open" : "closed"}
+      className={cn("min-w-0", className)}
+    >
       <button
         type="button"
+        data-slot="sidebar-section-trigger"
+        data-state={open ? "open" : "closed"}
         onClick={onToggle}
-        className="flex w-full items-center gap-1.5 px-2.5 pb-1 pt-1 uppercase"
-        style={{
-          background: "transparent",
-          border: 0,
-          color: "var(--muted-foreground)",
-          fontSize: 11,
-          fontWeight: 500,
-          letterSpacing: ".04em",
-        }}
+        aria-expanded={open}
+        className={cn(
+          "group/section flex w-full items-center gap-1.5 rounded-md px-2 py-1",
+          "text-[11px] font-medium tracking-wide uppercase text-muted-foreground",
+          "outline-none transition-colors hover:text-foreground",
+          "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60"
+        )}
       >
-        <span
-          className="inline-flex transition-transform"
-          style={{ transform: open ? "rotate(90deg)" : "none" }}
-        >
-          <ChevronRight className="h-3 w-3" />
-        </span>
-        <span>{title}</span>
-        <span className="ml-auto" style={{ fontWeight: 400 }}>
-          {count}
-        </span>
+        <ChevronRight className="size-3 shrink-0 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
+        <span className="min-w-0 flex-1 truncate text-left">{title}</span>
+        {action}
+        {typeof count === "number" ? (
+          <span className="shrink-0 font-normal tabular-nums">{count}</span>
+        ) : null}
       </button>
-      {open && description ? (
-        <div
-          className="px-2.5 pb-1.5"
-          style={{ fontSize: 12, color: "var(--muted-foreground)" }}
-        >
-          {description}
-        </div>
+      {open ? (
+        <>
+          {description ? (
+            <p
+              data-slot="sidebar-section-description"
+              className="px-2 pb-1.5 text-xs text-muted-foreground"
+            >
+              {description}
+            </p>
+          ) : null}
+          {children}
+        </>
       ) : null}
-      {open ? children : null}
     </div>
   )
 }
 
-export function SidebarEmptyState({ children }: { children: ReactNode }) {
+export function SidebarEmptyState({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
   return (
-    <div
-      className="px-2.5 py-2"
-      style={{ fontSize: 12, color: "var(--muted-foreground)" }}
+    <p
+      data-slot="sidebar-empty"
+      className={cn("px-2 py-2 text-xs text-muted-foreground", className)}
     >
       {children}
-    </div>
+    </p>
   )
 }
+
+/* -------------------------------------------------------------------------------------------------
+ * Sidebar
+ * -----------------------------------------------------------------------------------------------*/
 
 export type ChatSidebarProps = {
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
+  /** Header content of the expanded panel. */
   brand?: ReactNode
+  /** Sticky rows under the header (new chat, search, …). */
   nav?: ReactNode
+  /** Content of the collapsed rail. */
   rail?: ReactNode
   children?: ReactNode
   footer?: ReactNode
-  /** Extra absolute overlays inside the expanded panel (custom drop zones). */
+  /** Extra absolutely-positioned overlays inside the expanded panel. */
   overlays?: ReactNode
-  /** When inside ChatSidebarDnd, show pin/trash edge zones while dragging. */
+  /**
+   * Render the edge drop zones declared on the surrounding `ChatSidebarDnd`
+   * while a drag is in progress.
+   */
   edgeZones?: boolean
-  pinLabel?: string
-  trashLabel?: string
   widthExpanded?: number
   widthCollapsed?: number
   className?: string
+  classNames?: {
+    rail?: string
+    panel?: string
+    header?: string
+    nav?: string
+    content?: string
+    footer?: string
+  }
+  collapseLabel?: string
+  expandLabel?: string
 }
 
 export function ChatSidebar({
@@ -190,36 +223,39 @@ export function ChatSidebar({
   footer,
   overlays,
   edgeZones = false,
-  pinLabel = "Drop here to pin",
-  trashLabel = "Drop here to delete",
   widthExpanded = SIDEBAR_WIDTH_EXPANDED,
   widthCollapsed = SIDEBAR_WIDTH_COLLAPSED,
   className,
+  classNames,
+  collapseLabel = "Collapse sidebar",
+  expandLabel = "Open sidebar",
 }: ChatSidebarProps) {
-  const { activeDragId, pinZoneId, trashZoneId } = useSidebarDnd()
+  const { activeId, edgeZones: zones } = useSidebarDnd()
+  const showZones = edgeZones && !!activeId && zones.length > 0
 
   return (
     <div
+      data-slot="chat-sidebar"
+      data-collapsed={collapsed}
+      style={{ width: collapsed ? widthCollapsed : widthExpanded }}
       className={cn(
-        "lc-sidebar-wrap relative flex h-full min-h-0 min-w-0 flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out",
+        "relative flex h-full max-w-full min-h-0 min-w-0 shrink-0 overflow-hidden",
+        "border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "transition-[width] duration-300 ease-in-out",
         className
       )}
-      style={{
-        width: collapsed ? widthCollapsed : widthExpanded,
-        background: "var(--sidebar)",
-        borderRight: "1px solid var(--border)",
-      }}
     >
       <div
+        data-slot="chat-sidebar-rail"
         hidden={!collapsed}
-        className="absolute inset-y-0 left-0 z-20 flex flex-col items-center gap-1.5 py-3"
         style={{ width: widthCollapsed }}
+        className={cn(
+          "absolute inset-y-0 left-0 z-20 flex flex-col items-center gap-1.5 py-3",
+          classNames?.rail
+        )}
       >
-        <SideIconBtn
-          label="Open sidebar"
-          onClick={() => onCollapsedChange(false)}
-        >
-          <PanelLeft className="h-4 w-4" />
+        <SideIconBtn label={expandLabel} onClick={() => onCollapsedChange(false)}>
+          <PanelLeft className="size-4" />
         </SideIconBtn>
         {rail}
         <div className="flex-1" />
@@ -227,119 +263,117 @@ export function ChatSidebar({
       </div>
 
       <div
+        data-slot="chat-sidebar-panel"
         hidden={collapsed}
-        className="relative flex h-full min-h-0 flex-col"
-        style={{ width: widthExpanded, minWidth: widthExpanded }}
+        style={{ width: widthExpanded, maxWidth: "100%" }}
+        className={cn(
+          "relative flex h-full min-h-0 flex-col",
+          classNames?.panel
+        )}
       >
         <div
-          className="flex items-center justify-between gap-2 px-3 pb-2 pt-3"
-          style={{
-            background: "var(--sidebar)",
-            borderBottom: "1px solid var(--border)",
-          }}
+          data-slot="chat-sidebar-header"
+          className={cn(
+            "flex items-center justify-between gap-2 border-b border-sidebar-border px-2.5 pt-3 pb-2",
+            classNames?.header
+          )}
         >
           <div className="min-w-0 flex-1">{brand}</div>
-          <button
-            type="button"
+          <SideIconBtn
+            label={collapseLabel}
             onClick={() => onCollapsedChange(true)}
-            title="Collapse sidebar"
-            className="inline-flex items-center justify-center rounded-md p-1.5"
-            style={{
-              background: "transparent",
-              border: 0,
-              color: "var(--muted-foreground)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--muted)"
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent"
-            }}
           >
-            <PanelLeft className="h-[17px] w-[17px]" />
-          </button>
+            <PanelLeft className="size-4" />
+          </SideIconBtn>
         </div>
 
-        {nav ? <div className="px-2 pb-0.5 pt-2">{nav}</div> : null}
+        {nav ? (
+          <div
+            data-slot="chat-sidebar-nav"
+            className={cn("flex flex-col gap-px px-2 pt-2 pb-0.5", classNames?.nav)}
+          >
+            {nav}
+          </div>
+        ) : null}
 
-        <div className="flex-1 overflow-y-auto px-2 pb-2 pt-3 [scrollbar-width:thin]">
+        <div
+          data-slot="chat-sidebar-content"
+          className={cn(
+            "flex-1 overflow-x-hidden overflow-y-auto px-2 pt-3 pb-2 [scrollbar-width:thin]",
+            classNames?.content
+          )}
+        >
           {children}
         </div>
 
         {footer ? (
           <div
-            className="border-t px-2 py-2"
-            style={{ borderColor: "var(--border)" }}
+            data-slot="chat-sidebar-footer"
+            className={cn(
+              "border-t border-sidebar-border px-2 py-2",
+              classNames?.footer
+            )}
           >
             {footer}
           </div>
         ) : null}
 
         {overlays}
-        {edgeZones && activeDragId ? (
-          <>
-            <SidebarEdgeDropZone
-              id={pinZoneId}
-              edge="top"
-              icon={<Pin className="h-3.5 w-3.5" />}
-              label={pinLabel}
-              tone="accent"
-            />
-            <SidebarEdgeDropZone
-              id={trashZoneId}
-              edge="bottom"
-              icon={<Trash2 className="h-3.5 w-3.5" />}
-              label={trashLabel}
-              tone="danger"
-            />
-          </>
-        ) : null}
+
+        {showZones
+          ? zones.map((zone) => (
+              <SidebarEdgeDropZone
+                key={zone.id}
+                id={zone.id}
+                label={zone.label}
+                icon={zone.icon}
+                tone={zone.tone}
+                edge={zone.edge}
+              />
+            ))
+          : null}
       </div>
     </div>
   )
 }
 
-/** @deprecated Prefer ChatSidebarItem from sidebar-item. */
-export function ChatSidebarItemRow({
-  title,
-  active,
-  onClick,
-}: {
-  title: string
-  active?: boolean
-  onClick?: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-[13px]"
-      style={{
-        background: active ? "var(--muted)" : "transparent",
-        border: 0,
-        color: "var(--foreground)",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = "var(--muted)"
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = active
-          ? "var(--muted)"
-          : "transparent"
-      }}
-    >
-      <span className="min-w-0 flex-1 truncate">{title}</span>
-    </button>
-  )
-}
+/* -------------------------------------------------------------------------------------------------
+ * Family re-exports — `chat-sidebar` is the single import surface for the family.
+ * -----------------------------------------------------------------------------------------------*/
 
-export type { ChatSidebarItemData } from "@/components/ui/sidebar-item"
 export {
   ChatSidebarItem,
   ChatSidebarItemGhost,
   ChatSidebarItemList,
+  SidebarItemStatusDot,
 } from "@/components/ui/sidebar-item"
-export { ChatSidebarDnd, useSidebarDnd } from "@/components/ui/sidebar-dnd"
+export type {
+  ChatSidebarItemData,
+  ChatSidebarItemListProps,
+  ChatSidebarItemProps,
+  SidebarItemMenuAction,
+  SidebarItemStatus,
+} from "@/components/ui/sidebar-item"
+export {
+  ChatSidebarDnd,
+  DEFAULT_SIDEBAR_ZONES,
+  SIDEBAR_PIN_ZONE_ID,
+  SIDEBAR_TRASH_ZONE_ID,
+  pinDropZone,
+  trashDropZone,
+  useSidebarDnd,
+  useSidebarDndList,
+} from "@/components/ui/sidebar-dnd"
+export type {
+  ChatSidebarDndProps,
+  SidebarCustomDrop,
+  SidebarDndDrop,
+  SidebarDropZoneDef,
+  SidebarReorderDrop,
+  SidebarZoneDrop,
+  SidebarZoneEdge,
+  SidebarZoneTone,
+} from "@/components/ui/sidebar-dnd"
 export {
   SidebarDropZone,
   SidebarEdgeDropZone,

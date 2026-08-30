@@ -1,49 +1,94 @@
 "use client"
 
 import { useDroppable } from "@dnd-kit/core"
+import { cva, type VariantProps } from "class-variance-authority"
 import type { ReactNode } from "react"
 
+import type {
+  SidebarDropZoneDef,
+  SidebarZoneEdge,
+  SidebarZoneTone,
+} from "@/components/ui/sidebar-dnd"
+import { cn } from "@/lib/utils"
+
+const dropZoneSurfaceVariants = cva(
+  "flex items-center justify-center gap-1.5 rounded-md border border-dashed text-xs font-medium transition-colors duration-150 select-none",
+  {
+    variants: {
+      tone: {
+        accent:
+          "border-primary/40 bg-primary/10 text-primary data-[over=true]:border-primary data-[over=true]:bg-primary data-[over=true]:text-primary-foreground",
+        danger:
+          "border-destructive/40 bg-destructive/10 text-destructive data-[over=true]:border-destructive data-[over=true]:bg-destructive data-[over=true]:text-white",
+        muted:
+          "border-border bg-muted/60 text-muted-foreground data-[over=true]:border-foreground/25 data-[over=true]:bg-accent data-[over=true]:text-accent-foreground",
+      },
+    },
+    defaultVariants: { tone: "accent" },
+  }
+)
+
+export type SidebarDropZoneToneProps = VariantProps<
+  typeof dropZoneSurfaceVariants
+>
+
+type SidebarDropZoneBaseProps = {
+  id: string
+  label: ReactNode
+  icon?: ReactNode
+  tone?: SidebarZoneTone
+  className?: string
+  /** Class applied to the dashed surface itself. */
+  surfaceClassName?: string
+}
+
+/** Turns a `SidebarDropZoneDef` into the props both zone components take. */
+export function dropZoneProps(zone: SidebarDropZoneDef) {
+  return {
+    id: zone.id,
+    label: zone.label,
+    icon: zone.icon,
+    tone: zone.tone,
+  }
+}
+
+/**
+ * Full-width zone anchored to the top or bottom edge of the sidebar panel.
+ * Mount it only while a drag is active — it animates itself in.
+ */
 export function SidebarEdgeDropZone({
   id,
-  edge,
-  icon,
   label,
-  tone,
-}: {
-  id: string
-  edge: "top" | "bottom"
-  icon: ReactNode
-  label: string
-  tone: "accent" | "danger"
-}) {
+  icon,
+  tone = "accent",
+  edge = "top",
+  className,
+  surfaceClassName,
+}: SidebarDropZoneBaseProps & { edge?: SidebarZoneEdge }) {
   const { setNodeRef, isOver } = useDroppable({ id })
-  const color = tone === "danger" ? "var(--destructive)" : "var(--primary)"
-  const tint =
-    tone === "danger"
-      ? "color-mix(in oklab, var(--sidebar) 72%, var(--destructive))"
-      : "color-mix(in oklab, var(--sidebar) 72%, var(--primary))"
-  const positionClass =
-    edge === "top"
-      ? "top-0 right-0 left-0 min-h-[92px] h-[16%]"
-      : "right-0 bottom-0 left-0 min-h-[92px] h-[16%]"
 
   return (
     <div
       ref={setNodeRef}
-      className={`pointer-events-auto absolute z-[35] flex items-center justify-center px-3 py-4 ${positionClass}`}
-      style={{
-        background: isOver ? color : tint,
-        border: `1px dashed ${color}`,
-        transition: "background 120ms ease, color 120ms ease",
-      }}
+      data-slot="sidebar-edge-drop-zone"
+      data-edge={edge}
+      data-over={isOver}
+      className={cn(
+        "pointer-events-auto absolute inset-x-2 z-30 flex h-[16%] min-h-20 items-stretch",
+        "animate-in fade-in-0 duration-200 ease-out",
+        edge === "top"
+          ? "top-2 slide-in-from-top-2"
+          : "bottom-2 slide-in-from-bottom-2",
+        className
+      )}
     >
       <div
-        className="flex max-w-full items-center justify-center gap-1.5"
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          color: isOver ? "var(--primary-foreground)" : color,
-        }}
+        data-over={isOver}
+        className={cn(
+          dropZoneSurfaceVariants({ tone }),
+          "size-full px-3 backdrop-blur-[2px]",
+          surfaceClassName
+        )}
       >
         {icon}
         <span className="truncate">{label}</span>
@@ -52,50 +97,46 @@ export function SidebarEdgeDropZone({
   )
 }
 
+/**
+ * Inline zone that lives in the scroll flow (e.g. above a section) and
+ * collapses to zero height when hidden.
+ */
 export function SidebarDropZone({
   id,
-  icon,
   label,
-  tone,
+  icon,
+  tone = "accent",
   visible,
-}: {
-  id: string
-  icon: ReactNode
-  label: string
-  tone: "accent" | "danger"
-  visible: boolean
-}) {
+  className,
+  surfaceClassName,
+}: SidebarDropZoneBaseProps & { visible: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id })
-  const color = tone === "danger" ? "var(--destructive)" : "var(--primary)"
 
   return (
     <div
       ref={setNodeRef}
+      data-slot="sidebar-drop-zone"
+      data-over={isOver}
+      data-visible={visible}
       aria-hidden={!visible}
-      className="overflow-hidden"
-      style={{
-        maxHeight: visible ? 38 : 0,
-        marginTop: visible ? 4 : 0,
-        marginBottom: visible ? 4 : 0,
-        opacity: visible ? 1 : 0,
-        transition:
-          "max-height 160ms ease, opacity 160ms ease, margin 160ms ease",
-        pointerEvents: visible ? "auto" : "none",
-      }}
+      className={cn(
+        "overflow-hidden transition-all duration-200 ease-out",
+        visible
+          ? "my-1 max-h-12 opacity-100"
+          : "pointer-events-none my-0 max-h-0 opacity-0",
+        className
+      )}
     >
       <div
-        className="mx-1 flex items-center justify-center gap-1.5 rounded-md py-1.5"
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          color: isOver ? "var(--primary-foreground)" : color,
-          background: isOver ? color : "transparent",
-          border: `1px dashed ${color}`,
-          transition: "background 120ms ease, color 120ms ease",
-        }}
+        data-over={isOver}
+        className={cn(
+          dropZoneSurfaceVariants({ tone }),
+          "mx-1 px-2 py-1.5",
+          surfaceClassName
+        )}
       >
         {icon}
-        <span>{label}</span>
+        <span className="truncate">{label}</span>
       </div>
     </div>
   )

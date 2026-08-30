@@ -1,20 +1,21 @@
 "use client"
 
-import { ChatInput } from "@/components/ui/chat-input"
 import { toast } from "sonner"
+
+import { ChatInput } from "@/components/ui/chat-input"
 
 export function ChatInputExample() {
   return (
-    <div className="flex min-h-[400px] items-end">
+    <div className="w-full max-w-2xl">
       <ChatInput
-        className="w-full px-0 pb-0"
-        placeholder="Ask anything"
+        placeholder="Ask anything — type / for skills and commands"
         skills={[
           { name: "summarize", description: "Condense long text" },
           { name: "translate", description: "Translate into another language" },
         ]}
         slashCommands={[
-          { name: "help", description: "Show commands" },
+          { name: "help", description: "Show available commands" },
+          { name: "clear", description: "Clear the conversation" },
         ]}
         onSend={({ text, files, skills }) => {
           toast("Sent", {

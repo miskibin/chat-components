@@ -2,7 +2,6 @@
 
 import { Pencil, Save, Undo2 } from "lucide-react"
 import * as React from "react"
-import { useMemo, useState } from "react"
 
 import {
   MessageArtifact,
@@ -61,6 +60,16 @@ export type MessageProps = {
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
 const USER_PREVIEW_MAX_WORDS = 80
 
+const EMPTY_ACTIONS: ActionButton[] = []
+const EMPTY_TOOLS: MessageToolCallData[] = []
+const EMPTY_CODE_BLOCKS: MessageCodeBlockData[] = []
+const EMPTY_ARTIFACTS: MessageArtifactData[] = []
+const EMPTY_PATTERNS: PatternHandler[] = []
+
+/** Small square icon button used for edit / save / custom message actions. */
+const messageActionButton =
+  "inline-grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-3.5"
+
 function previewUserMessageText(text: string, maxWords: number) {
   const words = text.trim().split(/\s+/)
   if (words.length <= maxWords) {
@@ -72,29 +81,33 @@ function previewUserMessageText(text: string, maxWords: number) {
   }
 }
 
-export function Message({
+/**
+ * Memoized: in a streaming list only the message whose props actually change
+ * re-renders. Keep the callbacks you pass in stable to benefit from it.
+ */
+export const Message = React.memo(function Message({
   content,
   sender,
-  actionButtons = [],
+  actionButtons = EMPTY_ACTIONS,
   editable = false,
   onEdit,
-  patternHandlers = [],
+  patternHandlers = EMPTY_PATTERNS,
   className,
   contentClassName,
   reasoning: reasoningProp,
   reasoningDefaultOpen = false,
   reasoningDuration,
-  tools = [],
+  tools = EMPTY_TOOLS,
   parts,
-  codeBlocks = [],
-  artifacts = [],
+  codeBlocks = EMPTY_CODE_BLOCKS,
+  artifacts = EMPTY_ARTIFACTS,
   isAnimating = false,
 }: MessageProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedContent, setEditedContent] = useState(content)
-  const [longPromptExpanded, setLongPromptExpanded] = useState(false)
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [editedContent, setEditedContent] = React.useState(content)
+  const [longPromptExpanded, setLongPromptExpanded] = React.useState(false)
 
-  const { reasoning, displayContent } = useMemo(() => {
+  const { reasoning, displayContent } = React.useMemo(() => {
     if (reasoningProp != null) {
       return { reasoning: reasoningProp || null, displayContent: content }
     }
@@ -110,58 +123,70 @@ export function Message({
     setEditedContent(content)
   }, [content])
 
-  const { insideButtons, outsideButtons } = useMemo(() => {
-    const inside = actionButtons.filter((btn) => btn.position !== "outside")
-    const outside = actionButtons.filter((btn) => btn.position === "outside")
-    return { insideButtons: inside, outsideButtons: outside }
-  }, [actionButtons])
+  const { insideButtons, outsideButtons } = React.useMemo(
+    () => ({
+      insideButtons: actionButtons.filter((btn) => btn.position !== "outside"),
+      outsideButtons: actionButtons.filter((btn) => btn.position === "outside"),
+    }),
+    [actionButtons]
+  )
 
-  const handleSaveEdit = () => {
+  const cancelEdit = React.useCallback(() => {
+    setIsEditing(false)
+    setEditedContent(content)
+  }, [content])
+
+  const saveEdit = React.useCallback(() => {
     setIsEditing(false)
     if (onEdit && editedContent !== content) onEdit(editedContent)
-  }
+  }, [content, editedContent, onEdit])
 
   if (sender === "user") {
     if (isEditing) {
       return (
         <div
+          data-slot="message"
+          data-sender="user"
+          data-editing="true"
           className={cn("mb-4 flex w-full justify-end", className)}
         >
-          <div className="w-full max-w-[70%] rounded-2xl border border-border bg-muted px-4 py-2.5">
+          <div className="w-full max-w-[85%] rounded-2xl border bg-muted px-3.5 py-2.5 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:max-w-[70%] sm:px-4">
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                  handleSaveEdit()
+                  e.preventDefault()
+                  saveEdit()
                 } else if (e.key === "Escape") {
-                  setIsEditing(false)
-                  setEditedContent(content)
+                  e.preventDefault()
+                  cancelEdit()
                 }
               }}
               rows={3}
               autoFocus
-              className="w-full resize-none border-0 bg-transparent text-[15px] text-foreground outline-none"
+              aria-label="Edit message"
+              className="w-full resize-none border-0 bg-transparent text-base leading-relaxed text-foreground outline-none sm:text-[15px]"
             />
             <div className="mt-2 flex justify-end gap-1">
               <button
                 type="button"
-                title="Cancel"
-                onClick={() => {
-                  setIsEditing(false)
-                  setEditedContent(content)
-                }}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
+                title="Cancel (Esc)"
+                onClick={cancelEdit}
+                className={cn(messageActionButton, "hover:bg-background")}
               >
-                <Undo2 className="h-3.5 w-3.5" />
+                <Undo2 />
               </button>
               <button
                 type="button"
-                title="Save"
-                onClick={handleSaveEdit}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-background"
+                title="Save (⌘↵)"
+                onClick={saveEdit}
+                className={cn(
+                  messageActionButton,
+                  "text-primary hover:bg-background hover:text-primary"
+                )}
               >
-                <Save className="h-3.5 w-3.5" />
+                <Save />
               </button>
             </div>
           </div>
@@ -176,8 +201,10 @@ export function Message({
 
     return (
       <div
+        data-slot="message"
+        data-sender="user"
         className={cn(
-          "group mb-4 flex min-w-0 w-full items-center justify-end gap-1",
+          "group mb-4 flex w-full min-w-0 items-center justify-end gap-1",
           className
         )}
       >
@@ -186,23 +213,26 @@ export function Message({
             type="button"
             title="Edit message"
             onClick={() => setIsEditing(true)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+            className={cn(
+              messageActionButton,
+              "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+            )}
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil />
           </button>
         )}
         <div
+          data-slot="message-content"
           className={cn(
-            "max-w-[70%] min-w-0 rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground",
+            "max-w-[85%] min-w-0 rounded-2xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
             contentClassName
           )}
-          style={{ background: "var(--muted)" }}
         >
           {remainder && !longPromptExpanded ? preview : displayContent}
           {remainder ? (
             <button
               type="button"
-              className="mt-2 block w-full rounded-md py-1 text-left text-[13px] font-medium text-primary underline-offset-2 hover:underline"
+              className="mt-2 block rounded-sm py-0.5 text-left text-[13px] font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
               aria-expanded={longPromptExpanded}
               onClick={() => setLongPromptExpanded((v) => !v)}
             >
@@ -215,10 +245,15 @@ export function Message({
   }
 
   return (
-    <div className={cn("group mb-7", className)}>
+    <div
+      data-slot="message"
+      data-sender="assistant"
+      className={cn("group mb-7", className)}
+    >
       <div
+        data-slot="message-content"
         className={cn(
-          "max-w-full text-[15px] leading-[1.65] text-foreground",
+          "min-w-0 max-w-full text-[15px] leading-[1.65] text-foreground",
           contentClassName
         )}
       >
@@ -267,20 +302,20 @@ export function Message({
           <MessageArtifact key={artifact.id} artifact={artifact} />
         ))}
 
-        {(insideButtons.length > 0 ||
-          outsideButtons.length > 0 ||
-          (editable && onEdit)) && (
-          <div className="mt-2 flex flex-wrap items-center gap-1 opacity-0 transition group-hover:opacity-100">
+        {insideButtons.length > 0 ||
+        outsideButtons.length > 0 ||
+        (editable && onEdit) ? (
+          <div
+            data-slot="message-actions"
+            className="mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
+          >
             {[...insideButtons, ...outsideButtons].map((button) => (
               <button
                 key={button.id}
                 type="button"
                 title={button.title}
                 onClick={button.onClick}
-                className={cn(
-                  "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
-                  button.className
-                )}
+                className={cn(messageActionButton, button.className)}
               >
                 {button.icon}
               </button>
@@ -290,17 +325,17 @@ export function Message({
                 type="button"
                 title="Edit message"
                 onClick={() => setIsEditing(true)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                className={messageActionButton}
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil />
               </button>
             )}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
-}
+})
 
 export type {
   MessageArtifactData,

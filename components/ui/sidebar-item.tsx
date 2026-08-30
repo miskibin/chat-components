@@ -5,9 +5,20 @@ import {
   type DraggableAttributes,
   type DraggableSyntheticListeners,
 } from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { cva, type VariantProps } from "class-variance-authority"
 import { Pencil, Pin, PinOff, Trash2 } from "lucide-react"
 import {
+  memo,
+  useCallback,
   useEffect,
+  useId,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -21,6 +32,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { useSidebarDndList } from "@/components/ui/sidebar-dnd"
+import { cn } from "@/lib/utils"
+
+/* -------------------------------------------------------------------------------------------------
+ * Data
+ * -----------------------------------------------------------------------------------------------*/
 
 export type SidebarItemStatus =
   | "idle"
@@ -43,257 +60,214 @@ export type ChatSidebarItemData = {
   title: string
   pinned?: boolean
   status?: SidebarItemStatus
-  /** Leading icon overrides status dot. */
+  /** Leading node rendered instead of the status dot. */
   leading?: ReactNode
 }
 
-function statusChrome(
-  active: boolean,
-  status: SidebarItemStatus | undefined
-): { variant: string; dotStyle: CSSProperties; iconColor: string } {
-  const baseDot: CSSProperties = {
-    width: 8,
-    height: 8,
-    borderRadius: 9999,
-    flexShrink: 0,
-  }
-  const resolved = status ?? (active ? "active" : "idle")
-  if (resolved === "fault") {
-    const fill = "color-mix(in oklab, var(--destructive) 82%, var(--sidebar))"
-    return {
-      variant: "fault",
-      dotStyle: { ...baseDot, background: fill },
-      iconColor: fill,
-    }
-  }
-  if (resolved === "streaming") {
-    return {
-      variant: "streaming",
-      dotStyle: { ...baseDot, background: "var(--primary)" },
-      iconColor: "var(--primary)",
-    }
-  }
-  if (resolved === "pending") {
-    return {
-      variant: "pending",
-      dotStyle: { ...baseDot, background: "#ca8a04" },
-      iconColor: "#ca8a04",
-    }
-  }
-  if (resolved === "active" || active) {
-    const fill = "color-mix(in oklab, var(--muted-foreground) 58%, var(--sidebar))"
-    return {
-      variant: "active",
-      dotStyle: { ...baseDot, background: fill },
-      iconColor: fill,
-    }
-  }
-  const fill = "color-mix(in oklab, var(--muted-foreground) 88%, var(--sidebar))"
-  return {
-    variant: "idle",
-    dotStyle: { ...baseDot, background: fill },
-    iconColor: fill,
-  }
+/* -------------------------------------------------------------------------------------------------
+ * Status dot
+ * -----------------------------------------------------------------------------------------------*/
+
+const statusDotVariants = cva("size-2 shrink-0 rounded-full", {
+  variants: {
+    status: {
+      idle: "bg-muted-foreground/50",
+      active: "bg-primary",
+      streaming: "bg-primary animate-pulse",
+      pending: "bg-amber-500",
+      fault: "bg-destructive",
+    },
+  },
+  defaultVariants: { status: "idle" },
+})
+
+export type SidebarItemStatusDotProps = VariantProps<
+  typeof statusDotVariants
+> & { className?: string }
+
+export function SidebarItemStatusDot({
+  status,
+  className,
+}: SidebarItemStatusDotProps) {
+  return (
+    <span
+      aria-hidden
+      data-slot="sidebar-item-status"
+      data-status={status ?? "idle"}
+      className={cn(statusDotVariants({ status }), className)}
+    />
+  )
 }
 
-type ItemRowProps = {
+function resolveStatus(
+  active: boolean | undefined,
+  status: SidebarItemStatus | undefined
+): SidebarItemStatus {
+  return status ?? (active ? "active" : "idle")
+}
+
+/* -------------------------------------------------------------------------------------------------
+ * Row
+ * -----------------------------------------------------------------------------------------------*/
+
+type SidebarItemDragBinding = {
+  setNodeRef?: (element: HTMLElement | null) => void
+  setActivatorNodeRef?: (element: HTMLElement | null) => void
+  attributes?: DraggableAttributes
+  listeners?: DraggableSyntheticListeners
+  /** dnd-kit transform/transition — genuinely dynamic, so it stays inline. */
+  style?: CSSProperties
+  dragging?: boolean
+  enabled?: boolean
+}
+
+export type ChatSidebarItemProps = {
   item: ChatSidebarItemData
   active?: boolean
-  editing: boolean
-  setEditing: (v: boolean) => void
+  /** Enable pointer/keyboard dragging (needs a `ChatSidebarDnd` ancestor). */
+  draggable?: boolean
+  /** Enable drag-to-reorder (needs a `ChatSidebarItemList sortable` ancestor). */
+  sortable?: boolean
+  /** Separator above the row — used between pinned and unpinned groups. */
+  showDivider?: boolean
+  showStatusDot?: boolean
+  className?: string
   onSelect?: () => void
   onRename?: (title: string) => void
   onTogglePin?: () => void
   onDelete?: () => void
   menuActions?: SidebarItemMenuAction[]
-  dragAttrs?: DraggableAttributes
-  dragListeners?: DraggableSyntheticListeners
-  dragNodeRef?: (el: HTMLDivElement | null) => void
-  isBeingDragged?: boolean
-  showDivider?: boolean
-  showStatusDot?: boolean
 }
 
-function ItemRow({
+type SidebarItemRowProps = Omit<ChatSidebarItemProps, "draggable" | "sortable"> & {
+  editing: boolean
+  onEditingChange: (editing: boolean) => void
+  drag?: SidebarItemDragBinding
+}
+
+function SidebarItemRow({
   item,
   active = false,
+  showDivider = false,
+  showStatusDot = true,
+  className,
   editing,
-  setEditing,
+  onEditingChange,
   onSelect,
   onRename,
   onTogglePin,
   onDelete,
-  menuActions = [],
-  dragAttrs,
-  dragListeners,
-  dragNodeRef,
-  isBeingDragged,
-  showDivider,
-  showStatusDot = true,
-}: ItemRowProps) {
-  const [draft, setDraft] = useState(item.title || "")
+  menuActions,
+  drag,
+}: SidebarItemRowProps) {
+  const [draft, setDraft] = useState(item.title)
   const inputRef = useRef<HTMLInputElement>(null)
-  const isPinned = !!item.pinned
-  const chrome = statusChrome(active, item.status)
+  const pinned = !!item.pinned
 
   useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    }
+    if (!editing) return
+    inputRef.current?.focus()
+    inputRef.current?.select()
   }, [editing])
 
-  const startEdit = () => {
-    setDraft(item.title || "")
-    setEditing(true)
-  }
+  const startEdit = useCallback(() => {
+    setDraft(item.title)
+    onEditingChange(true)
+  }, [item.title, onEditingChange])
 
-  const commit = () => {
-    setEditing(false)
+  const commit = useCallback(() => {
+    onEditingChange(false)
     const next = draft.trim()
-    if (next && next !== (item.title || "")) onRename?.(next)
-  }
+    if (next && next !== item.title) onRename?.(next)
+  }, [draft, item.title, onEditingChange, onRename])
 
-  const cancel = () => {
-    setEditing(false)
-    setDraft(item.title || "")
-  }
+  const cancel = useCallback(() => {
+    onEditingChange(false)
+    setDraft(item.title)
+  }, [item.title, onEditingChange])
 
-  const rowStyle: CSSProperties = {
-    opacity: isBeingDragged ? 0.4 : 1,
-    touchAction: dragListeners ? "none" : undefined,
-    ...(showDivider
-      ? {
-          marginTop: 6,
-          paddingTop: 6,
-          borderTop: "1px solid var(--border)",
-        }
-      : {}),
-  }
-
-  const shellProps = {
-    ref: dragNodeRef,
-    ...(dragAttrs ?? {}),
-    ...(!editing && dragListeners ? dragListeners : {}),
-    className: "group/row relative",
-    style: rowStyle,
-  }
-
-  if (editing) {
-    return (
-      <div {...shellProps}>
+  const shell = (
+    <div
+      ref={drag?.setNodeRef}
+      data-slot="sidebar-item"
+      data-active={active}
+      data-pinned={pinned}
+      data-dragging={drag?.dragging ? true : undefined}
+      style={drag?.style}
+      className={cn(
+        "group/sidebar-item relative",
+        showDivider && "mt-1.5 border-t border-sidebar-border pt-1.5",
+        drag?.dragging && "opacity-40",
+        className
+      )}
+    >
+      {editing ? (
         <input
           ref={inputRef}
+          data-slot="sidebar-item-input"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
               commit()
-            } else if (e.key === "Escape") {
-              e.preventDefault()
+            } else if (event.key === "Escape") {
+              event.preventDefault()
               cancel()
             }
           }}
-          className="mb-px block w-full truncate py-1.5 pr-2.5 pl-2.5 text-left outline-none"
-          style={{
-            background: "var(--muted)",
-            color: "var(--foreground)",
-            border: 0,
-            borderLeft: "2px solid var(--primary)",
-            fontSize: 13.5,
-          }}
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-[13px] text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
-      </div>
-    )
-  }
-
-  const builtIn: SidebarItemMenuAction[] = []
-  if (onRename) {
-    builtIn.push({
-      id: "rename",
-      label: "Rename",
-      icon: <Pencil className="h-3.5 w-3.5" />,
-      onSelect: startEdit,
-    })
-  }
-  if (onTogglePin) {
-    builtIn.push({
-      id: "pin",
-      label: isPinned ? "Unpin" : "Pin",
-      icon: isPinned ? (
-        <PinOff className="h-3.5 w-3.5" />
       ) : (
-        <Pin className="h-3.5 w-3.5" />
-      ),
-      onSelect: onTogglePin,
-    })
-  }
-  if (onDelete) {
-    builtIn.push({
-      id: "delete",
-      label: "Delete",
-      icon: <Trash2 className="h-3.5 w-3.5" />,
-      onSelect: onDelete,
-      destructive: true,
-      separatorBefore: builtIn.length > 0 || menuActions.length > 0,
-    })
-  }
-
-  const actions = [...menuActions, ...builtIn]
-  const rowButton = (
-    <div {...shellProps}>
-      <button
-        type="button"
-        onClick={onSelect}
-        onDoubleClick={onRename ? startEdit : undefined}
-        title={item.title || "Untitled"}
-        className="mb-px flex w-full items-center gap-1.5 truncate py-1.5 pr-2.5 pl-2.5 text-left"
-        style={{
-          background: "transparent",
-          color: "var(--foreground)",
-          border: 0,
-          borderLeft: active
-            ? "2px solid var(--primary)"
-            : "2px solid transparent",
-          fontSize: 13.5,
-          fontWeight: active ? 500 : 400,
-          cursor: dragListeners ? "grab" : "pointer",
-        }}
-        onMouseEnter={(e) => {
-          if (!active) e.currentTarget.style.background = "var(--muted)"
-        }}
-        onMouseLeave={(e) => {
-          if (!active) e.currentTarget.style.background = "transparent"
-        }}
-      >
-        {isPinned && (
-          <Pin
-            className="h-3 w-3 flex-shrink-0"
-            style={{ color: "var(--primary)" }}
-          />
-        )}
-        {item.leading ? (
-          <span className="inline-flex flex-shrink-0">{item.leading}</span>
-        ) : showStatusDot && !isPinned ? (
-          <span
-            className="h-2 w-2 flex-shrink-0 rounded-full"
-            data-sidebar-item-dot={chrome.variant}
-            style={chrome.dotStyle}
-            aria-hidden
-          />
-        ) : null}
-        <span className="flex-1 truncate">{item.title || "Untitled"}</span>
-      </button>
+        <button
+          type="button"
+          ref={drag?.setActivatorNodeRef}
+          data-slot="sidebar-item-button"
+          data-active={active}
+          title={item.title || "Untitled"}
+          onClick={onSelect}
+          onDoubleClick={onRename ? startEdit : undefined}
+          {...(drag?.attributes ?? {})}
+          {...(drag?.listeners ?? {})}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5",
+            "text-sidebar-foreground outline-none transition-colors touch-manipulation",
+            "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
+            "data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground",
+            drag?.enabled && "cursor-grab active:cursor-grabbing"
+          )}
+        >
+          {pinned ? (
+            <Pin className="size-3 shrink-0 text-primary" aria-hidden />
+          ) : null}
+          {item.leading ? (
+            <span className="inline-flex shrink-0">{item.leading}</span>
+          ) : showStatusDot && !pinned ? (
+            <SidebarItemStatusDot status={resolveStatus(active, item.status)} />
+          ) : null}
+          <span className="min-w-0 flex-1 truncate">
+            {item.title || "Untitled"}
+          </span>
+        </button>
+      )}
     </div>
   )
 
-  if (actions.length === 0) return rowButton
+  const actions = useItemMenuActions({
+    pinned,
+    menuActions,
+    onRename: onRename ? startEdit : undefined,
+    onTogglePin,
+    onDelete,
+  })
+
+  if (editing || actions.length === 0) return shell
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{rowButton}</ContextMenuTrigger>
+      <ContextMenuTrigger asChild>{shell}</ContextMenuTrigger>
       <ContextMenuContent className="w-40">
         {actions.map((action) => (
           <div key={action.id}>
@@ -312,148 +286,339 @@ function ItemRow({
   )
 }
 
-export type ChatSidebarItemProps = {
-  item: ChatSidebarItemData
-  active?: boolean
-  onSelect?: () => void
-  onRename?: (title: string) => void
-  onTogglePin?: () => void
-  onDelete?: () => void
-  menuActions?: SidebarItemMenuAction[]
-  draggable?: boolean
-  isBeingDragged?: boolean
-  showDivider?: boolean
-  showStatusDot?: boolean
-}
-
-export function ChatSidebarItem({
-  item,
-  active,
-  onSelect,
+function useItemMenuActions({
+  pinned,
+  menuActions,
   onRename,
   onTogglePin,
   onDelete,
-  menuActions,
-  draggable = false,
-  isBeingDragged = false,
-  showDivider,
-  showStatusDot,
-}: ChatSidebarItemProps) {
-  const [editing, setEditing] = useState(false)
-  const { attributes, listeners, setNodeRef } = useDraggable({
-    id: item.id,
-    disabled: !draggable || editing,
-  })
+}: {
+  pinned: boolean
+  menuActions?: SidebarItemMenuAction[]
+  onRename?: () => void
+  onTogglePin?: () => void
+  onDelete?: () => void
+}) {
+  return useMemo(() => {
+    const builtIn: SidebarItemMenuAction[] = []
+    if (onRename) {
+      builtIn.push({
+        id: "rename",
+        label: "Rename",
+        icon: <Pencil className="size-3.5" />,
+        onSelect: onRename,
+      })
+    }
+    if (onTogglePin) {
+      builtIn.push({
+        id: "pin",
+        label: pinned ? "Unpin" : "Pin",
+        icon: pinned ? (
+          <PinOff className="size-3.5" />
+        ) : (
+          <Pin className="size-3.5" />
+        ),
+        onSelect: onTogglePin,
+      })
+    }
+    if (onDelete) {
+      builtIn.push({
+        id: "delete",
+        label: "Delete",
+        icon: <Trash2 className="size-3.5" />,
+        onSelect: onDelete,
+        destructive: true,
+        separatorBefore: builtIn.length > 0 || !!menuActions?.length,
+      })
+    }
+    return [...(menuActions ?? []), ...builtIn]
+  }, [menuActions, onDelete, onRename, onTogglePin, pinned])
+}
+
+/* -------------------------------------------------------------------------------------------------
+ * Drag flavours
+ * -----------------------------------------------------------------------------------------------*/
+
+type FlavourProps = Omit<SidebarItemRowProps, "drag">
+
+function StaticSidebarItem(props: FlavourProps) {
+  return <SidebarItemRow {...props} />
+}
+
+function DraggableSidebarItem(props: FlavourProps) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } =
+    useDraggable({ id: props.item.id, disabled: props.editing })
 
   return (
-    <ItemRow
-      item={item}
-      active={active}
-      editing={editing}
-      setEditing={setEditing}
-      onSelect={onSelect}
-      onRename={onRename}
-      onTogglePin={onTogglePin}
-      onDelete={onDelete}
-      menuActions={menuActions}
-      dragAttrs={draggable ? attributes : undefined}
-      dragListeners={draggable ? listeners : undefined}
-      dragNodeRef={draggable ? setNodeRef : undefined}
-      isBeingDragged={isBeingDragged}
-      showDivider={showDivider}
-      showStatusDot={showStatusDot}
+    <SidebarItemRow
+      {...props}
+      drag={{
+        enabled: true,
+        setNodeRef,
+        setActivatorNodeRef,
+        attributes,
+        listeners,
+        dragging: isDragging,
+      }}
     />
   )
 }
 
-export function ChatSidebarItemList({
-  items,
-  activeId,
-  activeDragId,
+function SortableSidebarItem(props: FlavourProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.item.id, disabled: props.editing })
+
+  return (
+    <SidebarItemRow
+      {...props}
+      drag={{
+        enabled: true,
+        setNodeRef,
+        setActivatorNodeRef,
+        attributes,
+        listeners,
+        dragging: isDragging,
+        style: {
+          transform: CSS.Translate.toString(transform),
+          transition,
+        },
+      }}
+    />
+  )
+}
+
+/* -------------------------------------------------------------------------------------------------
+ * Item
+ * -----------------------------------------------------------------------------------------------*/
+
+export const ChatSidebarItem = memo(function ChatSidebarItem({
+  draggable = false,
+  sortable = false,
+  ...props
+}: ChatSidebarItemProps) {
+  const [editing, setEditing] = useState(false)
+  const shared = { ...props, editing, onEditingChange: setEditing }
+
+  if (!draggable && !sortable) return <StaticSidebarItem {...shared} />
+  if (sortable) return <SortableSidebarItem {...shared} />
+  return <DraggableSidebarItem {...shared} />
+})
+
+/* -------------------------------------------------------------------------------------------------
+ * List
+ * -----------------------------------------------------------------------------------------------*/
+
+/** Keeps a callback identity stable so memoized rows survive parent re-renders. */
+function useStableCallback<A extends unknown[], R>(
+  callback: ((...args: A) => R) | undefined
+) {
+  const ref = useRef(callback)
+  useEffect(() => {
+    ref.current = callback
+  })
+  return useCallback((...args: A) => ref.current?.(...args), [])
+}
+
+type ListRowProps = {
+  item: ChatSidebarItemData
+  active: boolean
+  draggable: boolean
+  sortable: boolean
+  showDivider: boolean
+  showStatusDot: boolean
+  itemClassName?: string
+  onSelect?: (id: string) => void
+  onRename?: (id: string, title: string) => void
+  onTogglePin?: (id: string, pinned: boolean) => void
+  onDelete?: (id: string) => void
+  getMenuActions?: (
+    item: ChatSidebarItemData
+  ) => SidebarItemMenuAction[] | undefined
+}
+
+const SidebarListRow = memo(function SidebarListRow({
+  item,
+  active,
+  draggable,
+  sortable,
+  showDivider,
+  showStatusDot,
+  itemClassName,
   onSelect,
   onRename,
   onTogglePin,
   onDelete,
   getMenuActions,
-  draggable = true,
-}: {
+}: ListRowProps) {
+  const id = item.id
+  const pinned = !!item.pinned
+
+  const handleSelect = useCallback(() => onSelect?.(id), [onSelect, id])
+  const handleRename = useCallback(
+    (title: string) => onRename?.(id, title),
+    [onRename, id]
+  )
+  const handleTogglePin = useCallback(
+    () => onTogglePin?.(id, !pinned),
+    [onTogglePin, id, pinned]
+  )
+  const handleDelete = useCallback(() => onDelete?.(id), [onDelete, id])
+  const menuActions = useMemo(
+    () => getMenuActions?.(item),
+    [getMenuActions, item]
+  )
+
+  return (
+    <ChatSidebarItem
+      item={item}
+      active={active}
+      draggable={draggable}
+      sortable={sortable}
+      showDivider={showDivider}
+      showStatusDot={showStatusDot}
+      className={itemClassName}
+      menuActions={menuActions}
+      onSelect={onSelect ? handleSelect : undefined}
+      onRename={onRename ? handleRename : undefined}
+      onTogglePin={onTogglePin ? handleTogglePin : undefined}
+      onDelete={onDelete ? handleDelete : undefined}
+    />
+  )
+})
+
+export type ChatSidebarItemListProps = {
   items: ChatSidebarItemData[]
   activeId?: string
-  activeDragId?: string | null
+  /**
+   * Identifies this list in reorder events. Defaults to a generated id — pass a
+   * readable one ("pinned", "recent") when you render more than one list.
+   */
+  listId?: string
+  /** Drag items onto drop zones. */
+  draggable?: boolean
+  /** Drag items onto each other to reorder (implies `draggable`). */
+  sortable?: boolean
+  showStatusDot?: boolean
+  /** Draw a separator between the pinned group and the rest. */
+  groupPinned?: boolean
+  className?: string
+  itemClassName?: string
+  emptyState?: ReactNode
   onSelect?: (id: string) => void
   onRename?: (id: string, title: string) => void
   onTogglePin?: (id: string, pinned: boolean) => void
   onDelete?: (id: string) => void
   getMenuActions?: (item: ChatSidebarItemData) => SidebarItemMenuAction[]
-  draggable?: boolean
-}) {
+}
+
+export function ChatSidebarItemList({
+  items,
+  activeId,
+  listId,
+  draggable = true,
+  sortable = false,
+  showStatusDot = true,
+  groupPinned = true,
+  className,
+  itemClassName,
+  emptyState,
+  onSelect,
+  onRename,
+  onTogglePin,
+  onDelete,
+  getMenuActions,
+}: ChatSidebarItemListProps) {
+  const generatedId = useId()
+  const resolvedListId = listId ?? generatedId
+  const ids = useMemo(() => items.map((item) => item.id), [items])
+
+  useSidebarDndList(resolvedListId, ids)
+
+  const stableSelect = useStableCallback(onSelect)
+  const stableRename = useStableCallback(onRename)
+  const stableTogglePin = useStableCallback(onTogglePin)
+  const stableDelete = useStableCallback(onDelete)
+  const stableMenuActions = useStableCallback(getMenuActions)
+
+  const rows = items.map((item, index) => (
+    <SidebarListRow
+      key={item.id}
+      item={item}
+      active={item.id === activeId}
+      draggable={draggable || sortable}
+      sortable={sortable}
+      showStatusDot={showStatusDot}
+      itemClassName={itemClassName}
+      showDivider={
+        groupPinned && index > 0 && !!items[index - 1].pinned && !item.pinned
+      }
+      onSelect={onSelect ? stableSelect : undefined}
+      onRename={onRename ? stableRename : undefined}
+      onTogglePin={onTogglePin ? stableTogglePin : undefined}
+      onDelete={onDelete ? stableDelete : undefined}
+      getMenuActions={getMenuActions ? stableMenuActions : undefined}
+    />
+  ))
+
   return (
-    <>
-      {items.map((item, i) => {
-        const showDivider =
-          i > 0 && !!items[i - 1].pinned && !item.pinned
-        return (
-          <ChatSidebarItem
-            key={item.id}
-            item={item}
-            active={item.id === activeId}
-            isBeingDragged={activeDragId === item.id}
-            showDivider={showDivider}
-            draggable={draggable}
-            onSelect={onSelect ? () => onSelect(item.id) : undefined}
-            onRename={
-              onRename ? (title) => onRename(item.id, title) : undefined
-            }
-            onTogglePin={
-              onTogglePin
-                ? () => onTogglePin(item.id, !item.pinned)
-                : undefined
-            }
-            onDelete={onDelete ? () => onDelete(item.id) : undefined}
-            menuActions={getMenuActions?.(item)}
-          />
-        )
-      })}
-    </>
+    <div
+      data-slot="sidebar-item-list"
+      data-list-id={resolvedListId}
+      className={cn("flex flex-col gap-px", className)}
+    >
+      {items.length === 0 ? (
+        emptyState
+      ) : sortable ? (
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {rows}
+        </SortableContext>
+      ) : (
+        rows
+      )}
+    </div>
   )
 }
+
+/* -------------------------------------------------------------------------------------------------
+ * Drag overlay ghost
+ * -----------------------------------------------------------------------------------------------*/
 
 export function ChatSidebarItemGhost({
   item,
   active,
+  className,
 }: {
   item: ChatSidebarItemData
   active?: boolean
+  className?: string
 }) {
-  const chrome = statusChrome(!!active, item.status)
   return (
     <div
-      className="flex items-center gap-1.5 truncate rounded-md py-1.5 pr-3 pl-2.5"
-      style={{
-        background: "var(--sidebar)",
-        color: "var(--foreground)",
-        border: "1px solid var(--primary)",
-        boxShadow: "0 8px 18px -8px rgba(0,0,0,.35)",
-        fontSize: 13.5,
-        width: 264,
-        cursor: "grabbing",
-      }}
-    >
-      {item.pinned && (
-        <Pin
-          className="h-3 w-3 flex-shrink-0"
-          style={{ color: "var(--primary)" }}
-        />
+      data-slot="sidebar-item-ghost"
+      className={cn(
+        "flex w-64 max-w-[80vw] cursor-grabbing items-center gap-2 rounded-md border border-primary/60",
+        "bg-popover px-2 py-1.5 text-[13px] text-popover-foreground shadow-lg",
+        className
       )}
-      {!item.pinned && !item.leading ? (
-        <span
-          className="h-2 w-2 flex-shrink-0 rounded-full"
-          style={chrome.dotStyle}
-          aria-hidden
-        />
+    >
+      {item.pinned ? (
+        <Pin className="size-3 shrink-0 text-primary" aria-hidden />
       ) : null}
-      {item.leading}
-      <span className="flex-1 truncate">{item.title || "Untitled"}</span>
+      {item.leading ? (
+        <span className="inline-flex shrink-0">{item.leading}</span>
+      ) : !item.pinned ? (
+        <SidebarItemStatusDot status={resolveStatus(active, item.status)} />
+      ) : null}
+      <span className="min-w-0 flex-1 truncate">
+        {item.title || "Untitled"}
+      </span>
     </div>
   )
 }

@@ -31,7 +31,7 @@
       "name": "theme-toggle",
       "type": "registry:ui",
       "title": "Theme Toggle",
-      "description": "Floating circular theme chip (light/dark).",
+      "description": "Circular light/dark toggle — floating by default, inline via `floating={false}`.",
       "dependencies": ["lucide-react", "next-themes"],
       "files": [
         {
@@ -44,7 +44,7 @@
       "name": "chat-navbar",
       "type": "registry:ui",
       "title": "Chat Navbar",
-      "description": "Thin top bar with title and action slots.",
+      "description": "Thin top bar with truncating title and left/right slots.",
       "files": [
         {
           "path": "components/ui/chat-navbar.tsx",
@@ -56,8 +56,8 @@
       "name": "chat-input",
       "type": "registry:ui",
       "title": "Chat Input",
-      "description": "Composer-style chat input with attachments, optional skills/slash menu, and send/stop.",
-      "dependencies": ["lucide-react"],
+      "description": "Composer with attachments, drag-and-drop, a skills/slash menu, and Enter-to-send.",
+      "dependencies": ["lucide-react", "class-variance-authority"],
       "files": [
         {
           "path": "components/ui/chat-input.tsx",
@@ -81,9 +81,9 @@
       "name": "mode-picker",
       "type": "registry:ui",
       "title": "Mode Picker",
-      "description": "Ask / Plan / Agent mode switch for a chat composer.",
+      "description": "Ask / Plan / Agent mode switch built on the shadcn dropdown menu.",
       "dependencies": ["lucide-react"],
-      "registryDependencies": ["miskibin/chat-components/use-click-outside"],
+      "registryDependencies": ["dropdown-menu"],
       "files": [
         {
           "path": "components/ui/mode-picker.tsx",
@@ -95,9 +95,9 @@
       "name": "model-picker",
       "type": "registry:ui",
       "title": "Model Picker",
-      "description": "Dropdown model selector with badge, description, and optional disabled options.",
+      "description": "Collision-aware model selector with badge, description, and disabled options.",
       "dependencies": ["lucide-react"],
-      "registryDependencies": ["miskibin/chat-components/use-click-outside"],
+      "registryDependencies": ["dropdown-menu"],
       "files": [
         {
           "path": "components/ui/model-picker.tsx",
@@ -139,7 +139,7 @@
       "name": "message-parts",
       "type": "registry:ui",
       "title": "Message Parts",
-      "description": "Atomic assistant parts: reasoning, tool calls, code blocks, and artifacts.",
+      "description": "Atomic assistant parts: reasoning, tool calls, highlighted code, and artifacts.",
       "dependencies": ["lucide-react", "shiki", "next-themes"],
       "registryDependencies": [
         "collapsible",
@@ -156,7 +156,7 @@
       "name": "message",
       "type": "registry:ui",
       "title": "Message",
-      "description": "User bubble and assistant message with reasoning, tools, code, and artifacts.",
+      "description": "Memoized user bubble and assistant message with reasoning, tools, code, and artifacts.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["miskibin/chat-components/message-parts"],
       "files": [
@@ -170,7 +170,7 @@
       "name": "message-list",
       "type": "registry:ui",
       "title": "Message List",
-      "description": "Scrollable message list with smart auto-scroll and generation status.",
+      "description": "Scrollable message list with smart auto-scroll, stable edit callbacks, and generation status.",
       "registryDependencies": [
         "miskibin/chat-components/message",
         "miskibin/chat-components/generation-status"
@@ -186,8 +186,13 @@
       "name": "sidebar-dnd",
       "type": "registry:ui",
       "title": "Sidebar DnD",
-      "description": "Drag-and-drop context for pinning and deleting sidebar items.",
-      "dependencies": ["@dnd-kit/core", "@dnd-kit/utilities"],
+      "description": "Declarative drag-and-drop context for sidebar items: generic drop zones (pin/trash presets) plus drag-to-reorder events.",
+      "dependencies": [
+        "@dnd-kit/core",
+        "@dnd-kit/utilities",
+        "@dnd-kit/sortable",
+        "lucide-react"
+      ],
       "files": [
         {
           "path": "components/ui/sidebar-dnd.tsx",
@@ -199,8 +204,8 @@
       "name": "sidebar-drop-zones",
       "type": "registry:ui",
       "title": "Sidebar Drop Zones",
-      "description": "Pin and trash edge drop zones for the chat sidebar.",
-      "dependencies": ["@dnd-kit/core"],
+      "description": "Edge and inline drop zones rendered from a zone definition, with tone variants and drag-over highlighting.",
+      "dependencies": ["@dnd-kit/core", "class-variance-authority"],
       "registryDependencies": ["miskibin/chat-components/sidebar-dnd"],
       "files": [
         {
@@ -213,9 +218,18 @@
       "name": "sidebar-item",
       "type": "registry:ui",
       "title": "Sidebar Item",
-      "description": "Session row with rename, pin, delete, status dots, context menu, and drag.",
-      "dependencies": ["lucide-react", "@dnd-kit/core"],
-      "registryDependencies": ["context-menu"],
+      "description": "Memoized session row plus sortable list: rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
+      "dependencies": [
+        "lucide-react",
+        "@dnd-kit/core",
+        "@dnd-kit/sortable",
+        "@dnd-kit/utilities",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "context-menu",
+        "miskibin/chat-components/sidebar-dnd"
+      ],
       "files": [
         {
           "path": "components/ui/sidebar-item.tsx",
@@ -227,7 +241,7 @@
       "name": "chat-sidebar",
       "type": "registry:ui",
       "title": "Chat Sidebar",
-      "description": "Collapsible sidebar chrome with DnD pin/trash zones and slot-based composition.",
+      "description": "Collapsible sidebar chrome with slot-based composition and generic drag-and-drop zones (pin, trash, custom).",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/sidebar-item",
@@ -245,7 +259,7 @@
       "name": "chat",
       "type": "registry:block",
       "title": "Chat",
-      "description": "Full chat UI kit composed from atomic components. Starter layout is message list + input.",
+      "description": "Responsive chat block composed from the atomic components: message list + composer.",
       "registryDependencies": [
         "miskibin/chat-components/chat-input",
         "miskibin/chat-components/prompt-suggestions",
