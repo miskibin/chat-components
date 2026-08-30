@@ -1,5 +1,6 @@
-﻿"use client"
+"use client"
 
+import { arrayMove } from "@dnd-kit/sortable"
 import { Copy, PanelLeft, Pencil, RefreshCw, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState, type ReactNode } from "react"
@@ -37,6 +38,15 @@ import { streamCursorChat } from "@/lib/cursor-stream"
 import { cn } from "@/lib/utils"
 
 const DESKTOP_QUERY = "(min-width: 768px)"
+
+/** Pinning floats a chat to the top; drag-to-reorder owns the order after that. */
+function pinToTop(sessions: ChatSession[], id: string) {
+  const index = sessions.findIndex((s) => s.id === id)
+  if (index < 0) return sessions
+  const next = [...sessions]
+  const [item] = next.splice(index, 1)
+  return [{ ...item, pinned: true }, ...next]
+}
 
 /** Wall clock read, hoisted out of the component so render stays pure. */
 function nowMs() {
@@ -391,11 +401,6 @@ export default function ChatExample() {
     return () => window.removeEventListener("keydown", onKey)
   }, [drawerOpen])
 
-  const orderedSessions = [
-    ...sessions.filter((s) => s.pinned),
-    ...sessions.filter((s) => !s.pinned),
-  ]
-
   return (
     <div className="relative flex h-full min-h-0 overflow-hidden bg-background">
       {/* Mobile: the sidebar slides over the conversation instead of squeezing it. */}
@@ -413,110 +418,110 @@ export default function ChatExample() {
           !drawerOpen && "max-md:-translate-x-full"
         )}
       >
-      <ChatSidebarDnd
-        onDrop={(drop) => {
-          if (drop.action === "pin") {
-            setSessions((prev) =>
-              prev.map((s) =>
-                s.id === drop.itemId ? { ...s, pinned: true } : s
-              )
-            )
-          } else if (drop.action === "delete") {
-            stopGeneration()
-            setSessions((prev) => {
-              const next = prev.filter((s) => s.id !== drop.itemId)
-              if (activeId === drop.itemId) {
-                setActiveId(next[0]?.id ?? "")
-                setMessages(next[0]?.messages ?? [])
-              }
-              return next
-            })
-            toast.message("Chat deleted")
-          }
-        }}
-        renderOverlay={(id) => {
-          const item = sessions.find((s) => s.id === id)
-          if (!item) return null
-          return (
-            <ChatSidebarItemGhost
-              item={item}
-              active={item.id === activeId}
-            />
-          )
-        }}
-      >
-        <ChatSidebar
-          collapsed={isDesktop ? collapsed : false}
-          onCollapsedChange={(next) =>
-            isDesktop ? setCollapsed(next) : setMobileNavOpen(false)
-          }
-          edgeZones
-          brand={
-            <span className="truncate px-1 text-[15px] font-semibold tracking-tight text-foreground">
-              Chat
-            </span>
-          }
-          nav={
-            <>
-              <SideRow
-                icon={<Pencil className="h-4 w-4" />}
-                onClick={handleNewChat}
-              >
-                New chat
-              </SideRow>
-              <SideRow
-                icon={<Search className="h-4 w-4" />}
-                hint="⌘K"
-                onClick={() => toast.message("Wire search to your app")}
-              >
-                Search
-              </SideRow>
-            </>
-          }
-          rail={
-            <>
-              <SideIconBtn label="New chat" onClick={handleNewChat}>
-                <Pencil className="h-4 w-4" />
-              </SideIconBtn>
-              <SideIconBtn
-                label="Search"
-                onClick={() => toast.message("Wire search to your app")}
-              >
-                <Search className="h-4 w-4" />
-              </SideIconBtn>
-            </>
-          }
-        >
-          <SidebarSessionSection
-            open={chatsOpen}
-            onToggle={() => setChatsOpen((v) => !v)}
-            sessions={orderedSessions}
-            activeId={activeId}
-            onSelect={selectSession}
-            onRename={(id, title) =>
-              setSessions((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, title } : s))
-              )
-            }
-            onTogglePin={(id, pinned) =>
-              setSessions((prev) =>
-                prev.map((s) => (s.id === id ? { ...s, pinned } : s))
-              )
-            }
-            onDelete={(id) => {
-              if (id === activeId) stopGeneration()
+        <ChatSidebarDnd
+          onDrop={(drop) => {
+            if (drop.kind === "reorder") {
+              setSessions((prev) => arrayMove(prev, drop.from, drop.to))
+            } else if (drop.action === "pin") {
+              setSessions((prev) => pinToTop(prev, drop.itemId))
+            } else if (drop.action === "delete") {
+              stopGeneration()
               setSessions((prev) => {
-                const next = prev.filter((s) => s.id !== id)
-                if (activeId === id) {
+                const next = prev.filter((s) => s.id !== drop.itemId)
+                if (activeId === drop.itemId) {
                   setActiveId(next[0]?.id ?? "")
                   setMessages(next[0]?.messages ?? [])
                 }
                 return next
               })
-            }}
-          />
-        </ChatSidebar>
-      </ChatSidebarDnd>
+              toast.message("Chat deleted")
+            }
+          }}
+          renderOverlay={(id) => {
+            const item = sessions.find((s) => s.id === id)
+            if (!item) return null
+            return (
+              <ChatSidebarItemGhost
+                item={item}
+                active={item.id === activeId}
+              />
+            )
+          }}
+        >
+          <ChatSidebar
+            collapsed={isDesktop ? collapsed : false}
+            onCollapsedChange={(next) =>
+              isDesktop ? setCollapsed(next) : setMobileNavOpen(false)
+            }
+            edgeZones
+            brand={
+              <span className="truncate px-1 text-[15px] font-semibold tracking-tight text-foreground">
+                Chat
+              </span>
+            }
+            nav={
+              <>
+                <SideRow
+                  icon={<Pencil className="size-4" />}
+                  onClick={handleNewChat}
+                >
+                  New chat
+                </SideRow>
+                <SideRow
+                  icon={<Search className="size-4" />}
+                  hint="⌘K"
+                  onClick={() => toast.message("Wire search to your app")}
+                >
+                  Search
+                </SideRow>
+              </>
+            }
+            rail={
+              <>
+                <SideIconBtn label="New chat" onClick={handleNewChat}>
+                  <Pencil className="size-4" />
+                </SideIconBtn>
+                <SideIconBtn
+                  label="Search"
+                  onClick={() => toast.message("Wire search to your app")}
+                >
+                  <Search className="size-4" />
+                </SideIconBtn>
+              </>
+            }
+          >
+            <SidebarSessionSection
+              open={chatsOpen}
+              onToggle={() => setChatsOpen((v) => !v)}
+              sessions={sessions}
+              activeId={activeId}
+              onSelect={selectSession}
+              onRename={(id, title) =>
+                setSessions((prev) =>
+                  prev.map((s) => (s.id === id ? { ...s, title } : s))
+                )
+              }
+              onTogglePin={(id, pinned) =>
+                setSessions((prev) =>
+                  pinned
+                    ? pinToTop(prev, id)
+                    : prev.map((s) => (s.id === id ? { ...s, pinned } : s))
+                )
+              }
+              onDelete={(id) => {
+                if (id === activeId) stopGeneration()
+                setSessions((prev) => {
+                  const next = prev.filter((s) => s.id !== id)
+                  if (activeId === id) {
+                    setActiveId(next[0]?.id ?? "")
+                    setMessages(next[0]?.messages ?? [])
+                  }
+                  return next
+                })
+              }}
+            />
+          </ChatSidebar>
+        </ChatSidebarDnd>
       </div>
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -588,7 +593,7 @@ export default function ChatExample() {
                     toast.success("Copied")
                   }}
                 >
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy />
                 </ActionBtn>
                 <ActionBtn
                   title="Regenerate"
@@ -617,7 +622,7 @@ export default function ChatExample() {
                     )
                   }}
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
+                  <RefreshCw />
                 </ActionBtn>
                 <ActionBtn
                   title="Delete"
@@ -630,7 +635,7 @@ export default function ChatExample() {
                     setMessages(next)
                   }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 />
                 </ActionBtn>
               </div>
             )
@@ -689,7 +694,7 @@ function SidebarSessionSection({
         items={sessions}
         activeId={activeId}
         listId="recent"
-        draggable
+        sortable
         emptyState={
           <SidebarEmptyState>New chats appear here.</SidebarEmptyState>
         }

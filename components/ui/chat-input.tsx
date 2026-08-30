@@ -247,8 +247,7 @@ export function ChatInput({
           data-drag-over={dragOver || undefined}
           className={cn(
             "rounded-3xl border bg-background px-3 pt-2.5 pb-2 shadow-xs transition-colors has-[textarea:focus]:border-ring has-[textarea:focus]:ring-[3px] has-[textarea:focus]:ring-ring/50 sm:px-3.5",
-            dragOver && "border-primary ring-[3px] ring-primary/20",
-            busy && "opacity-95"
+            dragOver && "border-primary ring-[3px] ring-primary/20"
           )}
           onDragOver={(e) => {
             e.preventDefault()
