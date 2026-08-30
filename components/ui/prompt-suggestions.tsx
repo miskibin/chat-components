@@ -1,46 +1,52 @@
 "use client"
 
-import type { ReactNode } from "react"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
 export type PromptSuggestion = {
   id?: string
   label: string
-  icon?: ReactNode
+  icon?: React.ReactNode
 }
 
-export type PromptSuggestionsProps = {
+export type PromptSuggestionsProps = Omit<
+  React.ComponentProps<"ul">,
+  "onSelect"
+> & {
   items: PromptSuggestion[]
   onSelect?: (item: PromptSuggestion) => void
-  className?: string
 }
 
 export function PromptSuggestions({
   items,
   onSelect,
   className,
+  ...props
 }: PromptSuggestionsProps) {
   if (items.length === 0) return null
 
   return (
     <ul
-      className={cn("mx-auto w-full max-w-4xl px-8 pt-3", className)}
+      data-slot="prompt-suggestions"
       role="list"
+      className={cn("mx-auto w-full max-w-4xl px-4 pt-2 sm:px-8", className)}
+      {...props}
     >
       {items.map((item, index) => (
         <li key={item.id ?? `${item.label}-${index}`}>
           <button
             type="button"
+            data-slot="prompt-suggestion"
             onClick={() => onSelect?.(item)}
-            className="group flex w-full items-start gap-2.5 py-2 text-left text-sm leading-snug text-muted-foreground transition-colors hover:text-foreground"
+            className="group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-[13.5px] leading-snug text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             {item.icon ? (
-              <span className="mt-0.5 grid size-4 shrink-0 place-items-center text-muted-foreground/80 group-hover:text-foreground [&_svg]:size-4">
+              <span className="mt-px grid size-4 shrink-0 place-items-center text-muted-foreground/80 transition-colors group-hover:text-foreground">
                 {item.icon}
               </span>
             ) : null}
-            <span>{item.label}</span>
+            <span className="min-w-0">{item.label}</span>
           </button>
         </li>
       ))}

@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { Copy, Pencil, RefreshCw, Search, Trash2 } from "lucide-react"
+import { Copy, PanelLeft, Pencil, RefreshCw, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
@@ -9,6 +9,7 @@ import {
   ChatInput,
   type ChatInputPayload,
 } from "@/components/ui/chat-input"
+import { ChatNavbar } from "@/components/ui/chat-navbar"
 import {
   ChatSidebar,
   ChatSidebarDnd,
@@ -34,6 +35,24 @@ import {
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
 import { streamCursorChat } from "@/lib/cursor-stream"
+import { cn } from "@/lib/utils"
+
+const DESKTOP_QUERY = "(min-width: 768px)"
+
+/** Desktop-first so SSR and the first paint agree on the wide layout. */
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(true)
+
+  useEffect(() => {
+    const mql = window.matchMedia(DESKTOP_QUERY)
+    const sync = () => setIsDesktop(mql.matches)
+    sync()
+    mql.addEventListener("change", sync)
+    return () => mql.removeEventListener("change", sync)
+  }, [])
+
+  return isDesktop
+}
 
 type MessageData = ChatMessageData & {
   metadata?: {
@@ -75,7 +94,9 @@ const FALLBACK_MODELS: ModelOption[] = [
 ]
 
 export default function ChatExample() {
+  const isDesktop = useIsDesktop()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [sessions, setSessions] = useState<ChatSession[]>([
     { id: "1", title: "Welcome chat", pinned: true },
@@ -136,6 +157,7 @@ export default function ChatExample() {
 
   const handleNewChat = () => {
     stopGeneration()
+    setMobileNavOpen(false)
     const id = String(Date.now())
     setSessions((prev) => [
       { id, title: "New chat", pinned: false, messages: [] },
@@ -147,6 +169,7 @@ export default function ChatExample() {
 
   const selectSession = (id: string) => {
     stopGeneration()
+    setMobileNavOpen(false)
     const session = sessions.find((s) => s.id === id)
     setActiveId(id)
     setMessages(session?.messages ?? [])
@@ -329,7 +352,7 @@ export default function ChatExample() {
     if (messages.length === 0 && payload.text.trim()) {
       const title =
         payload.text.trim().slice(0, 42) +
-        (payload.text.trim().length > 42 ? "ΓÇª" : "")
+        (payload.text.trim().length > 42 ? "…" : "")
       persistSession(sessionId, (session) => ({ ...session, title }))
     }
 
@@ -350,13 +373,45 @@ export default function ChatExample() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  // The drawer only exists on narrow viewports.
+  useEffect(() => {
+    if (isDesktop) setMobileNavOpen(false)
+  }, [isDesktop])
+
+  // Escape closes the drawer.
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [mobileNavOpen])
+
   const orderedSessions = [
     ...sessions.filter((s) => s.pinned),
     ...sessions.filter((s) => !s.pinned),
   ]
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden bg-background">
+    <div className="relative flex h-full min-h-0 overflow-hidden bg-background">
+      {/* Mobile: the sidebar slides over the conversation instead of squeezing it. */}
+      <div
+        aria-hidden={!mobileNavOpen}
+        onClick={() => setMobileNavOpen(false)}
+        className={cn(
+          "absolute inset-0 z-40 bg-foreground/20 backdrop-blur-[1px] transition-opacity duration-200 md:hidden",
+          mobileNavOpen
+            ? "opacity-100"
+            : "pointer-events-none opacity-0"
+        )}
+      />
+      <div
+        className={cn(
+          "z-50 h-full shrink-0 max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:shadow-xl max-md:transition-transform max-md:duration-200 md:relative",
+          !mobileNavOpen && "max-md:-translate-x-full"
+        )}
+      >
       <ChatSidebarDnd
         onDrop={(drop) => {
           if (drop.action === "pin") {
@@ -390,17 +445,13 @@ export default function ChatExample() {
         }}
       >
         <ChatSidebar
-          collapsed={collapsed}
-          onCollapsedChange={setCollapsed}
+          collapsed={isDesktop ? collapsed : false}
+          onCollapsedChange={(next) =>
+            isDesktop ? setCollapsed(next) : setMobileNavOpen(false)
+          }
           edgeZones
           brand={
-            <span
-              className="truncate px-1 text-[15px] font-semibold tracking-tight"
-              style={{
-                color: "var(--ink)",
-                fontFamily: "var(--lc-body-font)",
-              }}
-            >
+            <span className="truncate px-1 text-[15px] font-semibold tracking-tight text-foreground">
               Chat
             </span>
           }
@@ -414,7 +465,7 @@ export default function ChatExample() {
               </SideRow>
               <SideRow
                 icon={<Search className="h-4 w-4" />}
-                hint="ΓîÿK"
+                hint="⌘K"
                 onClick={() => toast.message("Wire search to your app")}
               >
                 Search
@@ -465,15 +516,33 @@ export default function ChatExample() {
           />
         </ChatSidebar>
       </ChatSidebarDnd>
+      </div>
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ThemeToggle />
-        <Link
-          href="/"
-          className="fixed top-3 right-14 z-50 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Docs
-        </Link>
+        <ChatNavbar
+          title={activeTitle}
+          left={
+            <button
+              type="button"
+              aria-label="Open chats"
+              onClick={() => setMobileNavOpen(true)}
+              className="-ml-1 inline-grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 md:hidden [&_svg]:size-4"
+            >
+              <PanelLeft />
+            </button>
+          }
+          right={
+            <>
+              <Link
+                href="/"
+                className="rounded-md px-2 py-1 text-[13px] text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                Docs
+              </Link>
+              <ThemeToggle floating={false} />
+            </>
+          }
+        />
 
         <MessageList
           messages={messages}
@@ -492,28 +561,25 @@ export default function ChatExample() {
             })
           }
           emptyState={
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-              <p
-                className="text-lg font-medium text-foreground"
-                style={{ fontFamily: "var(--lc-body-font)" }}
-              >
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center text-muted-foreground">
+              <p className="text-balance text-lg font-medium text-foreground">
                 {activeTitle === "Welcome chat" || !activeTitle
                   ? "Talk to Cursor Agent"
                   : activeTitle}
               </p>
-              <p className="max-w-sm text-sm">
+              <p className="max-w-sm text-balance text-[13.5px]">
                 Real LLM + tool calls via the local{" "}
-                <code className="rounded-sm bg-muted px-1.5 py-0.5 text-xs">
+                <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
                   agent
                 </code>{" "}
-                CLI. Try ΓÇ£what files are in this repo?ΓÇ¥
+                CLI. Try “what files are in this repo?”
               </p>
             </div>
           }
           renderActions={(message) => {
             if (message.sender !== "assistant") return null
             return (
-              <div className="-mt-2 mb-4 flex gap-1 opacity-60 hover:opacity-100">
+              <div className="-mt-2 mb-4 flex gap-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
                 <ActionBtn
                   title="Copy"
                   onClick={() => {
@@ -574,7 +640,7 @@ export default function ChatExample() {
           onSend={handleSend}
           onStop={handleStop}
           isGenerating={isGenerating}
-          placeholder="Ask Cursor Agent ΓÇö try listing files in this repo"
+          placeholder="Ask Cursor Agent — try listing files in this repo"
           skills={DEMO_SKILLS}
           slashCommands={DEMO_COMMANDS}
           tools={
@@ -582,7 +648,8 @@ export default function ChatExample() {
               value={selectedModel}
               onChange={setSelectedModel}
               options={modelOptions}
-              align="up"
+              side="top"
+              className="min-w-0"
             />
           }
         />
@@ -702,8 +769,9 @@ function ActionBtn({
     <button
       type="button"
       title={title}
+      aria-label={title}
       onClick={onClick}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+      className="inline-grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:size-3.5"
     >
       {children}
     </button>

@@ -1,14 +1,12 @@
-"use client"
-
-import type { ReactNode } from "react"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-export type ChatNavbarProps = {
-  title?: ReactNode
-  left?: ReactNode
-  right?: ReactNode
-  className?: string
+export type ChatNavbarProps = React.ComponentProps<"header"> & {
+  /** String titles are truncated automatically; nodes are rendered as-is. */
+  title?: React.ReactNode
+  left?: React.ReactNode
+  right?: React.ReactNode
 }
 
 export function ChatNavbar({
@@ -16,27 +14,41 @@ export function ChatNavbar({
   left,
   right,
   className,
+  children,
+  ...props
 }: ChatNavbarProps) {
   return (
-    <div
+    <header
+      data-slot="chat-navbar"
       className={cn(
-        "flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4",
+        "flex h-12 w-full shrink-0 items-center justify-between gap-2 border-b bg-background px-3 sm:gap-3 sm:px-4",
         className
       )}
+      {...props}
     >
-      <div className="flex min-w-0 items-center gap-2">
+      <div
+        data-slot="chat-navbar-left"
+        className="flex min-w-0 flex-1 items-center gap-2"
+      >
         {left}
-        {title ? (
-          typeof title === "string" ? (
-            <h1 className="truncate text-[14px] font-medium text-foreground">
-              {title}
-            </h1>
-          ) : (
-            title
-          )
-        ) : null}
+        {typeof title === "string" ? (
+          <h1
+            data-slot="chat-navbar-title"
+            className="truncate text-[13.5px] font-medium text-foreground"
+          >
+            {title}
+          </h1>
+        ) : (
+          title
+        )}
+        {children}
       </div>
-      <div className="flex shrink-0 items-center gap-1">{right}</div>
-    </div>
+      <div
+        data-slot="chat-navbar-right"
+        className="flex shrink-0 items-center gap-1"
+      >
+        {right}
+      </div>
+    </header>
   )
 }

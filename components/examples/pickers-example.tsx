@@ -31,13 +31,13 @@ export function PickersExample() {
   const [mode, setMode] = useState<ChatMode>("agent")
 
   return (
-    <div className="flex min-h-[400px] items-center justify-center gap-2">
-      <ModePicker value={mode} onChange={setMode} align="down" />
+    <div className="flex min-h-[400px] flex-wrap items-center justify-center gap-2 px-4">
+      <ModePicker value={mode} onChange={setMode} side="bottom" />
       <ModelPicker
         value={model}
         onChange={setModel}
         options={MODELS}
-        align="down"
+        side="bottom"
       />
     </div>
   )

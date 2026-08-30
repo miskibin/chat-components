@@ -30,7 +30,7 @@ export function greet(name: string) {
 export function MessageExample() {
   return (
     <MessageList
-      className="h-[400px] rounded-md"
+      className="h-[400px] rounded-md border"
       messages={messages}
     />
   )

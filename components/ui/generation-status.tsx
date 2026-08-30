@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -9,21 +9,28 @@ const FRAME_MS = 80
 
 export type GenerationStage = "thinking" | "searching" | "responding" | "idle"
 
-export type GenerationStatusProps = {
+export type GenerationStatusProps = React.ComponentProps<"span"> & {
   /** When true, shows the spinner. Prefer this over stage for simple UIs. */
   active?: boolean
   /** Optional legacy stage. Non-idle stages show the spinner. */
   stage?: GenerationStage
   /** Optional label next to the spinner. */
   label?: string
-  className?: string
+  /** Spinner font size in px. */
   size?: number
 }
 
-function BrailleSpinner({ size = 16 }: { size?: number }) {
-  const [frame, setFrame] = useState(0)
+const STAGE_LABELS: Record<GenerationStage, string | undefined> = {
+  thinking: "Thinking",
+  searching: "Searching",
+  responding: "Responding",
+  idle: undefined,
+}
 
-  useEffect(() => {
+function BrailleSpinner({ size = 16 }: { size?: number }) {
+  const [frame, setFrame] = React.useState(0)
+
+  React.useEffect(() => {
     const id = window.setInterval(() => {
       setFrame((f) => (f + 1) % FRAMES.length)
     }, FRAME_MS)
@@ -32,10 +39,11 @@ function BrailleSpinner({ size = 16 }: { size?: number }) {
 
   return (
     <span
+      data-slot="generation-status-spinner"
       aria-label="Loading"
       role="status"
-      className="font-mono text-muted-foreground"
-      style={{ fontSize: size, lineHeight: 1 }}
+      className="font-mono leading-none text-muted-foreground"
+      style={{ fontSize: size }}
     >
       {FRAMES[frame]}
     </span>
@@ -48,27 +56,27 @@ export function GenerationStatus({
   label,
   className,
   size = 16,
+  ...props
 }: GenerationStatusProps) {
   const show = active ?? stage !== "idle"
   if (!show) return null
 
-  const defaultLabel =
-    stage === "searching"
-      ? "Searching"
-      : stage === "responding"
-        ? "Responding"
-        : stage === "thinking"
-          ? "Thinking"
-          : undefined
+  const text = label ?? STAGE_LABELS[stage]
 
   return (
     <span
+      data-slot="generation-status"
+      data-stage={stage}
       aria-live="polite"
       aria-busy="true"
-      className={cn("inline-flex items-center gap-2 text-sm text-muted-foreground", className)}
+      className={cn(
+        "inline-flex items-center gap-2 text-[13px] text-muted-foreground",
+        className
+      )}
+      {...props}
     >
       <BrailleSpinner size={size} />
-      {(label ?? defaultLabel) && <span>{label ?? defaultLabel}</span>}
+      {text ? <span className="truncate">{text}</span> : null}
     </span>
   )
 }

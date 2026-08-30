@@ -206,6 +206,11 @@
     min-height: 100%;
   }
 
+  html {
+    /* Keep mobile Safari from inflating the 13px UI scale in landscape. */
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--lc-body-font);

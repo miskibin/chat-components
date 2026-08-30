@@ -5,9 +5,9 @@ import { toast } from "sonner"
 
 export function ChatInputExample() {
   return (
-    <div className="flex min-h-[400px] items-end">
+    <div className="flex min-h-[400px] items-end px-4 pb-4">
       <ChatInput
-        className="w-full px-0 pb-0"
+        className="w-full px-0 pt-0 pb-0 sm:px-0 sm:pb-0"
         placeholder="Ask anything"
         skills={[
           { name: "summarize", description: "Condense long text" },

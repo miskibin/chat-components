@@ -2,12 +2,11 @@
 
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-export type ThemeToggleProps = {
-  className?: string
+export type ThemeToggleProps = React.ComponentProps<"button"> & {
   /** Fixed floating chip (default) or inline. */
   floating?: boolean
 }
@@ -15,24 +14,33 @@ export type ThemeToggleProps = {
 export function ThemeToggle({
   className,
   floating = true,
+  onClick,
+  ...props
 }: ThemeToggleProps) {
   const { resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
   const isDark = mounted && resolvedTheme === "dark"
 
   return (
     <button
       type="button"
+      data-slot="theme-toggle"
       aria-label="Toggle theme"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      title={isDark ? "Switch to light" : "Switch to dark"}
+      onClick={(event) => {
+        onClick?.(event)
+        if (event.defaultPrevented) return
+        setTheme(isDark ? "light" : "dark")
+      }}
       className={cn(
-        "grid h-9 w-9 place-items-center rounded-full border border-border bg-muted text-muted-foreground transition hover:opacity-80",
+        "inline-grid size-8 shrink-0 place-items-center rounded-full border bg-background text-muted-foreground shadow-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
         floating && "fixed top-3 right-3 z-50",
         className
       )}
+      {...props}
     >
-      {mounted ? isDark ? <Sun size={16} /> : <Moon size={16} /> : null}
+      {mounted ? isDark ? <Sun /> : <Moon /> : null}
     </button>
   )
 }
