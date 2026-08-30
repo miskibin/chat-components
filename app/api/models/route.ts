@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { listCursorModels } from "@/lib/cursor-agent"
+import { shouldUseMockAgent } from "@/lib/agent-runtime"
+import { MOCK_MODELS } from "@/lib/mock-agent"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,11 +22,19 @@ let cache: { at: number; models: { id: string; name: string; badge?: string }[] 
 const CACHE_MS = 5 * 60 * 1000
 
 export async function GET() {
+  // No CLI to ask (Vercel, a fresh clone, or MOCK_CURSOR_AGENT=1): serve the
+  // static list so the ModelPicker still renders, and tell the demo it is
+  // talking to the scripted agent.
+  if (shouldUseMockAgent()) {
+    return NextResponse.json({ models: MOCK_MODELS, mock: true })
+  }
+
   try {
     if (cache && Date.now() - cache.at < CACHE_MS) {
       return NextResponse.json({ models: cache.models })
     }
 
+    const { listCursorModels } = await import("@/lib/cursor-agent")
     const listed = await listCursorModels()
     const byId = new Map(listed.map((m) => [m.id, m]))
     const headline = HEADLINE_IDS.filter((id) => byId.has(id)).map((id) => {

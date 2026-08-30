@@ -122,6 +122,8 @@ export default function ChatExample() {
     useState<GenerationStage>("idle")
   const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODELS)
   const [selectedModel, setSelectedModel] = useState("composer-2.5")
+  // Set by /api/models when no local `agent` binary is available.
+  const [isMock, setIsMock] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const activeIdRef = useRef(activeId)
 
@@ -138,8 +140,9 @@ export default function ChatExample() {
     let cancelled = false
     fetch("/api/models")
       .then((res) => res.json())
-      .then((data: { models?: ModelOption[]; error?: string }) => {
+      .then((data: { models?: ModelOption[]; error?: string; mock?: boolean }) => {
         if (cancelled || !data.models?.length) return
+        setIsMock(Boolean(data.mock))
         setModelOptions(data.models)
         setSelectedModel((current) =>
           data.models!.some((m) => m.id === current)
@@ -570,15 +573,30 @@ export default function ChatExample() {
             <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center text-muted-foreground">
               <p className="text-balance text-lg font-medium text-foreground">
                 {activeTitle === "Welcome chat" || !activeTitle
-                  ? "Talk to Cursor Agent"
+                  ? isMock
+                    ? "Talk to the simulated agent"
+                    : "Talk to Cursor Agent"
                   : activeTitle}
               </p>
               <p className="max-w-sm text-balance text-[13.5px]">
-                Real LLM + tool calls via the local{" "}
-                <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
-                  agent
-                </code>{" "}
-                CLI. Try “what files are in this repo?”
+                {isMock ? (
+                  <>
+                    No local{" "}
+                    <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
+                      agent
+                    </code>{" "}
+                    CLI here, so replies are a scripted run — reasoning, tool
+                    calls and streamed markdown. Try “how does streaming work?”
+                  </>
+                ) : (
+                  <>
+                    Real LLM + tool calls via the local{" "}
+                    <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
+                      agent
+                    </code>{" "}
+                    CLI. Try “what files are in this repo?”
+                  </>
+                )}
               </p>
             </div>
           }
@@ -646,7 +664,11 @@ export default function ChatExample() {
           onSend={handleSend}
           onStop={handleStop}
           isGenerating={isGenerating}
-          placeholder="Ask Cursor Agent — try listing files in this repo"
+          placeholder={
+            isMock
+              ? "Ask the simulated agent — try “how does streaming work?”"
+              : "Ask Cursor Agent — try listing files in this repo"
+          }
           skills={DEMO_SKILLS}
           slashCommands={DEMO_COMMANDS}
           tools={

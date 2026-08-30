@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { runCursorAgent, type AgentStreamEvent } from "@/lib/cursor-agent"
+import { shouldUseMockAgent } from "@/lib/agent-runtime"
+import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
+import { runMockAgent } from "@/lib/mock-agent"
 
 export const runtime = "nodejs"
 // Vercel hobby plan caps serverless maxDuration at 60s
@@ -35,11 +37,10 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
       }
       try {
-        for await (const event of runCursorAgent({
+        for await (const event of agentStream({
           prompt,
           model,
           sessionId: body.sessionId,
-          workspace: process.cwd(),
           signal: req.signal,
         })) {
           send(event)
@@ -63,4 +64,23 @@ export async function POST(req: Request) {
       Connection: "keep-alive",
     },
   })
+}
+
+/**
+ * Real CLI when one is installed, scripted agent otherwise. `lib/cursor-agent`
+ * is imported lazily so the mock path never pulls in `child_process`.
+ */
+async function* agentStream(options: {
+  prompt: string
+  model: string
+  sessionId?: string
+  signal: AbortSignal
+}): AsyncGenerator<AgentStreamEvent> {
+  if (shouldUseMockAgent()) {
+    yield* runMockAgent(options)
+    return
+  }
+
+  const { runCursorAgent } = await import("@/lib/cursor-agent")
+  yield* runCursorAgent({ ...options, workspace: process.cwd() })
 }
