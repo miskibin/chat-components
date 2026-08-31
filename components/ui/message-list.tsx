@@ -131,12 +131,12 @@ export function MessageList({
                 (isGenerating || generationStage !== "idle") &&
                 index === lastIndex &&
                 message.sender === "assistant"
-              const pendingAsk =
+              const pendingAsk = Boolean(
                 message.tools?.some(isPendingAskTool) ||
-                message.parts?.some(
-                  (part) =>
-                    part.type === "tool" && isPendingAskTool(part.tool)
-                )
+                  message.parts?.some(
+                    (part) => part.type === "tool" && isPendingAskTool(part.tool)
+                  )
+              )
               const waiting =
                 isStreaming &&
                 !message.reasoning &&
@@ -166,8 +166,11 @@ export function MessageList({
                         ? (content) => onEditMessage(message.id, content)
                         : undefined
                     }
+                    /* Only the row that is actually asking takes a callback,
+                       so every other memoized Message keeps its render while
+                       the turn streams. */
                     onAskAnswer={
-                      onAskAnswer
+                      pendingAsk && onAskAnswer
                         ? (toolId, result) =>
                             onAskAnswer(message.id, toolId, result)
                         : undefined
