@@ -577,14 +577,19 @@ function askFollowUpScenario(topic: string): MockStep[] {
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 
+export function isAskDemoPrompt(prompt: string) {
+  const trimmed = prompt.trim()
+  if (/^askquestion result:/i.test(trimmed)) return true
+  return /\bask\s+tool\b|askquestion|questions panel/i.test(trimmed)
+}
+
 function pickScenario(prompt: string): Scenario {
+  if (isAskDemoPrompt(prompt)) {
+    return /^askquestion result:/i.test(prompt.trim())
+      ? askFollowUpScenario
+      : askScenario
+  }
   const lower = prompt.toLowerCase()
-  if (/^askquestion result:/i.test(prompt.trim())) {
-    return askFollowUpScenario
-  }
-  if (/\bask(\s+tool)?\b|askquestion|questions panel/i.test(lower)) {
-    return askScenario
-  }
   if (/(theme|color|token|dark mode|css|style|registry)/.test(lower)) {
     return themingScenario
   }

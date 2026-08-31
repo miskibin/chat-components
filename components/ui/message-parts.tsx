@@ -869,6 +869,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
         ? `${readFile.content.split("\n").length} lines`
         : null
   const shortOutput =
+    !ask &&
     !stats &&
     !readMeta &&
     displayTool.output &&

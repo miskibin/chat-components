@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { shouldUseMockAgent } from "@/lib/agent-runtime"
 import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
-import { runMockAgent } from "@/lib/mock-agent"
+import { isAskDemoPrompt, runMockAgent } from "@/lib/mock-agent"
 
 export const runtime = "nodejs"
 // Vercel hobby plan caps serverless maxDuration at 60s
@@ -76,7 +76,7 @@ async function* agentStream(options: {
   sessionId?: string
   signal: AbortSignal
 }): AsyncGenerator<AgentStreamEvent> {
-  if (shouldUseMockAgent()) {
+  if (shouldUseMockAgent() || isAskDemoPrompt(options.prompt)) {
     yield* runMockAgent(options)
     return
   }
