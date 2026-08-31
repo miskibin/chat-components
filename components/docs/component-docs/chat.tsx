@@ -12,7 +12,7 @@ export const chatDocs = {
   chat: {
     title: "Chat",
     description:
-      "Starter block that wires the composer, prompt suggestions, and the message list into one working chat surface.",
+      "Starter block that opens centered — greeting, composer, suggestions — and settles into the message list once the first message is sent.",
     registry: "chat",
     registryDependencies: [
       "chat-input",
@@ -39,6 +39,24 @@ export default function Page() {
         caption: "Chat",
         rows: [
           {
+            name: "greeting",
+            type: "React.ReactNode",
+            default: '"How can I help?"',
+            description:
+              "Headline above the centered composer while the conversation is empty. It disappears with the first message.",
+          },
+          {
+            name: "suggestions",
+            type: "PromptSuggestion[]",
+            description: (
+              <>
+                Starter prompts listed under the centered composer; picking one
+                sends it. Defaults to three generic starters, and{" "}
+                <DocsCode>[]</DocsCode> hides the list.
+              </>
+            ),
+          },
+          {
             name: "className",
             type: "string",
             description:
@@ -54,8 +72,38 @@ export default function Page() {
     ],
     dataSlots: [
       { slot: "chat", description: "Root flex column." },
+      {
+        slot: "chat-greeting",
+        description: "Greeting wrapper — only mounted while the chat is empty.",
+      },
+      {
+        slot: "chat-composer",
+        description: "Wraps the composer and, when empty, the suggestion list.",
+      },
     ],
     customization: [
+      {
+        title: "Own the opening",
+        description: (
+          <>
+            An empty chat centers the greeting, the composer, and the starter
+            prompts. Both halves are props, so the block opens in your
+            product&apos;s voice — and the same{" "}
+            <DocsCode>ChatInput</DocsCode> element stays mounted when the first
+            message drops it to the bottom, so nothing jumps.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<Chat
+  greeting="Where should we start?"
+  suggestions={[
+    { id: "audit", label: "Audit this file for dead code", icon: <Trash2 /> },
+    { id: "tests", label: "Write tests for the reducer", icon: <FlaskConical /> },
+  ]}
+/>`,
+        },
+      },
       {
         title: "Own the state",
         description: (
@@ -411,6 +459,19 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   onSelect={(item) => send(item.label)}
 />`,
         },
+      },
+    ],
+    notes: [
+      {
+        title: "Accessibility",
+        description: (
+          <>
+            The list renders as <DocsCode>role=&quot;list&quot;</DocsCode>{" "}
+            labelled &ldquo;Suggested prompts&rdquo;. Pass your own{" "}
+            <DocsCode>aria-label</DocsCode> to rename it — it merges through{" "}
+            <DocsCode>...props</DocsCode>.
+          </>
+        ),
       },
     ],
   },

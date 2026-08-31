@@ -9,14 +9,18 @@ export const controlDocs = {
   "model-picker": {
     title: "Model Picker",
     description:
-      "Collision-aware model selector with badges, descriptions, and disabled options that explain themselves.",
+      "Searchable model selector on Popover + cmdk, with badges, descriptions, disabled options that explain themselves, and an optional reasoning-effort row.",
     registry: "model-picker",
-    registryDependencies: ["dropdown-menu"],
+    registryDependencies: ["popover", "command"],
     preview: { name: "model-picker-example", node: <ModelPickerExample /> },
     usage: `"use client"
 
 import { useState } from "react"
-import { ModelPicker, type ModelOption } from "@/components/ui/model-picker"
+import {
+  DEFAULT_MODEL_EFFORTS,
+  ModelPicker,
+  type ModelOption,
+} from "@/components/ui/model-picker"
 
 const MODELS: ModelOption[] = [
   { id: "composer-2.5", name: "Composer 2.5", badge: "Cursor" },
@@ -25,7 +29,18 @@ const MODELS: ModelOption[] = [
 
 export function Picker() {
   const [model, setModel] = useState(MODELS[0].id)
-  return <ModelPicker value={model} onChange={setModel} options={MODELS} />
+  const [effort, setEffort] = useState("medium")
+
+  return (
+    <ModelPicker
+      value={model}
+      onChange={setModel}
+      options={MODELS}
+      efforts={DEFAULT_MODEL_EFFORTS}
+      effort={effort}
+      onEffortChange={setEffort}
+    />
+  )
 }`,
     props: [
       {
@@ -35,8 +50,14 @@ export function Picker() {
             name: "options",
             type: "ModelOption[]",
             required: true,
-            description:
-              "The menu contents. An empty array disables the trigger.",
+            description: (
+              <>
+                The list contents. cmdk filters them on{" "}
+                <DocsCode>name</DocsCode>, with <DocsCode>badge</DocsCode>,{" "}
+                <DocsCode>description</DocsCode>, and <DocsCode>meta</DocsCode>{" "}
+                as keywords. An empty array disables the trigger.
+              </>
+            ),
           },
           {
             name: "value",
@@ -52,14 +73,45 @@ export function Picker() {
           {
             name: "onChange",
             type: "(id: string) => void",
-            description: "Fired on pick. Disabled options never fire it.",
+            description:
+              "Fired on pick, then the popover closes. Disabled options never fire it.",
+          },
+          {
+            name: "efforts",
+            type: "ModelEffortOption[] | false",
+            default: "false",
+            description: (
+              <>
+                Reasoning-effort options under a divider.{" "}
+                <DocsCode>false</DocsCode> hides the section; pass{" "}
+                <DocsCode>DEFAULT_MODEL_EFFORTS</DocsCode> or your own list to
+                show it.
+              </>
+            ),
+          },
+          {
+            name: "effort",
+            type: "string",
+            description: "Controlled effort id.",
+          },
+          {
+            name: "defaultEffort",
+            type: "string",
+            default: "efforts[0]?.id",
+            description: "Initial effort when uncontrolled.",
+          },
+          {
+            name: "onEffortChange",
+            type: "(id: string) => void",
+            description:
+              "Fired on effort pick. The popover stays open so both choices happen in one visit.",
           },
           {
             name: "side",
             type: '"top" | "bottom"',
             default: '"top"',
             description:
-              "Which way the menu opens. Composers open top, navbars open bottom.",
+              "Which way the popover opens. Composers open top, navbars open bottom.",
           },
           {
             name: "placeholder",
@@ -68,10 +120,28 @@ export function Picker() {
             description: "Trigger label when nothing is selected.",
           },
           {
+            name: "searchPlaceholder",
+            type: "string",
+            default: '"Search models…"',
+            description: "Placeholder inside the search field.",
+          },
+          {
+            name: "emptyMessage",
+            type: "string",
+            default: '"No models found."',
+            description: "Shown when the search matches nothing.",
+          },
+          {
             name: "label",
             type: "string",
             default: '"Models"',
             description: "Heading above the option list.",
+          },
+          {
+            name: "effortLabel",
+            type: "string",
+            default: '"Reasoning effort"',
+            description: "Heading above the effort row.",
           },
           {
             name: "disabled",
@@ -83,6 +153,34 @@ export function Picker() {
             name: "className",
             type: "string",
             description: "Merged onto the trigger button.",
+          },
+        ],
+      },
+      {
+        caption: "ModelEffortOption",
+        rows: [
+          {
+            name: "id",
+            type: "string",
+            required: true,
+            description: (
+              <>
+                Stable key, reported by <DocsCode>onEffortChange</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "label",
+            type: "string",
+            required: true,
+            description:
+              "Shown on the chip and as the trigger suffix, e.g. “· High”.",
+          },
+          {
+            name: "description",
+            type: "string",
+            description:
+              "Tooltip on the chip, and the line under the row while it is active.",
           },
         ],
       },
@@ -123,12 +221,38 @@ export function Picker() {
           },
         ],
       },
+      {
+        caption: "Exports",
+        rows: [
+          {
+            name: "DEFAULT_MODEL_EFFORTS",
+            type: "ModelEffortOption[]",
+            description:
+              "low / medium / high / xhigh — “Low”, “Medium”, “High”, “Extra High”. Pass it to efforts, or copy it and rename the steps.",
+          },
+        ],
+      },
     ],
     dataSlots: [
       { slot: "model-picker-trigger", description: "The trigger button." },
-      { slot: "model-picker-content", description: "The dropdown panel." },
-      { slot: "model-picker-item", description: "Each option row." },
+      { slot: "model-picker-content", description: "The popover panel." },
+      { slot: "model-picker-search", description: "The search input." },
+      { slot: "model-picker-list", description: "The scrolling result list." },
+      { slot: "model-picker-item", description: "Each model row." },
       { slot: "model-picker-badge", description: "The uppercase provider tag." },
+      {
+        slot: "model-picker-effort",
+        description: "The effort section under the divider.",
+      },
+      {
+        slot: "model-picker-effort-item",
+        description: (
+          <>
+            Each effort chip. Carries{" "}
+            <DocsCode>data-state=&quot;on&quot;</DocsCode> when active.
+          </>
+        ),
+      },
     ],
     customization: [
       {
@@ -136,12 +260,36 @@ export function Picker() {
         description: (
           <>
             Keeping a model listed with a <DocsCode>disabledReason</DocsCode>{" "}
-            answers &ldquo;where did it go?&rdquo; before it gets asked.
+            answers &ldquo;where did it go?&rdquo; before it gets asked — and it
+            still turns up in search, it just cannot be picked.
           </>
         ),
         example: {
           name: "model-picker-disabled-example",
           node: <ModelPickerDisabledExample />,
+        },
+      },
+      {
+        title: "Name your own effort steps",
+        description: (
+          <>
+            <DocsCode>efforts</DocsCode> is plain data, so the scale is yours —
+            two steps or six, whatever your backend accepts. The row sits
+            outside the filtered list, so typing in the search box never hides
+            it.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<ModelPicker
+  options={MODELS}
+  efforts={[
+    { id: "fast", label: "Fast", description: "No thinking budget" },
+    { id: "think", label: "Think", description: "Reasons before answering" },
+  ]}
+  defaultEffort="think"
+  onEffortChange={(id) => setEffort(id)}
+/>`,
         },
       },
       {
@@ -170,6 +318,16 @@ export function Picker() {
             <DocsCode>ChatInput</DocsCode> with{" "}
             <DocsCode>side=&quot;top&quot;</DocsCode>; the trigger already
             matches the toolbar height.
+          </>
+        ),
+      },
+      {
+        title: "Picking, and picking again",
+        description: (
+          <>
+            Choosing a model closes the popover; choosing an effort does not, so
+            a model plus its effort is one visit. The search box takes focus on
+            open, and clears every time.
           </>
         ),
       },

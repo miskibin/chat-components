@@ -352,6 +352,8 @@ export type {
   ChatSidebarItemListProps,
   ChatSidebarItemProps,
   SidebarItemMenuAction,
+  SidebarItemRenderContent,
+  SidebarItemRenderContext,
   SidebarItemStatus,
 } from "@/components/ui/sidebar-item"
 export {

@@ -1,7 +1,18 @@
 "use client"
 
 import { arrayMove } from "@dnd-kit/sortable"
-import { Copy, PanelLeft, Pencil, RefreshCw, Search, Trash2 } from "lucide-react"
+import {
+  Copy,
+  Palette,
+  PanelLeft,
+  Paperclip,
+  Pencil,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Trash2,
+  Waves,
+} from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
@@ -29,9 +40,14 @@ import {
 import type { GenerationStage } from "@/components/ui/generation-status"
 import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
 import {
+  DEFAULT_MODEL_EFFORTS,
   ModelPicker,
   type ModelOption,
 } from "@/components/ui/model-picker"
+import {
+  PromptSuggestions,
+  type PromptSuggestion,
+} from "@/components/ui/prompt-suggestions"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
 import { streamCursorChat } from "@/lib/cursor-stream"
@@ -51,6 +67,23 @@ function pinToTop(sessions: ChatSession[], id: string) {
 /** Wall clock read, hoisted out of the component so render stays pure. */
 function nowMs() {
   return Date.now()
+}
+
+/** Compact sidebar timestamp — "now", "2m", "3h", "5d". */
+function relativeTime(from: number, now: number) {
+  const seconds = Math.max(0, Math.round((now - from) / 1000))
+  if (seconds < 60) return "now"
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
+}
+
+/** Second sidebar line: the model that answered last, or an empty-chat hint. */
+function sessionSubtitle(session: ChatSession, models: ModelOption[]) {
+  if (!session.model || !session.messages?.length) return "New chat"
+  return models.find((m) => m.id === session.model)?.name ?? session.model
 }
 
 /** Desktop-first so SSR and the first paint agree on the wide layout. */
@@ -79,6 +112,10 @@ type MessageData = ChatMessageData & {
 type ChatSession = ChatSidebarItemData & {
   messages?: MessageData[]
   cursorSessionId?: string
+  /** Last time the thread changed — drives the sidebar `meta` timestamp. */
+  updatedAt: number
+  /** Model used for the last turn — drives the sidebar `subtitle`. */
+  model?: string
 }
 
 const DEMO_SKILLS = [
@@ -90,6 +127,34 @@ const DEMO_SKILLS = [
 const DEMO_COMMANDS = [
   { name: "help", description: "Show available commands", argHint: "" },
   { name: "clear", description: "Clear the conversation", argHint: "" },
+]
+
+/**
+ * Each label is a trigger phrase for one of `lib/mock-agent.ts`'s scripted
+ * scenarios, so the simulated run stays rich: reasoning, tool calls that fail
+ * and recover, then streamed markdown with code, tables, math and mermaid.
+ */
+const DEMO_SUGGESTIONS: PromptSuggestion[] = [
+  {
+    id: "streaming",
+    label: "How does streaming work?",
+    icon: <Waves />,
+  },
+  {
+    id: "theming",
+    label: "How do theme tokens work in dark mode?",
+    icon: <Palette />,
+  },
+  {
+    id: "composer",
+    label: "What does the composer send when I attach a file?",
+    icon: <Paperclip />,
+  },
+  {
+    id: "markdown",
+    label: "Walk me through the markdown, math and mermaid rendering",
+    icon: <Sparkles />,
+  },
 ]
 
 const FALLBACK_MODELS: ModelOption[] = [
@@ -112,8 +177,8 @@ export default function ChatExample() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [chatsOpen, setChatsOpen] = useState(true)
-  const [sessions, setSessions] = useState<ChatSession[]>([
-    { id: "1", title: "Welcome chat", pinned: true },
+  const [sessions, setSessions] = useState<ChatSession[]>(() => [
+    { id: "1", title: "Welcome chat", pinned: true, updatedAt: nowMs() },
   ])
   const [activeId, setActiveId] = useState("1")
   const [messages, setMessages] = useState<MessageData[]>([])
@@ -122,8 +187,12 @@ export default function ChatExample() {
     useState<GenerationStage>("idle")
   const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODELS)
   const [selectedModel, setSelectedModel] = useState("composer-2.5")
+  // Effort is UI-only here — the mock agent ignores it.
+  const [effort, setEffort] = useState("high")
   // Set by /api/models when no local `agent` binary is available.
   const [isMock, setIsMock] = useState(false)
+  // One clock for every sidebar timestamp, so "now" ages into "2m" together.
+  const [clock, setClock] = useState(() => nowMs())
   const abortRef = useRef<AbortController | null>(null)
   const activeIdRef = useRef(activeId)
 
@@ -131,10 +200,26 @@ export default function ChatExample() {
     activeIdRef.current = activeId
   }, [activeId])
 
+  useEffect(() => {
+    const timer = setInterval(() => setClock(nowMs()), 30_000)
+    return () => clearInterval(timer)
+  }, [])
+
   const activeSession = sessions.find((s) => s.id === activeId)
   const activeTitle = activeSession?.title ?? "Chat"
+  const isEmptyChat = messages.length === 0
   // The drawer only exists below md; derive it so a resize can't strand it open.
   const drawerOpen = mobileNavOpen && !isDesktop
+
+  // Rich rows are derived at render — never stored, so they can't drift.
+  const sessionItems: ChatSidebarItemData[] = sessions.map((session) => ({
+    id: session.id,
+    title: session.title,
+    pinned: session.pinned,
+    status: session.status,
+    subtitle: sessionSubtitle(session, modelOptions),
+    meta: relativeTime(session.updatedAt, clock),
+  }))
 
   useEffect(() => {
     let cancelled = false
@@ -181,7 +266,7 @@ export default function ChatExample() {
     setMobileNavOpen(false)
     const id = String(nowMs())
     setSessions((prev) => [
-      { id, title: "New chat", pinned: false, messages: [] },
+      { id, title: "New chat", pinned: false, messages: [], updatedAt: nowMs() },
       ...prev,
     ])
     setActiveId(id)
@@ -220,6 +305,8 @@ export default function ChatExample() {
       persistSession(sessionId, (session) => ({
         ...session,
         messages: next,
+        model,
+        updatedAt: nowMs(),
         cursorSessionId: nextSessionId ?? session.cursorSessionId,
       }))
       if (activeIdRef.current === sessionId) setMessages(next)
@@ -353,6 +440,8 @@ export default function ChatExample() {
       persistSession(activeId, (session) => ({
         ...session,
         messages: [],
+        model: undefined,
+        updatedAt: nowMs(),
         cursorSessionId: undefined,
       }))
       setMessages([])
@@ -383,7 +472,12 @@ export default function ChatExample() {
       sender: "user",
     }
     const next = [...messages, userMessage]
-    persistSession(sessionId, (session) => ({ ...session, messages: next }))
+    persistSession(sessionId, (session) => ({
+      ...session,
+      messages: next,
+      model: selectedModel,
+      updatedAt: nowMs(),
+    }))
     setMessages(next)
     void runPrompt(content, sessionId, next, activeSession?.cursorSessionId)
   }
@@ -391,6 +485,39 @@ export default function ChatExample() {
   const handleStop = () => {
     stopGeneration()
   }
+
+  /**
+   * One composer for both layouts. Moving it between the centered opening and
+   * the docked conversation remounts the element, but the handlers, tools and
+   * placeholder are declared exactly once.
+   */
+  const composer = (
+    <ChatInput
+      onSend={handleSend}
+      onStop={handleStop}
+      isGenerating={isGenerating}
+      placeholder={
+        isMock
+          ? "Ask the simulated agent — try “how does streaming work?”"
+          : "Ask Cursor Agent — try listing files in this repo"
+      }
+      skills={DEMO_SKILLS}
+      slashCommands={DEMO_COMMANDS}
+      className={isEmptyChat ? "max-w-3xl pb-0 sm:pb-0" : undefined}
+      tools={
+        <ModelPicker
+          value={selectedModel}
+          onChange={setSelectedModel}
+          options={modelOptions}
+          efforts={DEFAULT_MODEL_EFFORTS}
+          effort={effort}
+          onEffortChange={setEffort}
+          side="top"
+          className="min-w-0"
+        />
+      }
+    />
+  )
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
@@ -441,7 +568,7 @@ export default function ChatExample() {
             }
           }}
           renderOverlay={(id) => {
-            const item = sessions.find((s) => s.id === id)
+            const item = sessionItems.find((s) => s.id === id)
             if (!item) return null
             return (
               <ChatSidebarItemGhost
@@ -496,12 +623,14 @@ export default function ChatExample() {
             <SidebarSessionSection
               open={chatsOpen}
               onToggle={() => setChatsOpen((v) => !v)}
-              sessions={sessions}
+              sessions={sessionItems}
               activeId={activeId}
               onSelect={selectSession}
               onRename={(id, title) =>
                 setSessions((prev) =>
-                  prev.map((s) => (s.id === id ? { ...s, title } : s))
+                  prev.map((s) =>
+                    s.id === id ? { ...s, title, updatedAt: nowMs() } : s
+                  )
                 )
               }
               onTogglePin={(id, pinned) =>
@@ -553,134 +682,136 @@ export default function ChatExample() {
           }
         />
 
-        <MessageList
-          messages={messages}
-          isGenerating={isGenerating}
-          generationStage={generationStage}
-          onEditMessage={(id, content) =>
-            setMessages((prev) => {
-              const next = prev.map((msg) =>
-                msg.id === id ? { ...msg, content } : msg
-              )
-              persistSession(activeId, (session) => ({
-                ...session,
-                messages: next,
-              }))
-              return next
-            })
-          }
-          emptyState={
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-2 text-center text-muted-foreground">
-              <p className="text-balance text-lg font-medium text-foreground">
-                {activeTitle === "Welcome chat" || !activeTitle
-                  ? isMock
-                    ? "Talk to the simulated agent"
-                    : "Talk to Cursor Agent"
-                  : activeTitle}
-              </p>
-              <p className="max-w-sm text-balance text-[13.5px]">
-                {isMock ? (
-                  <>
-                    No local{" "}
-                    <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
-                      agent
-                    </code>{" "}
-                    CLI here, so replies are a scripted run — reasoning, tool
-                    calls and streamed markdown. Try “how does streaming work?”
-                  </>
-                ) : (
-                  <>
-                    Real LLM + tool calls via the local{" "}
-                    <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
-                      agent
-                    </code>{" "}
-                    CLI. Try “what files are in this repo?”
-                  </>
-                )}
-              </p>
-            </div>
-          }
-          renderActions={(message) => {
-            if (message.sender !== "assistant") return null
-            return (
-              <div className="-mt-2 mb-4 flex gap-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
-                <ActionBtn
-                  title="Copy"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(message.content)
-                    toast.success("Copied")
-                  }}
-                >
-                  <Copy />
-                </ActionBtn>
-                <ActionBtn
-                  title="Regenerate"
-                  onClick={() => {
-                    const idx = messages.findIndex((m) => m.id === message.id)
-                    let userIdx = idx - 1
-                    while (
-                      userIdx >= 0 &&
-                      messages[userIdx].sender !== "user"
-                    ) {
-                      userIdx--
-                    }
-                    if (userIdx < 0) return
-                    const prompt = messages[userIdx].content
-                    const next = messages.filter((m) => m.id !== message.id)
-                    persistSession(activeId, (session) => ({
-                      ...session,
-                      messages: next,
-                    }))
-                    setMessages(next)
-                    void runPrompt(
-                      prompt,
-                      activeId,
-                      next,
-                      activeSession?.cursorSessionId
-                    )
-                  }}
-                >
-                  <RefreshCw />
-                </ActionBtn>
-                <ActionBtn
-                  title="Delete"
-                  onClick={() => {
-                    const next = messages.filter((m) => m.id !== message.id)
-                    persistSession(activeId, (session) => ({
-                      ...session,
-                      messages: next,
-                    }))
-                    setMessages(next)
-                  }}
-                >
-                  <Trash2 />
-                </ActionBtn>
+        {isEmptyChat ? (
+          <div
+            data-slot="demo-opening"
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+          >
+            <div className="my-auto w-full py-6">
+              <div className="mx-auto w-full max-w-3xl px-3 pb-5 sm:px-4">
+                <h2 className="text-center text-2xl font-semibold tracking-tight text-balance text-foreground sm:text-3xl">
+                  How can I help?
+                </h2>
+                <p className="mx-auto mt-2 max-w-md text-center text-[13.5px] text-balance text-muted-foreground">
+                  {isMock ? (
+                    <>
+                      No local{" "}
+                      <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
+                        agent
+                      </code>{" "}
+                      CLI here, so replies are a scripted run — reasoning, tool
+                      calls and streamed markdown.
+                    </>
+                  ) : (
+                    <>
+                      Real LLM + tool calls via the local{" "}
+                      <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
+                        agent
+                      </code>{" "}
+                      CLI, running against this repository.
+                    </>
+                  )}
+                </p>
               </div>
-            )
-          }}
-        />
 
-        <ChatInput
-          onSend={handleSend}
-          onStop={handleStop}
-          isGenerating={isGenerating}
-          placeholder={
-            isMock
-              ? "Ask the simulated agent — try “how does streaming work?”"
-              : "Ask Cursor Agent — try listing files in this repo"
-          }
-          skills={DEMO_SKILLS}
-          slashCommands={DEMO_COMMANDS}
-          tools={
-            <ModelPicker
-              value={selectedModel}
-              onChange={setSelectedModel}
-              options={modelOptions}
-              side="top"
-              className="min-w-0"
+              {composer}
+
+              <PromptSuggestions
+                items={DEMO_SUGGESTIONS}
+                onSelect={(item) =>
+                  handleSend({ text: item.label, files: [], skills: [] })
+                }
+                className="max-w-3xl px-3 pt-2 sm:px-4"
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            <MessageList
+              messages={messages}
+              isGenerating={isGenerating}
+              generationStage={generationStage}
+              onEditMessage={(id, content) =>
+                setMessages((prev) => {
+                  const next = prev.map((msg) =>
+                    msg.id === id ? { ...msg, content } : msg
+                  )
+                  persistSession(activeId, (session) => ({
+                    ...session,
+                    messages: next,
+                  }))
+                  return next
+                })
+              }
+              renderActions={(message) => {
+                if (message.sender !== "assistant") return null
+                return (
+                  <div className="-mt-2 mb-4 flex gap-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
+                    <ActionBtn
+                      title="Copy"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(message.content)
+                        toast.success("Copied")
+                      }}
+                    >
+                      <Copy />
+                    </ActionBtn>
+                    <ActionBtn
+                      title="Regenerate"
+                      onClick={() => {
+                        const idx = messages.findIndex(
+                          (m) => m.id === message.id
+                        )
+                        let userIdx = idx - 1
+                        while (
+                          userIdx >= 0 &&
+                          messages[userIdx].sender !== "user"
+                        ) {
+                          userIdx--
+                        }
+                        if (userIdx < 0) return
+                        const prompt = messages[userIdx].content
+                        const next = messages.filter(
+                          (m) => m.id !== message.id
+                        )
+                        persistSession(activeId, (session) => ({
+                          ...session,
+                          messages: next,
+                        }))
+                        setMessages(next)
+                        void runPrompt(
+                          prompt,
+                          activeId,
+                          next,
+                          activeSession?.cursorSessionId
+                        )
+                      }}
+                    >
+                      <RefreshCw />
+                    </ActionBtn>
+                    <ActionBtn
+                      title="Delete"
+                      onClick={() => {
+                        const next = messages.filter(
+                          (m) => m.id !== message.id
+                        )
+                        persistSession(activeId, (session) => ({
+                          ...session,
+                          messages: next,
+                        }))
+                        setMessages(next)
+                      }}
+                    >
+                      <Trash2 />
+                    </ActionBtn>
+                  </div>
+                )
+              }}
             />
-          }
-        />
+
+            {composer}
+          </>
+        )}
       </div>
     </div>
   )

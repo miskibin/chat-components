@@ -18,6 +18,10 @@ export type PromptSuggestionsProps = Omit<
   onSelect?: (item: PromptSuggestion) => void
 }
 
+/**
+ * The quiet list under an empty composer: one full-width row per prompt, no
+ * borders or dividers — spacing and a hover fill carry the structure.
+ */
 export function PromptSuggestions({
   items,
   onSelect,
@@ -30,6 +34,7 @@ export function PromptSuggestions({
     <ul
       data-slot="prompt-suggestions"
       role="list"
+      aria-label="Suggested prompts"
       className={cn("mx-auto w-full max-w-4xl px-4 pt-2 sm:px-8", className)}
       {...props}
     >
@@ -39,10 +44,10 @@ export function PromptSuggestions({
             type="button"
             data-slot="prompt-suggestion"
             onClick={() => onSelect?.(item)}
-            className="group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-[13.5px] leading-snug text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="group flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-[13.5px] leading-snug text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 active:bg-muted [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             {item.icon ? (
-              <span className="mt-px grid size-4 shrink-0 place-items-center text-muted-foreground/80 transition-colors group-hover:text-foreground">
+              <span className="mt-px grid size-4 shrink-0 place-items-center text-muted-foreground/70 transition-colors group-hover:text-foreground">
                 {item.icon}
               </span>
             ) : null}

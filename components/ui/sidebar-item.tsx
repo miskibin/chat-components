@@ -58,11 +58,36 @@ export type SidebarItemMenuAction = {
 export type ChatSidebarItemData = {
   id: string
   title: string
+  /**
+   * Second line under the title — a model name, a branch, a snippet. Muted and
+   * truncating; its presence is what turns the row into a two-line thread row.
+   */
+  subtitle?: ReactNode
+  /**
+   * Trailing node on the title line — a relative time, a message count. Never
+   * shrinks; the title truncates around it.
+   */
+  meta?: ReactNode
   pinned?: boolean
   status?: SidebarItemStatus
   /** Leading node rendered instead of the status dot. */
   leading?: ReactNode
 }
+
+export type SidebarItemRenderContext = {
+  active: boolean
+  pinned: boolean
+}
+
+/**
+ * Replaces the default row body (leading dot, title, subtitle, meta) while the
+ * component keeps the button shell, drag listeners, context menu and renaming.
+ * Return `undefined` to fall back to the default body for that row.
+ */
+export type SidebarItemRenderContent = (
+  item: ChatSidebarItemData,
+  ctx: SidebarItemRenderContext
+) => ReactNode
 
 /* -------------------------------------------------------------------------------------------------
  * Status dot
@@ -107,6 +132,74 @@ function resolveStatus(
 }
 
 /* -------------------------------------------------------------------------------------------------
+ * Default row body — shared by the row and the drag ghost
+ * -----------------------------------------------------------------------------------------------*/
+
+/** A subtitle is what makes a row two lines; meta alone stays compact. */
+function isMultiline(item: ChatSidebarItemData) {
+  return item.subtitle != null
+}
+
+function SidebarItemBody({
+  item,
+  active = false,
+  pinned,
+  showStatusDot = true,
+}: {
+  item: ChatSidebarItemData
+  active?: boolean
+  pinned: boolean
+  showStatusDot?: boolean
+}) {
+  const leading =
+    item.leading ??
+    (showStatusDot && !pinned ? (
+      <SidebarItemStatusDot status={resolveStatus(active, item.status)} />
+    ) : null)
+  const title = item.title || "Untitled"
+
+  return (
+    <>
+      {pinned || leading ? (
+        // h-5 matches the first line box, so the dot keeps aligning with the
+        // title once a subtitle stretches the row.
+        <span className="inline-flex h-5 shrink-0 items-center gap-2">
+          {pinned ? (
+            <Pin className="size-3 shrink-0 text-primary" aria-hidden />
+          ) : null}
+          {leading}
+        </span>
+      ) : null}
+      {item.subtitle != null || item.meta != null ? (
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{title}</span>
+            {item.meta != null ? (
+              <span
+                data-slot="sidebar-item-meta"
+                className="shrink-0 text-[11px] font-normal text-muted-foreground"
+              >
+                {item.meta}
+              </span>
+            ) : null}
+          </span>
+          {item.subtitle != null ? (
+            <span
+              data-slot="sidebar-item-subtitle"
+              className="block min-w-0 truncate text-[11px] leading-4 font-normal text-muted-foreground"
+            >
+              {item.subtitle}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{title}</span>
+      )}
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------------------------------
  * Row
  * -----------------------------------------------------------------------------------------------*/
 
@@ -131,6 +224,11 @@ export type ChatSidebarItemProps = {
   /** Separator above the row — used between pinned and unpinned groups. */
   showDivider?: boolean
   showStatusDot?: boolean
+  /**
+   * Replace the row body entirely. The shell — button, drag listeners, context
+   * menu, double-click renaming and the editing input — stays.
+   */
+  renderContent?: SidebarItemRenderContent
   className?: string
   onSelect?: () => void
   onRename?: (title: string) => void
@@ -150,6 +248,7 @@ function SidebarItemRow({
   active = false,
   showDivider = false,
   showStatusDot = true,
+  renderContent,
   className,
   editing,
   onEditingChange,
@@ -185,6 +284,9 @@ function SidebarItemRow({
     onEditingChange(false)
     setDraft(item.title)
   }, [item.title, onEditingChange])
+
+  const custom = renderContent?.(item, { active, pinned })
+  const multiline = custom === undefined && isMultiline(item)
 
   const shell = (
     <div
@@ -231,7 +333,8 @@ function SidebarItemRow({
           {...(drag?.attributes ?? {})}
           {...(drag?.listeners ?? {})}
           className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-5",
+            "flex w-full gap-2 rounded-md px-2 text-left text-[13px] leading-5",
+            multiline ? "items-start py-2" : "items-center py-1.5",
             "text-sidebar-foreground outline-none transition-colors touch-manipulation",
             "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
@@ -239,17 +342,16 @@ function SidebarItemRow({
             drag?.enabled && "cursor-grab active:cursor-grabbing"
           )}
         >
-          {pinned ? (
-            <Pin className="size-3 shrink-0 text-primary" aria-hidden />
-          ) : null}
-          {item.leading ? (
-            <span className="inline-flex shrink-0">{item.leading}</span>
-          ) : showStatusDot && !pinned ? (
-            <SidebarItemStatusDot status={resolveStatus(active, item.status)} />
-          ) : null}
-          <span className="min-w-0 flex-1 truncate">
-            {item.title || "Untitled"}
-          </span>
+          {custom === undefined ? (
+            <SidebarItemBody
+              item={item}
+              active={active}
+              pinned={pinned}
+              showStatusDot={showStatusDot}
+            />
+          ) : (
+            custom
+          )}
         </button>
       )}
     </div>
@@ -434,6 +536,7 @@ type ListRowProps = {
   showDivider: boolean
   showStatusDot: boolean
   itemClassName?: string
+  renderContent?: SidebarItemRenderContent
   onSelect?: (id: string) => void
   onRename?: (id: string, title: string) => void
   onTogglePin?: (id: string, pinned: boolean) => void
@@ -451,6 +554,7 @@ const SidebarListRow = memo(function SidebarListRow({
   showDivider,
   showStatusDot,
   itemClassName,
+  renderContent,
   onSelect,
   onRename,
   onTogglePin,
@@ -483,6 +587,7 @@ const SidebarListRow = memo(function SidebarListRow({
       sortable={sortable}
       showDivider={showDivider}
       showStatusDot={showStatusDot}
+      renderContent={renderContent}
       className={itemClassName}
       menuActions={menuActions}
       onSelect={onSelect ? handleSelect : undefined}
@@ -511,6 +616,12 @@ export type ChatSidebarItemListProps = {
   className?: string
   itemClassName?: string
   emptyState?: ReactNode
+  /**
+   * Replace the body of every row. Return `undefined` for a row to keep the
+   * default title / subtitle / meta body. Identity is stabilised internally, so
+   * an inline callback still leaves rows memoized.
+   */
+  renderContent?: SidebarItemRenderContent
   onSelect?: (id: string) => void
   onRename?: (id: string, title: string) => void
   onTogglePin?: (id: string, pinned: boolean) => void
@@ -529,6 +640,7 @@ export function ChatSidebarItemList({
   className,
   itemClassName,
   emptyState,
+  renderContent,
   onSelect,
   onRename,
   onTogglePin,
@@ -546,6 +658,7 @@ export function ChatSidebarItemList({
   const stableTogglePin = useStableCallback(onTogglePin)
   const stableDelete = useStableCallback(onDelete)
   const stableMenuActions = useStableCallback(getMenuActions)
+  const stableRenderContent = useStableCallback(renderContent)
 
   const rows = items.map((item, index) => (
     <SidebarListRow
@@ -556,6 +669,7 @@ export function ChatSidebarItemList({
       sortable={sortable}
       showStatusDot={showStatusDot}
       itemClassName={itemClassName}
+      renderContent={renderContent ? stableRenderContent : undefined}
       showDivider={
         groupPinned && index > 0 && !!items[index - 1].pinned && !item.pinned
       }
@@ -593,32 +707,34 @@ export function ChatSidebarItemList({
 export function ChatSidebarItemGhost({
   item,
   active,
+  renderContent,
   className,
 }: {
   item: ChatSidebarItemData
   active?: boolean
+  /** Pass the list's `renderContent` so the preview matches the row. */
+  renderContent?: SidebarItemRenderContent
   className?: string
 }) {
+  const pinned = !!item.pinned
+  const custom = renderContent?.(item, { active: !!active, pinned })
+  const multiline = custom === undefined && isMultiline(item)
+
   return (
     <div
       data-slot="sidebar-item-ghost"
       className={cn(
-        "flex w-64 max-w-[80vw] cursor-grabbing items-center gap-2 rounded-md border border-primary/60",
-        "bg-popover px-2 py-1.5 text-[13px] text-popover-foreground shadow-lg",
+        "flex w-64 max-w-[80vw] cursor-grabbing gap-2 rounded-md border border-primary/60",
+        "bg-popover px-2 text-[13px] leading-5 text-popover-foreground shadow-lg",
+        multiline ? "items-start py-2" : "items-center py-1.5",
         className
       )}
     >
-      {item.pinned ? (
-        <Pin className="size-3 shrink-0 text-primary" aria-hidden />
-      ) : null}
-      {item.leading ? (
-        <span className="inline-flex shrink-0">{item.leading}</span>
-      ) : !item.pinned ? (
-        <SidebarItemStatusDot status={resolveStatus(active, item.status)} />
-      ) : null}
-      <span className="min-w-0 flex-1 truncate">
-        {item.title || "Untitled"}
-      </span>
+      {custom === undefined ? (
+        <SidebarItemBody item={item} active={active} pinned={pinned} />
+      ) : (
+        custom
+      )}
     </div>
   )
 }
