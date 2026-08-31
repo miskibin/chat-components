@@ -1,12 +1,6 @@
 "use client"
 
-import {
-  FileCode,
-  FileJson,
-  FileText,
-  Hash,
-  MoreHorizontal,
-} from "lucide-react"
+import { FileCode, FileJson, FileText, Hash, MoreHorizontal } from "lucide-react"
 import * as React from "react"
 
 import {
@@ -29,15 +23,14 @@ export type ChangeSummaryTool = {
   output?: string
 }
 
-export type ChangeSummaryProps = {
+export type ChangeSummaryProps = Omit<React.ComponentProps<"div">, "title"> & {
   files: ChangeSummaryFile[]
   /** Defaults to “N Files Changed”. */
-  title?: string
-  actionLabel?: string
+  title?: React.ReactNode
+  actionLabel?: React.ReactNode
   onAction?: () => void
   /** How many files to show before “Show N more”. */
   previewCount?: number
-  className?: string
 }
 
 export type WorkedForProps = React.ComponentProps<"span"> & {
@@ -45,18 +38,26 @@ export type WorkedForProps = React.ComponentProps<"span"> & {
   seconds: number
 }
 
+/** Quiet text button shared by Review and “Show N more”. */
+const changeSummaryAction =
+  "inline-flex shrink-0 items-center gap-1.5 rounded-sm text-[13px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+
 function fileName(path: string) {
   const trimmed = path.replace(/[\\/]+$/, "")
   return trimmed.split(/[\\/]/).pop() || path
 }
 
-function FileGlyph({ path }: { path: string }) {
+/**
+ * File kind reads from the icon, not from colour — the palette stays on the
+ * theme tokens so the card survives a re-themed light/dark pair.
+ */
+function fileGlyph(path: string) {
   const ext = fileName(path).split(".").pop()?.toLowerCase()
   if (ext === "css" || ext === "scss" || ext === "less") {
-    return <Hash className="size-3.5 text-violet-500" />
+    return { kind: "style", Icon: Hash }
   }
   if (ext === "json" || ext === "jsonc") {
-    return <FileJson className="size-3.5 text-amber-500" />
+    return { kind: "data", Icon: FileJson }
   }
   if (
     ext === "ts" ||
@@ -66,11 +67,12 @@ function FileGlyph({ path }: { path: string }) {
     ext === "mts" ||
     ext === "cts"
   ) {
-    return <FileCode className="size-3.5 text-sky-500" />
+    return { kind: "code", Icon: FileCode }
   }
-  return <FileText className="size-3.5 text-muted-foreground" />
+  return { kind: "text", Icon: FileText }
 }
 
+/** +/- is the one raw-palette exception: no theme token means "grew". */
 function DiffStats({
   additions = 0,
   deletions = 0,
@@ -80,7 +82,10 @@ function DiffStats({
 }) {
   if (additions === 0 && deletions === 0) return null
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[12px] tabular-nums">
+    <span
+      data-slot="change-summary-stats"
+      className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[12px] tabular-nums"
+    >
       {additions > 0 ? (
         <span className="text-emerald-600 dark:text-emerald-400">
           +{additions}
@@ -94,15 +99,22 @@ function DiffStats({
 }
 
 function FileRow({ file }: { file: ChangeSummaryFile }) {
+  const { kind, Icon } = fileGlyph(file.path)
   return (
     <div
       data-slot="change-summary-file"
+      data-kind={kind}
       className="flex min-w-0 items-center gap-2 py-[3px] text-[13px] leading-snug"
     >
-      <span className="inline-flex shrink-0">
-        <FileGlyph path={file.path} />
-      </span>
-      <span className="min-w-0 flex-1 truncate text-foreground" title={file.path}>
+      <Icon
+        aria-hidden
+        data-slot="change-summary-file-icon"
+        className="size-3.5 shrink-0 text-muted-foreground"
+      />
+      <span
+        className="min-w-0 flex-1 truncate text-foreground"
+        title={file.path}
+      >
         {fileName(file.path)}
       </span>
       <DiffStats additions={file.additions} deletions={file.deletions} />
@@ -139,33 +151,37 @@ export function formatWorkedFor(seconds: number) {
 
 /**
  * Collapsed review card: file count, optional Review action, a few rows, then
- * “Show N more”.
+ * “Show N more”. Memoized — it sits at the end of a settled turn that a
+ * streaming sibling re-renders often.
  */
-export function ChangeSummary({
+export const ChangeSummary = React.memo(function ChangeSummary({
   files,
   title,
   actionLabel = "Review",
   onAction,
   previewCount = 4,
   className,
+  ...props
 }: ChangeSummaryProps) {
   const [expanded, setExpanded] = React.useState(false)
   const count = files.length
-  if (count === 0) return null
 
-  const heading =
-    title ?? `${count} ${count === 1 ? "File" : "Files"} Changed`
+  const heading = title ?? `${count} ${count === 1 ? "File" : "Files"} Changed`
   const preview = files.slice(0, previewCount)
   const rest = files.slice(previewCount)
   const hidden = rest.length
 
+  if (count === 0) return null
+
   return (
     <div
       data-slot="change-summary"
+      data-state={hidden === 0 || expanded ? "expanded" : "collapsed"}
       className={cn(
-        "w-full max-w-md rounded-xl border bg-card px-3.5 py-3 text-card-foreground",
+        "w-full max-w-md rounded-lg border bg-card px-3.5 py-3 text-card-foreground",
         className
       )}
+      {...props}
     >
       <div
         data-slot="change-summary-header"
@@ -175,13 +191,17 @@ export function ChangeSummary({
         {onAction ? (
           <button
             type="button"
+            data-slot="change-summary-action"
             onClick={onAction}
-            className="shrink-0 rounded-sm text-[13px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className={changeSummaryAction}
           >
             {actionLabel}
           </button>
         ) : (
-          <span className="shrink-0 text-[13px] text-muted-foreground">
+          <span
+            data-slot="change-summary-action"
+            className="shrink-0 text-[13px] text-muted-foreground"
+          >
             {actionLabel}
           </span>
         )}
@@ -196,7 +216,7 @@ export function ChangeSummary({
       {hidden > 0 ? (
         <Collapsible open={expanded} onOpenChange={setExpanded}>
           <CollapsibleContent>
-            <div className="flex flex-col">
+            <div data-slot="change-summary-rest" className="flex flex-col">
               {rest.map((file) => (
                 <FileRow key={file.path} file={file} />
               ))}
@@ -206,7 +226,7 @@ export function ChangeSummary({
             <button
               type="button"
               data-slot="change-summary-more"
-              className="mt-0.5 inline-flex items-center gap-1.5 rounded-sm py-0.5 text-[13px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className={cn(changeSummaryAction, "mt-0.5 py-0.5")}
             >
               <MoreHorizontal className="size-3.5 opacity-70" />
               {expanded ? "Show less" : `Show ${hidden} more`}
@@ -216,7 +236,7 @@ export function ChangeSummary({
       ) : null}
     </div>
   )
-}
+})
 
 function parseArgs(input?: string): Record<string, unknown> {
   if (!input?.trim()) return {}

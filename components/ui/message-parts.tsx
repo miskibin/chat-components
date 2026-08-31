@@ -59,7 +59,7 @@ export type MessageArtifactData = {
 const disclosureTrigger =
   "inline-flex max-w-full items-center gap-1.5 rounded-sm py-0.5 text-left text-[13px] leading-snug text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
 
-export function MessageReasoning({
+export const MessageReasoning = React.memo(function MessageReasoning({
   children,
   defaultOpen = false,
   duration,
@@ -74,11 +74,15 @@ export function MessageReasoning({
   className?: string
 }) {
   const [open, setOpen] = React.useState(defaultOpen || streaming)
+  const [wasStreaming, setWasStreaming] = React.useState(streaming)
 
-  React.useEffect(() => {
+  // Adjust while rendering rather than in an effect: the disclosure never
+  // paints a stale open state, and no extra commit lands mid-stream.
+  if (wasStreaming !== streaming) {
+    setWasStreaming(streaming)
     if (streaming) setOpen(true)
     else if (!defaultOpen) setOpen(false)
-  }, [streaming, defaultOpen])
+  }
 
   const label =
     duration == null
@@ -93,7 +97,11 @@ export function MessageReasoning({
       className={cn("mb-2 animate-in fade-in duration-150", className)}
     >
       <CollapsibleTrigger asChild>
-        <button type="button" className={disclosureTrigger}>
+        <button
+          type="button"
+          data-slot="message-reasoning-trigger"
+          className={disclosureTrigger}
+        >
           <Brain className="size-3.5 opacity-70" />
           <span className="min-w-0 truncate">{label}</span>
           <ChevronDown
@@ -105,7 +113,10 @@ export function MessageReasoning({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-2 border-l pl-3 text-[13px] leading-relaxed opacity-60">
+        <div
+          data-slot="message-reasoning-content"
+          className="mt-2 border-l pl-3 text-[13px] leading-relaxed opacity-60"
+        >
           <MessageMarkdown className="text-inherit! text-[13px]! leading-relaxed!">
             {children}
           </MessageMarkdown>
@@ -113,7 +124,7 @@ export function MessageReasoning({
       </CollapsibleContent>
     </Collapsible>
   )
-}
+})
 
 function parseToolArgs(input?: string): Record<string, unknown> {
   if (!input?.trim()) return {}
@@ -515,6 +526,11 @@ function formatDiffStats(lines: ToolDiffLine[]) {
   return { added, removed }
 }
 
+/**
+ * Added / removed is the one place a raw palette earns its keep — no theme
+ * token carries "this line grew". Every pair below ships a dark variant or
+ * an alpha blend, so a re-themed app still reads correctly.
+ */
 function DiffStats({
   added,
   removed,
@@ -527,6 +543,7 @@ function DiffStats({
   if (added === 0 && removed === 0) return null
   return (
     <span
+      data-slot="message-tool-stats"
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 font-mono text-[12px] tabular-nums",
         className
@@ -641,7 +658,8 @@ async function highlight(
   return html
 }
 
-function InlineDiffCode({
+/** Memoized: a long diff mounts one of these per line. */
+const InlineDiffCode = React.memo(function InlineDiffCode({
   code,
   language,
 }: {
@@ -652,27 +670,29 @@ function InlineDiffCode({
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
   const cacheKey = `${theme}\0${lang}\0inline\0${code}`
-  const [html, setHtml] = React.useState<string | null>(
-    () => highlightCache.get(cacheKey) ?? null
-  )
+  // Keyed by the snippet it belongs to, so a re-keyed line never paints the
+  // previous line's HTML while its own highlight is still in flight.
+  const [rendered, setRendered] = React.useState<{
+    key: string
+    html: string
+  } | null>(null)
 
   React.useEffect(() => {
+    if (!code) return
     let cancelled = false
-    if (!code) {
-      setHtml(null)
-      return
-    }
     highlight(code, lang, theme, "inline")
       .then((out) => {
-        if (!cancelled) setHtml(out)
+        if (!cancelled) setRendered({ key: cacheKey, html: out })
       })
-      .catch(() => {
-        if (!cancelled) setHtml(null)
-      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [code, lang, theme])
+  }, [cacheKey, code, lang, theme])
+
+  const html =
+    highlightCache.get(cacheKey) ??
+    (rendered?.key === cacheKey ? rendered.html : null)
 
   if (!html) {
     return <>{code || "\u00a0"}</>
@@ -684,9 +704,9 @@ function InlineDiffCode({
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
-}
+})
 
-function ToolDiff({
+const ToolDiff = React.memo(function ToolDiff({
   lines,
   language,
 }: {
@@ -706,6 +726,8 @@ function ToolDiff({
         return (
           <div
             key={index}
+            data-slot="message-tool-diff-line"
+            data-type={line.type}
             className={cn(
               "flex",
               line.type === "add" && "bg-emerald-500/10",
@@ -720,7 +742,7 @@ function ToolDiff({
                 "w-5 shrink-0 select-none text-center",
                 line.type === "add" &&
                   "text-emerald-600/80 dark:text-emerald-400/80",
-                line.type === "remove" && "text-red-500/80",
+                line.type === "remove" && "text-red-500/80 dark:text-red-400/80",
                 line.type === "context" && "text-muted-foreground/40"
               )}
             >
@@ -750,10 +772,10 @@ function ToolDiff({
       })}
     </div>
   )
-}
+})
 
 /** Same chrome as ToolDiff, for Read — line gutter + Shiki, no +/- column. */
-function ToolFileView({
+const ToolFileView = React.memo(function ToolFileView({
   content,
   language,
   startLine = 1,
@@ -769,7 +791,7 @@ function ToolFileView({
       className="max-h-[min(22rem,55vh)] overflow-auto rounded-md border border-border/60 bg-muted/30 font-mono text-[12.5px] leading-[1.7]"
     >
       {lines.map((text, index) => (
-        <div key={index} className="flex">
+        <div key={index} data-slot="message-tool-file-line" className="flex">
           <span className="w-9 shrink-0 select-none border-r border-border/50 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/45">
             {startLine + index}
           </span>
@@ -780,7 +802,7 @@ function ToolFileView({
       ))}
     </div>
   )
-}
+})
 
 /** Single Cursor-style tool row — no card chrome. */
 export const MessageToolCall = React.memo(function MessageToolCall({
@@ -791,8 +813,11 @@ export const MessageToolCall = React.memo(function MessageToolCall({
 }: {
   tool: MessageToolCallData
   defaultOpen?: boolean
-  /** Called when an Ask Question tool is submitted or skipped. */
-  onAskAnswer?: (result: AskQuestionResult) => void
+  /**
+   * Called when an Ask Question tool is submitted or skipped. Takes the tool
+   * id first so the same handler can be shared by every row in a turn.
+   */
+  onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
   className?: string
 }) {
   const [open, setOpen] = React.useState(defaultOpen)
@@ -800,11 +825,14 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     null
   )
   const ask = React.useMemo(
-    () =>
-      isAskToolName(tool.name) ? parseAskQuestionInput(tool.input) : null,
+    () => (isAskToolName(tool.name) ? parseAskQuestionInput(tool.input) : null),
     [tool.name, tool.input]
   )
-  const resolvedAsk = askResult ?? parseAskQuestionResult(tool.output)
+  const parsedAsk = React.useMemo(
+    () => parseAskQuestionResult(tool.output),
+    [tool.output]
+  )
+  const resolvedAsk = askResult ?? parsedAsk
   const displayTool = React.useMemo((): MessageToolCallData => {
     if (!askResult) return tool
     return {
@@ -838,10 +866,14 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   const answerAsk = React.useCallback(
     (result: AskQuestionResult) => {
       setAskResult(result)
-      onAskAnswer?.(result)
+      onAskAnswer?.(tool.id, result)
     },
-    [onAskAnswer]
+    [onAskAnswer, tool.id]
   )
+
+  const skipAsk = React.useCallback(() => {
+    answerAsk({ skipped: true, answers: {} })
+  }, [answerAsk])
 
   if (ask && running && !askResult) {
     return (
@@ -849,7 +881,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
         title={ask.title}
         questions={ask.questions}
         onSubmit={answerAsk}
-        onSkip={() => answerAsk({ skipped: true, answers: {} })}
+        onSkip={skipAsk}
         className={className}
       />
     )
@@ -890,6 +922,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
       <CollapsibleTrigger asChild>
         <button
           type="button"
+          data-slot="message-tool-call-trigger"
           disabled={!hasBody}
           className={cn(
             disclosureTrigger,
@@ -939,7 +972,10 @@ export const MessageToolCall = React.memo(function MessageToolCall({
       </CollapsibleTrigger>
       {hasBody ? (
         <CollapsibleContent>
-          <div className="mb-1.5 ml-0.5 space-y-1.5 border-l border-border/70 pl-3">
+          <div
+            data-slot="message-tool-call-body"
+            className="mb-1.5 ml-0.5 space-y-1.5 border-l border-border/70 pl-3"
+          >
             {showAskSummary && ask && resolvedAsk ? (
               <AskQuestionSummary
                 questions={ask.questions}
@@ -997,16 +1033,12 @@ export function MessageToolCalls({
 
   if (tools.length === 0) return null
 
+  // One shared handler, so the memoized rows keep their render while a
+  // sibling part of the same turn streams.
   const list = (
-    <div className="flex flex-col">
+    <div data-slot="message-tool-list" className="flex flex-col">
       {tools.map((tool) => (
-        <MessageToolCall
-          key={tool.id}
-          tool={tool}
-          onAskAnswer={
-            onAskAnswer ? (result) => onAskAnswer(tool.id, result) : undefined
-          }
-        />
+        <MessageToolCall key={tool.id} tool={tool} onAskAnswer={onAskAnswer} />
       ))}
     </div>
   )
@@ -1027,7 +1059,11 @@ export function MessageToolCalls({
       className={cn("mb-3 animate-in fade-in duration-150", className)}
     >
       <CollapsibleTrigger asChild>
-        <button type="button" className={cn(disclosureTrigger, "w-full")}>
+        <button
+          type="button"
+          data-slot="message-tool-calls-trigger"
+          className={cn(disclosureTrigger, "w-full")}
+        >
           <span>
             Used {tools.length} tool{tools.length === 1 ? "" : "s"}
           </span>
@@ -1055,24 +1091,27 @@ function HighlightedCode({
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
   const cacheKey = `${theme}\0${lang}\0classic\0${code}`
-  // Paint straight from cache when we have it — no flash of unhighlighted code.
-  const [html, setHtml] = React.useState<string | null>(
-    () => highlightCache.get(cacheKey) ?? null
-  )
+  const [rendered, setRendered] = React.useState<{
+    key: string
+    html: string
+  } | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
     highlight(code, lang, theme, "classic")
       .then((out) => {
-        if (!cancelled) setHtml(out)
+        if (!cancelled) setRendered({ key: cacheKey, html: out })
       })
-      .catch(() => {
-        if (!cancelled) setHtml(null)
-      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [code, lang, theme])
+  }, [cacheKey, code, lang, theme])
+
+  // Paint straight from cache when we have it — no flash of unhighlighted code.
+  const html =
+    highlightCache.get(cacheKey) ??
+    (rendered?.key === cacheKey ? rendered.html : null)
 
   if (!html) {
     return (
@@ -1130,7 +1169,10 @@ export const MessageCode = React.memo(function MessageCode({
         className
       )}
     >
-      <div className="flex h-8 items-center gap-2 border-b px-2.5">
+      <div
+        data-slot="message-code-header"
+        className="flex h-8 items-center gap-2 border-b px-2.5"
+      >
         <span className="rounded-sm border px-1.5 py-0.5 font-mono text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           {langLabel}
         </span>
@@ -1143,6 +1185,8 @@ export const MessageCode = React.memo(function MessageCode({
         )}
         <button
           type="button"
+          data-slot="message-code-copy"
+          data-state={copied ? "copied" : "idle"}
           onClick={copy}
           title={copied ? "Copied" : "Copy"}
           aria-label={copied ? "Copied" : "Copy code"}
@@ -1184,6 +1228,7 @@ export const MessageArtifact = React.memo(function MessageArtifact({
     >
       <button
         type="button"
+        data-slot="message-artifact-trigger"
         onClick={artifact.onOpen}
         disabled={!interactive}
         className={cn(
@@ -1207,7 +1252,10 @@ export const MessageArtifact = React.memo(function MessageArtifact({
         </span>
       </button>
       {artifact.content ? (
-        <div className="max-h-[min(14rem,40vh)] overflow-auto bg-muted px-3.5 py-2.5 font-mono text-[12.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground">
+        <div
+          data-slot="message-artifact-content"
+          className="max-h-[min(14rem,40vh)] overflow-auto bg-muted px-3.5 py-2.5 font-mono text-[12.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground"
+        >
           {artifact.content}
         </div>
       ) : null}

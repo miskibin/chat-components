@@ -118,10 +118,7 @@ function sessionMeta(
   if (session.run) {
     return (
       <span
-        className={cn(
-          "font-medium text-sky-600 dark:text-sky-400",
-          !isActive && "opacity-75"
-        )}
+        className={cn("font-medium text-primary", !isActive && "opacity-75")}
       >
         Working · {formatElapsed(session.run.startedAt, now)}
       </span>
@@ -618,7 +615,7 @@ export default function ChatExample() {
     )
   }
 
-    const handleStop = () => {
+  const handleStop = () => {
     stopSession(activeId)
   }
 

@@ -513,9 +513,9 @@ export function Answer() {
           },
           {
             name: "onAskAnswer",
-            type: "(result: AskQuestionResult) => void",
+            type: "(toolId: string, result: AskQuestionResult) => void",
             description:
-              "Ask Question tools only. Continue and Skip both fire this — check result.skipped.",
+              "Ask Question tools only. Continue and Skip both fire this — check result.skipped. The row reports its own id, so one handler can serve a whole turn without breaking memoization.",
           },
           {
             name: "collapseAt",
@@ -571,6 +571,14 @@ export function Answer() {
     dataSlots: [
       { slot: "message-reasoning", description: "Reasoning disclosure." },
       {
+        slot: "message-reasoning-trigger",
+        description: '"Thought for N seconds" row.',
+      },
+      {
+        slot: "message-reasoning-content",
+        description: "The thought body.",
+      },
+      {
         slot: "message-tool-call",
         description: (
           <>
@@ -580,7 +588,24 @@ export function Answer() {
           </>
         ),
       },
+      {
+        slot: "message-tool-call-trigger",
+        description: "The headline button of one row.",
+      },
+      {
+        slot: "message-tool-call-body",
+        description: "Expanded body — diff, file, summary, or raw payload.",
+      },
       { slot: "message-tool-calls", description: "The stack of rows." },
+      {
+        slot: "message-tool-calls-trigger",
+        description: '"Used N tools" summary row.',
+      },
+      { slot: "message-tool-list", description: "The rows inside the stack." },
+      {
+        slot: "message-tool-stats",
+        description: "The +/- counts on an Edit / Write headline.",
+      },
       {
         slot: "ask-question",
         description:
@@ -592,12 +617,41 @@ export function Answer() {
           "Unified diff body inside an Edit / Write / ApplyPatch row.",
       },
       {
+        slot: "message-tool-diff-line",
+        description: (
+          <>
+            One diff line, tagged <DocsCode>data-type</DocsCode> —{" "}
+            <DocsCode>add</DocsCode>, <DocsCode>remove</DocsCode>,{" "}
+            <DocsCode>context</DocsCode>.
+          </>
+        ),
+      },
+      {
         slot: "message-tool-file",
         description:
           "Read-file body — line gutter and syntax highlight, same chrome as the diff.",
       },
+      { slot: "message-tool-file-line", description: "One read-file line." },
       { slot: "message-code", description: "Code card." },
+      { slot: "message-code-header", description: "Language chip + copy row." },
+      {
+        slot: "message-code-copy",
+        description: (
+          <>
+            Copy button. Flips <DocsCode>data-state</DocsCode> to{" "}
+            <DocsCode>copied</DocsCode> for a moment.
+          </>
+        ),
+      },
       { slot: "message-artifact", description: "Artifact card." },
+      {
+        slot: "message-artifact-trigger",
+        description: "Artifact header button.",
+      },
+      {
+        slot: "message-artifact-content",
+        description: "Inline artifact preview.",
+      },
     ],
     customization: [
       {
@@ -777,18 +831,110 @@ export function Clarify() {
             default: "true",
             description: "Start the panel expanded. Collapse it to read the turn behind it.",
           },
+          {
+            name: "skipLabel",
+            type: "string",
+            default: '"Skip"',
+            description: "Label on the secondary action.",
+          },
+          {
+            name: "submitLabel",
+            type: "string",
+            default: '"Continue"',
+            description: "Label on the primary action.",
+          },
+          { name: "className", type: "string", description: "Merged last." },
+        ],
+      },
+      {
+        caption: "AskQuestionSummary",
+        rows: [
+          {
+            name: "questions",
+            type: "AskQuestionItem[]",
+            required: true,
+            description: "The same questions the answer was collected for.",
+          },
+          {
+            name: "result",
+            type: "AskQuestionResult",
+            required: true,
+            description:
+              "Settled answer. skipped: true renders the one-line skipped note instead.",
+          },
+          {
+            name: "hideOther",
+            type: "boolean",
+            default: "false",
+            description: "Match the AskQuestion setting so labels resolve.",
+          },
           { name: "className", type: "string", description: "Merged last." },
         ],
       },
     ],
     dataSlots: [
       { slot: "ask-question", description: "The questionnaire card." },
+      { slot: "ask-question-trigger", description: "Collapsible header row." },
+      { slot: "ask-question-form", description: "The form body." },
+      { slot: "ask-question-item", description: "One question fieldset." },
+      { slot: "ask-question-prompt", description: "The question legend." },
+      {
+        slot: "ask-question-group",
+        description: (
+          <>
+            The <DocsCode>radiogroup</DocsCode> (or checkbox{" "}
+            <DocsCode>group</DocsCode>) wrapping one question&apos;s options.
+          </>
+        ),
+      },
+      {
+        slot: "ask-question-option",
+        description: (
+          <>
+            One option button. Carries <DocsCode>data-selected</DocsCode> and{" "}
+            <DocsCode>data-state</DocsCode> —{" "}
+            <DocsCode>checked</DocsCode>/<DocsCode>unchecked</DocsCode>.
+          </>
+        ),
+      },
+      {
+        slot: "ask-question-indicator",
+        description: "The radio dot or checkbox tick.",
+      },
+      { slot: "ask-question-other", description: "The Other… text field." },
+      { slot: "ask-question-actions", description: "The button row." },
+      { slot: "ask-question-skip", description: "Skip button." },
+      { slot: "ask-question-submit", description: "Continue button." },
       {
         slot: "ask-question-summary",
-        description: "Read-only recap after Skip or Continue.",
+        description: (
+          <>
+            Read-only recap after Skip or Continue.{" "}
+            <DocsCode>data-state</DocsCode> is{" "}
+            <DocsCode>answered</DocsCode> or <DocsCode>skipped</DocsCode>.
+          </>
+        ),
       },
     ],
     customization: [
+      {
+        title: "Restyle the selected option",
+        description: (
+          <>
+            Every option stamps its own state, so a wrapper can theme selection
+            without forking the component.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<div
+  className="[&_[data-slot=ask-question-option][data-selected=true]]:bg-primary/10
+             [&_[data-slot=ask-question-submit]]:rounded-full"
+>
+  <AskQuestion questions={questions} onSubmit={save} />
+</div>`,
+        },
+      },
       {
         title: "Render it from a tool call",
         description: (
@@ -816,6 +962,19 @@ export function Clarify() {
             JSON. <DocsCode>allow_multiple</DocsCode> and{" "}
             <DocsCode>allowMultiple</DocsCode> both work. Continue stays disabled
             until every question has at least one option.
+          </>
+        ),
+      },
+      {
+        title: "Keyboard",
+        description: (
+          <>
+            A single-select question is a real{" "}
+            <DocsCode>radiogroup</DocsCode>: one tab stop, arrow keys move and
+            select. Multi-select questions are{" "}
+            <DocsCode>checkbox</DocsCode> buttons and each is its own tab stop.
+            Picking Other… with the pointer focuses its text field; arrowing
+            onto it does not, so the group stays navigable.
           </>
         ),
       },
@@ -977,12 +1136,12 @@ export function AfterTurn() {
           },
           {
             name: "title",
-            type: "string",
+            type: "React.ReactNode",
             description: 'Defaults to “N Files Changed”.',
           },
           {
             name: "actionLabel",
-            type: "string",
+            type: "React.ReactNode",
             default: '"Review"',
             description: "Right-aligned header label.",
           },
@@ -1015,10 +1174,40 @@ export function AfterTurn() {
       },
     ],
     dataSlots: [
-      { slot: "change-summary", description: "The card." },
+      {
+        slot: "change-summary",
+        description: (
+          <>
+            The card. <DocsCode>data-state</DocsCode> is{" "}
+            <DocsCode>collapsed</DocsCode> while rows are still hidden.
+          </>
+        ),
+      },
       { slot: "change-summary-header", description: "Title + Review." },
+      {
+        slot: "change-summary-action",
+        description: "The Review button, or its plain-text stand-in.",
+      },
       { slot: "change-summary-list", description: "Visible file rows." },
-      { slot: "change-summary-file", description: "One file row." },
+      {
+        slot: "change-summary-rest",
+        description: "Rows revealed by “Show N more”.",
+      },
+      {
+        slot: "change-summary-file",
+        description: (
+          <>
+            One file row, tagged <DocsCode>data-kind</DocsCode> —{" "}
+            <DocsCode>code</DocsCode>, <DocsCode>style</DocsCode>,{" "}
+            <DocsCode>data</DocsCode>, <DocsCode>text</DocsCode>.
+          </>
+        ),
+      },
+      {
+        slot: "change-summary-file-icon",
+        description: "The per-kind glyph on a row.",
+      },
+      { slot: "change-summary-stats", description: "The +/- counts on a row." },
       { slot: "change-summary-more", description: "Show N more / Show less." },
       { slot: "worked-for", description: "The elapsed-time badge." },
     ],
@@ -1039,6 +1228,25 @@ export function AfterTurn() {
           code: `import { fileChangesFromTools } from "@/components/ui/change-summary"
 
 <ChangeSummary files={fileChangesFromTools(tools)} />`,
+        },
+      },
+      {
+        title: "Colour the file kinds",
+        description: (
+          <>
+            Rows ship on theme tokens so the card survives a re-themed
+            light/dark pair — the kind reads from the icon. Each row still
+            tags itself with <DocsCode>data-kind</DocsCode>, so opt into colour
+            from the outside when you want it.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<ChangeSummary
+  files={files}
+  className="[&_[data-kind=code]_svg]:text-primary
+             [&_[data-kind=style]_svg]:text-muted-foreground/70"
+/>`,
         },
       },
     ],

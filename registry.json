@@ -154,7 +154,7 @@
       "type": "registry:ui",
       "title": "Ask Question",
       "description": "Cursor-style questionnaire: single- and multi-select questions, an Other… field, Skip and Continue.",
-      "dependencies": ["lucide-react"],
+      "dependencies": ["lucide-react", "class-variance-authority"],
       "registryDependencies": ["collapsible"],
       "files": [
         {

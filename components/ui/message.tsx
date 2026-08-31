@@ -301,15 +301,13 @@ export const Message = React.memo(function Message({
         {parts && parts.length > 0 ? (
           parts.map((part, index) => {
             if (part.type === "tool") {
+              // onAskAnswer is forwarded as-is: MessageToolCall reports its
+              // own id, so a stable handler keeps every row memoized.
               return (
                 <MessageToolCall
                   key={part.id}
                   tool={part.tool}
-                  onAskAnswer={
-                    onAskAnswer
-                      ? (result) => onAskAnswer(part.tool.id, result)
-                      : undefined
-                  }
+                  onAskAnswer={onAskAnswer}
                 />
               )
             }
