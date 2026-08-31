@@ -16,6 +16,20 @@
       ]
     },
     {
+      "name": "change-summary",
+      "type": "registry:ui",
+      "title": "Change Summary",
+      "description": "Collapsed files-changed card with +/- stats, a Review action, and a WorkedFor elapsed-time badge.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["collapsible"],
+      "files": [
+        {
+          "path": "components/ui/change-summary.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "generation-status",
       "type": "registry:ui",
       "title": "Generation Status",
@@ -136,14 +150,29 @@
       "docs": "Add Tailwind v4 sources so Streamdown utilities are generated, then transpile the packages in Next.js.\n\n```css\n@source \"../node_modules/streamdown/dist/*.js\";\n@source \"../node_modules/@streamdown/code/dist/*.js\";\n@source \"../node_modules/@streamdown/mermaid/dist/*.js\";\n@source \"../node_modules/@streamdown/math/dist/*.js\";\n```\n\n```js\ntranspilePackages: [\"streamdown\", \"@streamdown/code\", \"@streamdown/mermaid\", \"@streamdown/math\", \"mermaid\"]\n```"
     },
     {
+      "name": "ask-question",
+      "type": "registry:ui",
+      "title": "Ask Question",
+      "description": "Cursor-style questionnaire: single- and multi-select questions, an Other… field, Skip and Continue.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["collapsible"],
+      "files": [
+        {
+          "path": "components/ui/ask-question.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "message-parts",
       "type": "registry:ui",
       "title": "Message Parts",
-      "description": "Atomic assistant parts: reasoning, tool calls, highlighted code, and artifacts.",
-      "dependencies": ["lucide-react", "shiki", "next-themes"],
+      "description": "Atomic assistant parts: reasoning, tool calls, ask questions, highlighted code, and artifacts.",
+      "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
       "registryDependencies": [
         "collapsible",
-        "miskibin/chat-components/message-markdown"
+        "miskibin/chat-components/message-markdown",
+        "miskibin/chat-components/ask-question"
       ],
       "files": [
         {
@@ -156,9 +185,12 @@
       "name": "message",
       "type": "registry:ui",
       "title": "Message",
-      "description": "Memoized user bubble and assistant message with reasoning, tools, code, and artifacts.",
+      "description": "Memoized user bubble and assistant message with reasoning, tools, ask questions, code, artifacts, and a post-turn change summary.",
       "dependencies": ["lucide-react"],
-      "registryDependencies": ["miskibin/chat-components/message-parts"],
+      "registryDependencies": [
+        "miskibin/chat-components/message-parts",
+        "miskibin/chat-components/change-summary"
+      ],
       "files": [
         {
           "path": "components/ui/message.tsx",
@@ -274,6 +306,10 @@
         {
           "path": "components/chat.tsx",
           "type": "registry:block"
+        },
+        {
+          "path": "lib/layout-transition.ts",
+          "type": "registry:lib"
         }
       ]
     }

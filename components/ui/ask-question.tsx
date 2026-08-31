@@ -1,0 +1,549 @@
+"use client"
+
+import { Check, ChevronDown, CircleHelp } from "lucide-react"
+import * as React from "react"
+
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { cn } from "@/lib/utils"
+
+export const ASK_OTHER_ID = "other"
+
+export type AskQuestionOption = {
+  id: string
+  label: string
+}
+
+export type AskQuestionItem = {
+  id: string
+  prompt: string
+  options: AskQuestionOption[]
+  allowMultiple?: boolean
+}
+
+export type AskQuestionSelection = {
+  optionIds: string[]
+  other?: string
+}
+
+export type AskQuestionResult = {
+  skipped: boolean
+  answers: Record<string, AskQuestionSelection>
+}
+
+export type AskQuestionProps = {
+  title?: string
+  questions: AskQuestionItem[]
+  /** Controlled selections keyed by question id. */
+  value?: Record<string, AskQuestionSelection>
+  defaultValue?: Record<string, AskQuestionSelection>
+  onChange?: (value: Record<string, AskQuestionSelection>) => void
+  onSubmit?: (result: AskQuestionResult) => void
+  onSkip?: () => void
+  /** Hide the built-in Other… option on every question. */
+  hideOther?: boolean
+  disabled?: boolean
+  defaultOpen?: boolean
+  className?: string
+}
+
+const EMPTY_SELECTION: AskQuestionSelection = { optionIds: [] }
+
+function optionLabel(option: AskQuestionOption) {
+  return option.label.replace(/\s*\(Recommended\)\s*$/i, "")
+}
+
+function isRecommended(option: AskQuestionOption) {
+  return /\(Recommended\)\s*$/i.test(option.label)
+}
+
+function withOther(question: AskQuestionItem, hideOther: boolean): AskQuestionOption[] {
+  if (hideOther) return question.options
+  const hasOther = question.options.some(
+    (option) =>
+      option.id === ASK_OTHER_ID || /^other\b/i.test(option.label.trim())
+  )
+  if (hasOther) return question.options
+  return [...question.options, { id: ASK_OTHER_ID, label: "Other…" }]
+}
+
+function isAnswered(selection: AskQuestionSelection | undefined) {
+  return (selection?.optionIds.length ?? 0) > 0
+}
+
+function selectionsComplete(
+  questions: AskQuestionItem[],
+  value: Record<string, AskQuestionSelection>
+) {
+  return questions.every((question) => isAnswered(value[question.id]))
+}
+
+export function isAskToolName(name: string) {
+  const kind = name.replace(/[\s_-]+/g, "").toLowerCase()
+  return (
+    kind === "askquestion" ||
+    kind === "ask" ||
+    kind === "askuser" ||
+    kind === "askuserquestion" ||
+    kind === "questions"
+  )
+}
+
+export function isPendingAskTool(tool: {
+  name: string
+  status?: string
+}) {
+  return (
+    isAskToolName(tool.name) &&
+    (tool.status === "pending" || tool.status === "running")
+  )
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function parseOptions(value: unknown): AskQuestionOption[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item, index) => {
+    if (typeof item === "string" && item.trim()) {
+      return [{ id: `opt-${index}`, label: item.trim() }]
+    }
+    const record = asRecord(item)
+    if (!record) return []
+    const label =
+      typeof record.label === "string"
+        ? record.label
+        : typeof record.title === "string"
+          ? record.title
+          : typeof record.text === "string"
+            ? record.text
+            : ""
+    if (!label.trim()) return []
+    const id =
+      typeof record.id === "string" && record.id.trim()
+        ? record.id
+        : `opt-${index}`
+    return [{ id, label: label.trim() }]
+  })
+}
+
+function parseQuestions(value: unknown): AskQuestionItem[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item, index) => {
+    const record = asRecord(item)
+    if (!record) return []
+    const prompt =
+      typeof record.prompt === "string"
+        ? record.prompt
+        : typeof record.question === "string"
+          ? record.question
+          : typeof record.text === "string"
+            ? record.text
+            : ""
+    const options = parseOptions(record.options)
+    if (!prompt.trim() || options.length < 2) return []
+    const id =
+      typeof record.id === "string" && record.id.trim()
+        ? record.id
+        : `q-${index}`
+    const allowMultiple = Boolean(
+      record.allowMultiple ?? record.allow_multiple
+    )
+    return [{ id, prompt: prompt.trim(), options, allowMultiple }]
+  })
+}
+
+/** Read Cursor AskQuestion tool args (`title` + `questions`) from a JSON string. */
+export function parseAskQuestionInput(input?: string): {
+  title?: string
+  questions: AskQuestionItem[]
+} | null {
+  if (!input?.trim()) return null
+  try {
+    const value = JSON.parse(input) as unknown
+    const record = asRecord(value)
+    const questions = parseQuestions(
+      Array.isArray(value) ? value : record?.questions
+    )
+    if (questions.length === 0) return null
+    const title =
+      typeof record?.title === "string" && record.title.trim()
+        ? record.title.trim()
+        : undefined
+    return { title, questions }
+  } catch {
+    return null
+  }
+}
+
+export function parseAskQuestionResult(
+  output?: string
+): AskQuestionResult | null {
+  if (!output?.trim()) return null
+  if (/skip/i.test(output) && !output.trim().startsWith("{")) {
+    return { skipped: true, answers: {} }
+  }
+  try {
+    const value = JSON.parse(output) as unknown
+    const record = asRecord(value)
+    if (!record) return null
+    if (record.skipped === true) {
+      return { skipped: true, answers: {} }
+    }
+    const answersRecord = asRecord(record.answers) ?? record
+    const answers: Record<string, AskQuestionSelection> = {}
+    for (const [key, item] of Object.entries(answersRecord)) {
+      if (key === "skipped") continue
+      if (Array.isArray(item)) {
+        answers[key] = {
+          optionIds: item.filter((id): id is string => typeof id === "string"),
+        }
+        continue
+      }
+      const entry = asRecord(item)
+      if (!entry) continue
+      const optionIds = Array.isArray(entry.optionIds)
+        ? entry.optionIds.filter((id): id is string => typeof id === "string")
+        : []
+      const other =
+        typeof entry.other === "string" && entry.other.trim()
+          ? entry.other
+          : undefined
+      if (optionIds.length > 0 || other) {
+        answers[key] = { optionIds, other }
+      }
+    }
+    return { skipped: false, answers }
+  } catch {
+    return null
+  }
+}
+
+export function formatAskQuestionOutput(result: AskQuestionResult) {
+  if (result.skipped) return "Questions skipped"
+  return JSON.stringify(result, null, 2)
+}
+
+function selectedLabels(
+  question: AskQuestionItem,
+  selection: AskQuestionSelection | undefined,
+  hideOther: boolean
+) {
+  if (!selection?.optionIds.length) return []
+  const options = withOther(question, hideOther)
+  return selection.optionIds.map((id) => {
+    if (id === ASK_OTHER_ID) {
+      return selection.other?.trim()
+        ? `Other: ${selection.other.trim()}`
+        : "Other"
+    }
+    return (
+      options.find((option) => option.id === id)?.label ?? id
+    )
+  })
+}
+
+function Indicator({
+  selected,
+  multiple,
+}: {
+  selected: boolean
+  multiple: boolean
+}) {
+  if (multiple) {
+    return (
+      <span
+        aria-hidden
+        className={cn(
+          "grid size-4 shrink-0 place-items-center rounded-[4px] border transition-colors",
+          selected
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-muted-foreground/40 bg-background"
+        )}
+      >
+        {selected ? <Check className="size-3" strokeWidth={3} /> : null}
+      </span>
+    )
+  }
+
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "grid size-4 shrink-0 place-items-center rounded-full border transition-colors",
+        selected ? "border-primary" : "border-muted-foreground/40"
+      )}
+    >
+      {selected ? <span className="size-2 rounded-full bg-primary" /> : null}
+    </span>
+  )
+}
+
+/**
+ * Cursor-style questionnaire: single-select radios, multi-select
+ * checkboxes, an Other… field, and Skip / Continue.
+ */
+export function AskQuestion({
+  title,
+  questions,
+  value: valueProp,
+  defaultValue,
+  onChange,
+  onSubmit,
+  onSkip,
+  hideOther = false,
+  disabled = false,
+  defaultOpen = true,
+  className,
+}: AskQuestionProps) {
+  const [open, setOpen] = React.useState(defaultOpen)
+  const [uncontrolled, setUncontrolled] = React.useState<
+    Record<string, AskQuestionSelection>
+  >(defaultValue ?? {})
+  const otherRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
+
+  const value = valueProp ?? uncontrolled
+  const setValue = React.useCallback(
+    (next: Record<string, AskQuestionSelection>) => {
+      if (valueProp === undefined) setUncontrolled(next)
+      onChange?.(next)
+    },
+    [onChange, valueProp]
+  )
+
+  const ready = selectionsComplete(questions, value)
+
+  const select = React.useCallback(
+    (question: AskQuestionItem, optionId: string) => {
+      if (disabled) return
+      const current = value[question.id] ?? EMPTY_SELECTION
+      let optionIds: string[]
+      if (question.allowMultiple) {
+        optionIds = current.optionIds.includes(optionId)
+          ? current.optionIds.filter((id) => id !== optionId)
+          : [...current.optionIds, optionId]
+      } else {
+        optionIds = [optionId]
+      }
+      const other =
+        optionIds.includes(ASK_OTHER_ID) ? current.other : undefined
+      setValue({
+        ...value,
+        [question.id]: { optionIds, other },
+      })
+      if (optionId === ASK_OTHER_ID) {
+        requestAnimationFrame(() => otherRefs.current[question.id]?.focus())
+      }
+    },
+    [disabled, setValue, value]
+  )
+
+  const setOther = React.useCallback(
+    (questionId: string, other: string) => {
+      if (disabled) return
+      const current = value[questionId] ?? EMPTY_SELECTION
+      const optionIds = current.optionIds.includes(ASK_OTHER_ID)
+        ? current.optionIds
+        : [...current.optionIds, ASK_OTHER_ID]
+      setValue({
+        ...value,
+        [questionId]: { optionIds, other },
+      })
+    },
+    [disabled, setValue, value]
+  )
+
+  const submit = React.useCallback(() => {
+    if (disabled || !ready) return
+    onSubmit?.({ skipped: false, answers: value })
+  }, [disabled, onSubmit, ready, value])
+
+  const skip = React.useCallback(() => {
+    if (disabled) return
+    if (onSkip) onSkip()
+    else onSubmit?.({ skipped: true, answers: {} })
+  }, [disabled, onSkip, onSubmit])
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      data-slot="ask-question"
+      data-disabled={disabled ? "true" : undefined}
+      className={cn(
+        "my-2 overflow-hidden rounded-xl border bg-card animate-in fade-in duration-150",
+        className
+      )}
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13px] text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
+        >
+          <CircleHelp className="size-3.5 opacity-70" />
+          <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+            {title || "Questions"}
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-3.5 opacity-50 transition-transform duration-150",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <form
+          className="border-t px-3.5 pt-3 pb-3.5"
+          onSubmit={(event) => {
+            event.preventDefault()
+            submit()
+          }}
+        >
+          <div className="flex flex-col gap-4">
+            {questions.map((question) => {
+              const options = withOther(question, hideOther)
+              const selection = value[question.id] ?? EMPTY_SELECTION
+              const promptId = `ask-${question.id}-prompt`
+              return (
+                <fieldset key={question.id} className="min-w-0">
+                  <legend
+                    id={promptId}
+                    className="mb-1.5 text-[13.5px] leading-snug font-medium text-foreground"
+                  >
+                    {question.prompt}
+                  </legend>
+                  <div
+                    role={question.allowMultiple ? "group" : "radiogroup"}
+                    aria-labelledby={promptId}
+                    className="flex flex-col gap-0.5"
+                  >
+                    {options.map((option) => {
+                      const selected = selection.optionIds.includes(option.id)
+                      const isOther = option.id === ASK_OTHER_ID
+                      return (
+                        <div key={option.id} className="min-w-0">
+                          <button
+                            type="button"
+                            role={question.allowMultiple ? "checkbox" : "radio"}
+                            aria-checked={selected}
+                            aria-label={optionLabel(option)}
+                            disabled={disabled}
+                            onClick={() => select(question, option.id)}
+                            className={cn(
+                              "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] leading-snug outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                              disabled
+                                ? "cursor-default"
+                                : "cursor-pointer hover:bg-muted",
+                              selected && "bg-muted/80"
+                            )}
+                          >
+                            <Indicator
+                              selected={selected}
+                              multiple={!!question.allowMultiple}
+                            />
+                            <span className="min-w-0 text-foreground">
+                              {optionLabel(option)}
+                              {isRecommended(option) ? (
+                                <span className="ml-1.5 text-[11px] font-medium text-muted-foreground">
+                                  Recommended
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                          {isOther && selected ? (
+                            <input
+                              ref={(node) => {
+                                otherRefs.current[question.id] = node
+                              }}
+                              value={selection.other ?? ""}
+                              disabled={disabled}
+                              onChange={(event) =>
+                                setOther(question.id, event.target.value)
+                              }
+                              placeholder="Type your answer"
+                              aria-label="Other answer"
+                              className="mt-1 mb-1 ml-8 w-[calc(100%-2rem)] rounded-md border bg-background px-2.5 py-1.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                            />
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </fieldset>
+              )
+            })}
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={skip}
+              className="h-8 rounded-md px-3 text-[13px] font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            >
+              Skip
+            </button>
+            <button
+              type="submit"
+              disabled={disabled || !ready}
+              className="h-8 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            >
+              Continue
+            </button>
+          </div>
+        </form>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+export function AskQuestionSummary({
+  questions,
+  result,
+  hideOther = false,
+  className,
+}: {
+  questions: AskQuestionItem[]
+  result: AskQuestionResult
+  hideOther?: boolean
+  className?: string
+}) {
+  if (result.skipped) {
+    return (
+      <p
+        data-slot="ask-question-summary"
+        className={cn("text-[13px] text-muted-foreground", className)}
+      >
+        Skipped — nothing was selected.
+      </p>
+    )
+  }
+
+  return (
+    <div
+      data-slot="ask-question-summary"
+      className={cn("flex flex-col gap-2 text-[13px] leading-snug", className)}
+    >
+      {questions.map((question) => {
+        const labels = selectedLabels(
+          question,
+          result.answers[question.id],
+          hideOther
+        )
+        return (
+          <div key={question.id}>
+            <div className="font-medium text-foreground">{question.prompt}</div>
+            <div className="mt-0.5 text-muted-foreground">
+              {labels.length > 0 ? labels.join(", ") : "No selection"}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

@@ -100,7 +100,7 @@ export default function ThemingPage() {
               name: "--font-sans / --font-mono",
               type: "font stack",
               description:
-                "UI text and every code surface, including highlighted snippets.",
+                "ChatGPT uses Klim’s Söhne (licensed). We ship Inter in that slot, then the same system fallbacks they use.",
             },
           ]}
         />

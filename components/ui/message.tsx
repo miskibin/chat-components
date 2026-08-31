@@ -13,6 +13,13 @@ import {
   type MessageCodeBlockData,
   type MessageToolCallData,
 } from "@/components/ui/message-parts"
+import type { AskQuestionResult } from "@/components/ui/ask-question"
+import {
+  ChangeSummary,
+  WorkedFor,
+  fileChangesFromTools,
+  type ChangeSummaryFile,
+} from "@/components/ui/change-summary"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
 
@@ -31,6 +38,7 @@ export type ActionButton = {
 }
 
 export type MessagePart =
+  | { type: "thinking"; id: string; text: string }
   | { type: "text"; id: string; text: string }
   | { type: "tool"; id: string; tool: MessageToolCallData }
 
@@ -49,12 +57,19 @@ export type MessageProps = {
   /** Shown as “Thought for N seconds” when set. */
   reasoningDuration?: number
   tools?: MessageToolCallData[]
-  /** Chronological text/tool segments. When set, replaces the tools-then-content layout. */
+  /** Chronological thinking / text / tool segments. When set, replaces the tools-then-content layout. */
   parts?: MessagePart[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
   /** True while this assistant message is still streaming. */
   isAnimating?: boolean
+  /** Called when an Ask Question tool on this turn is submitted or skipped. */
+  onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
+  /** Elapsed seconds — shown as “Worked for 12s” after the turn settles. */
+  workedFor?: number
+  /** Explicit file-change card. When omitted, Edit / Write tools are summarised. */
+  changes?: ChangeSummaryFile[]
+  onReviewChanges?: () => void
 }
 
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
@@ -102,6 +117,10 @@ export const Message = React.memo(function Message({
   codeBlocks = EMPTY_CODE_BLOCKS,
   artifacts = EMPTY_ARTIFACTS,
   isAnimating = false,
+  onAskAnswer,
+  workedFor,
+  changes,
+  onReviewChanges,
 }: MessageProps) {
   const [isEditing, setIsEditing] = React.useState(false)
   const [editedContent, setEditedContent] = React.useState(content)
@@ -140,6 +159,18 @@ export const Message = React.memo(function Message({
     setIsEditing(false)
     if (onEdit && editedContent !== content) onEdit(editedContent)
   }, [content, editedContent, onEdit])
+
+  const derivedChanges = React.useMemo(() => {
+    if (changes) return changes
+    const fromParts =
+      parts
+        ?.filter(
+          (part): part is Extract<MessagePart, { type: "tool" }> =>
+            part.type === "tool"
+        )
+        .map((part) => part.tool) ?? []
+    return fileChangesFromTools(fromParts.length > 0 ? fromParts : tools)
+  }, [changes, parts, tools])
 
   if (sender === "user") {
     if (isEditing) {
@@ -257,20 +288,47 @@ export const Message = React.memo(function Message({
           contentClassName
         )}
       >
-        {reasoning ? (
+        {reasoning && !parts?.some((part) => part.type === "thinking") ? (
           <MessageReasoning
             defaultOpen={reasoningDefaultOpen}
             duration={reasoningDuration}
+            streaming={isAnimating}
           >
             {reasoning}
           </MessageReasoning>
         ) : null}
 
         {parts && parts.length > 0 ? (
-          parts.map((part) =>
-            part.type === "tool" ? (
-              <MessageToolCall key={part.id} tool={part.tool} />
-            ) : part.text ? (
+          parts.map((part, index) => {
+            if (part.type === "tool") {
+              return (
+                <MessageToolCall
+                  key={part.id}
+                  tool={part.tool}
+                  onAskAnswer={
+                    onAskAnswer
+                      ? (result) => onAskAnswer(part.tool.id, result)
+                      : undefined
+                  }
+                />
+              )
+            }
+            if (part.type === "thinking") {
+              if (!part.text) return null
+              const isLatestThinking =
+                parts.findLastIndex((item) => item.type === "thinking") ===
+                index
+              return (
+                <MessageReasoning
+                  key={part.id}
+                  defaultOpen={reasoningDefaultOpen}
+                  streaming={isAnimating && isLatestThinking}
+                >
+                  {part.text}
+                </MessageReasoning>
+              )
+            }
+            return part.text ? (
               <MessageMarkdown
                 key={part.id}
                 isAnimating={isAnimating}
@@ -279,10 +337,12 @@ export const Message = React.memo(function Message({
                 {part.text}
               </MessageMarkdown>
             ) : null
-          )
+          })
         ) : (
           <>
-            {tools.length > 0 ? <MessageToolCalls tools={tools} /> : null}
+            {tools.length > 0 ? (
+              <MessageToolCalls tools={tools} onAskAnswer={onAskAnswer} />
+            ) : null}
             {displayContent ? (
               <MessageMarkdown
                 isAnimating={isAnimating}
@@ -301,6 +361,21 @@ export const Message = React.memo(function Message({
         {artifacts.map((artifact) => (
           <MessageArtifact key={artifact.id} artifact={artifact} />
         ))}
+
+        {!isAnimating && (workedFor != null || derivedChanges.length > 0) ? (
+          <div
+            data-slot="message-turn-summary"
+            className="mt-3 flex flex-col items-start gap-2.5"
+          >
+            {workedFor != null ? <WorkedFor seconds={workedFor} /> : null}
+            {derivedChanges.length > 0 ? (
+              <ChangeSummary
+                files={derivedChanges}
+                onAction={onReviewChanges}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         {insideButtons.length > 0 ||
         outsideButtons.length > 0 ||
@@ -342,6 +417,9 @@ export type {
   MessageCodeBlockData,
   MessageToolCallData,
 } from "@/components/ui/message-parts"
+export type { ChangeSummaryFile } from "@/components/ui/change-summary"
+export type { AskQuestionResult } from "@/components/ui/ask-question"
+export { ChangeSummary, WorkedFor } from "@/components/ui/change-summary"
 export {
   MessageArtifact,
   MessageCode,
@@ -349,3 +427,9 @@ export {
   MessageToolCall,
   MessageToolCalls,
 } from "@/components/ui/message-parts"
+export {
+  AskQuestion,
+  isAskToolName,
+  isPendingAskTool,
+  parseAskQuestionInput,
+} from "@/components/ui/ask-question"

@@ -64,6 +64,7 @@ type MockStep =
       output: string
       runMs?: number
     }
+  | { kind: "ask"; input: Record<string, unknown> }
 
 type Scenario = (topic: string) => MockStep[]
 
@@ -107,6 +108,15 @@ export async function* runMockAgent(
           : { type: "text", text: chunk }
         await sleep(randomInt(40, 115), signal)
       }
+      continue
+    }
+
+    if (step.kind === "ask") {
+      const id = `${sessionId}-tool-${++toolSeq}`
+      const input = JSON.stringify(step.input, null, 2)
+      await sleep(randomInt(120, 320), signal)
+      if (signal?.aborted) return
+      yield { type: "tool", id, name: "Ask Question", status: "running", input }
       continue
     }
 
@@ -196,12 +206,29 @@ function streamingScenario(topic: string): MockStep[] {
       name: "Edit",
       input: {
         path: "components/ui/message-parts.tsx",
-        instructions: "Keep tool parts stable while text chunks stream in",
+        // Matches cursor-agent after it folds result.success.diffString → args.diff.
+        diff: [
+          "--- a/components/ui/message-parts.tsx",
+          "+++ b/components/ui/message-parts.tsx",
+          "@@ -220,1 +220,3 @@",
+          "-const hasBody = !!(tool.input || tool.output)",
+          "+const diff = extractToolDiff(tool)",
+          "+const showDiff = !!diff?.length",
+          "+const hasBody = showDiff || !!(tool.input || tool.output)",
+        ].join("\n"),
       },
       status: "done",
-      output: "components/ui/message-parts.tsx · +18 −4",
+      output: "+3 −1",
     },
     { kind: "pause", ms: 240 },
+    {
+      kind: "thinking",
+      text: [
+        "The edit landed. Ordered parts are what keep a later thought from",
+        "gluing onto the first reasoning block — thinking, tool, thinking stay",
+        "as three spans. I'll write that up next.",
+      ].join(" "),
+    },
     {
       kind: "text",
       text: [
@@ -216,6 +243,7 @@ function streamingScenario(topic: string): MockStep[] {
         "",
         "```ts",
         "type MessagePart =",
+        '  | { type: "thinking"; id: string; text: string }',
         '  | { type: "text"; id: string; text: string }',
         '  | { type: "tool"; id: string; tool: MessageToolCallData }',
         "",
@@ -401,10 +429,16 @@ function composerScenario(topic: string): MockStep[] {
       name: "Edit",
       input: {
         path: "app/demo/page.tsx",
-        instructions: "Drop the speculative attachments field, keep the file note",
+        diff: [
+          "--- a/app/demo/page.tsx",
+          "+++ b/app/demo/page.tsx",
+          "@@ -1,1 +1,1 @@",
+          "-attachments: payload.files,",
+          "+// Files ride along in the prompt note instead.",
+        ].join("\n"),
       },
       status: "done",
-      output: "app/demo/page.tsx · +3 −11",
+      output: "+1 −1",
     },
     { kind: "pause", ms: 240 },
     {
@@ -449,12 +483,108 @@ function composerScenario(topic: string): MockStep[] {
   ]
 }
 
+function askScenario(): MockStep[] {
+  return [
+    {
+      kind: "thinking",
+      text: [
+        "The user is testing the UI and wants to use the ask tool.",
+        "I'll use the AskQuestion tool to demonstrate the Ask UI component.",
+      ].join(" "),
+    },
+    { kind: "text", text: "Using the ask tool so you can try the UI.\n\n" },
+    {
+      kind: "ask",
+      input: {
+        title: "A couple of questions",
+        questions: [
+          {
+            id: "next",
+            prompt: "What would you like to test next?",
+            options: [
+              { id: "options", label: "Different options (Recommended)" },
+              { id: "one", label: "One question only" },
+              { id: "prompt", label: "A specific prompt" },
+            ],
+          },
+          {
+            id: "focus",
+            prompt: "Which areas should we focus on?",
+            allow_multiple: true,
+            options: [
+              { id: "layout", label: "Layout" },
+              { id: "keyboard", label: "Keyboard" },
+              { id: "multi", label: "Multi-select" },
+            ],
+          },
+        ],
+      },
+    },
+  ]
+}
+
+function askFollowUpScenario(topic: string): MockStep[] {
+  const skipped = /skipped/i.test(topic)
+  let recap = topic
+  if (!skipped) {
+    try {
+      recap = JSON.stringify(JSON.parse(topic), null, 2)
+    } catch {
+      /* keep raw */
+    }
+  }
+  return [
+    {
+      kind: "thinking",
+      text: skipped
+        ? [
+            "The user skipped the questions.",
+            "I'll let them know they can ask me to fire the ask tool again with different prompts whenever they want to keep testing.",
+          ].join(" ")
+        : [
+            "The user answered the questions.",
+            "I'll recap what they picked and offer to run the questionnaire again.",
+          ].join(" "),
+    },
+    {
+      kind: "text",
+      text: skipped
+        ? [
+            "The ask tool ran with two questions (single-select **What would you like to test next?** and multi-select **Which areas should we focus on?**). You skipped it, so nothing was selected.",
+            "",
+            "If you want to keep testing the UI, say what you'd like — e.g. different options, one question only, or a specific prompt — and I'll trigger it again.",
+            "",
+            MOCK_NOTE,
+            "",
+          ].join("\n")
+        : [
+            "Got it — I recorded your answers from the questionnaire.",
+            "",
+            "```json",
+            recap,
+            "```",
+            "",
+            "Say the word if you want another round with different prompts.",
+            "",
+            MOCK_NOTE,
+            "",
+          ].join("\n"),
+    },
+  ]
+}
+
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 
 function pickScenario(prompt: string): Scenario {
   const lower = prompt.toLowerCase()
+  if (/^askquestion result:/i.test(prompt.trim())) {
+    return askFollowUpScenario
+  }
+  if (/\bask(\s+tool)?\b|askquestion|questions panel/i.test(lower)) {
+    return askScenario
+  }
   if (/(theme|color|token|dark mode|css|style|registry)/.test(lower)) {
     return themingScenario
   }
@@ -475,6 +605,8 @@ function extractTopic(prompt: string): string {
     .replace(/\s+/g, " ")
     .trim()
   if (!cleaned) return "this codebase"
+  const askResult = cleaned.match(/^AskQuestion result:\s*([\s\S]+)$/i)
+  if (askResult) return askResult[1].trim() || "skipped"
   const firstSentence = cleaned.split(/[.?!]\s/)[0] ?? cleaned
   const trimmed = firstSentence.replace(/[.?!]+$/, "")
   return trimmed.length > 72 ? `${trimmed.slice(0, 71)}…` : trimmed

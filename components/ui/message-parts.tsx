@@ -1,5 +1,6 @@
 "use client"
 
+import { diffLines, diffWords, type Change } from "diff"
 import {
   Brain,
   Check,
@@ -18,6 +19,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import {
+  AskQuestion,
+  AskQuestionSummary,
+  formatAskQuestionOutput,
+  isAskToolName,
+  isPendingAskTool,
+  parseAskQuestionInput,
+  parseAskQuestionResult,
+  type AskQuestionResult,
+} from "@/components/ui/ask-question"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
 
@@ -52,14 +63,23 @@ export function MessageReasoning({
   children,
   defaultOpen = false,
   duration,
+  streaming = false,
   className,
 }: {
   children: string
   defaultOpen?: boolean
   duration?: number
+  /** Keep the body open while this thought is still streaming in. */
+  streaming?: boolean
   className?: string
 }) {
-  const [open, setOpen] = React.useState(defaultOpen)
+  const [open, setOpen] = React.useState(defaultOpen || streaming)
+
+  React.useEffect(() => {
+    if (streaming) setOpen(true)
+    else if (!defaultOpen) setOpen(false)
+  }, [streaming, defaultOpen])
+
   const label =
     duration == null
       ? "Thought for a few seconds"
@@ -85,8 +105,10 @@ export function MessageReasoning({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-2 border-l pl-3 text-[13px] leading-relaxed text-muted-foreground">
-          <MessageMarkdown>{children}</MessageMarkdown>
+        <div className="mt-2 border-l pl-3 text-[13px] leading-relaxed opacity-60">
+          <MessageMarkdown className="text-inherit! text-[13px]! leading-relaxed!">
+            {children}
+          </MessageMarkdown>
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -163,7 +185,8 @@ function toolHeadline(tool: MessageToolCallData) {
   if (
     kind.includes("edit") ||
     kind.includes("applypatch") ||
-    kind.includes("searchreplace")
+    kind.includes("searchreplace") ||
+    kind.includes("strreplace")
   ) {
     return {
       label: failed ? "Couldn’t edit" : running ? "Editing file" : "Edited file",
@@ -200,170 +223,346 @@ function toolHeadline(tool: MessageToolCallData) {
       detail: path ? fileName(path) : undefined,
     }
   }
+  if (isAskToolName(tool.name)) {
+    return {
+      label: failed ? "Failed" : running ? "Asking" : "Done",
+      detail: "Ask Question",
+    }
+  }
   return {
     label: failed ? "Failed" : running ? "Working" : "Done",
     detail: tool.name,
   }
 }
 
-/** Single Cursor-style tool row — no card chrome. */
-export const MessageToolCall = React.memo(function MessageToolCall({
-  tool,
-  defaultOpen = false,
-  className,
-}: {
-  tool: MessageToolCallData
-  defaultOpen?: boolean
-  className?: string
-}) {
-  const [open, setOpen] = React.useState(defaultOpen)
-  const status = tool.status ?? "done"
-  const running = status === "running" || status === "pending"
-  const errored = status === "error"
-  const hasBody = !!(tool.input || tool.output)
-  const headline = toolHeadline(tool)
-  const inlineOutput =
-    !open &&
-    tool.output &&
-    tool.output.length < 28 &&
-    !tool.output.includes("\n")
-      ? tool.output
-      : null
+type DiffSegment = { text: string; highlight: boolean }
 
+type ToolDiffLine = {
+  type: "add" | "remove" | "context"
+  text: string
+  oldLine?: number
+  newLine?: number
+  segments?: DiffSegment[]
+}
+
+function asRawString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined
+}
+
+function isFileMutationTool(name: string) {
+  const kind = name.replace(/\s+/g, "").toLowerCase()
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      data-slot="message-tool-call"
-      data-status={status}
-      className={cn("group animate-in fade-in duration-150", className)}
-    >
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          disabled={!hasBody}
-          className={cn(
-            disclosureTrigger,
-            "py-[3px]",
-            hasBody ? "cursor-pointer" : "cursor-default hover:text-muted-foreground"
-          )}
-        >
-          {running ? (
-            <Loader2 className="size-3 animate-spin opacity-70" />
-          ) : errored ? (
-            <TriangleAlert className="size-3 text-destructive" />
-          ) : null}
-          <span className="shrink-0">{headline.label}</span>
-          {headline.detail ? (
-            <span
-              className={cn(
-                "min-w-0 truncate font-mono text-[12px] font-medium",
-                errored ? "text-destructive" : "text-foreground/90"
-              )}
-              title={headline.detail}
-            >
-              {headline.detail}
-            </span>
-          ) : null}
-          {inlineOutput ? (
-            <span
-              className={cn(
-                "shrink-0 text-[12px]",
-                inlineOutput.startsWith("+")
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-muted-foreground"
-              )}
-            >
-              {inlineOutput}
-            </span>
-          ) : null}
-          {hasBody ? (
-            <ChevronDown
-              className={cn(
-                "size-3 opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-40",
-                open && "rotate-180 opacity-40"
-              )}
-            />
-          ) : null}
-        </button>
-      </CollapsibleTrigger>
-      {hasBody ? (
-        <CollapsibleContent>
-          <div className="mb-1.5 ml-0.5 space-y-1.5 border-l pl-3">
-            {tool.input ? (
-              <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
-                {tool.input}
-              </pre>
-            ) : null}
-            {tool.output ? (
-              <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
-                {tool.output}
-              </pre>
-            ) : null}
-          </div>
-        </CollapsibleContent>
-      ) : null}
-    </Collapsible>
+    kind.includes("write") ||
+    kind.includes("createfile") ||
+    kind.includes("edit") ||
+    kind.includes("applypatch") ||
+    kind.includes("searchreplace") ||
+    kind.includes("strreplace")
   )
-})
+}
 
-/** Stack of minimal tool rows; collapses behind “Used N tools” when many. */
-export function MessageToolCalls({
-  tools,
-  className,
-  collapseAt = 3,
-  defaultOpen,
-}: {
-  tools: MessageToolCallData[]
-  className?: string
-  /** Collapse the list behind a summary when tool count ≥ this. */
-  collapseAt?: number
-  defaultOpen?: boolean
-}) {
-  const many = tools.length >= collapseAt
-  const [open, setOpen] = React.useState(defaultOpen ?? !many)
+function isReadTool(name: string) {
+  const kind = name.replace(/\s+/g, "").toLowerCase()
+  return kind.includes("read") && !kind.includes("thread")
+}
 
-  if (tools.length === 0) return null
+function asPositiveInt(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value)
+  }
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    const n = Number(value.trim())
+    return n > 0 ? n : undefined
+  }
+  return undefined
+}
 
-  const list = (
-    <div className="flex flex-col">
-      {tools.map((tool) => (
-        <MessageToolCall key={tool.id} tool={tool} />
-      ))}
-    </div>
-  )
+/** Pull file body out of a Read tool's output (`N lines\\n…` or raw text). */
+function extractReadFile(
+  tool: MessageToolCallData
+): { content: string; lineCount?: number; startLine: number } | null {
+  if (!isReadTool(tool.name) || tool.status === "error") return null
+  const output = tool.output?.replace(/\r\n/g, "\n")
+  if (!output?.trim()) return null
 
-  if (!many) {
-    return (
-      <div data-slot="message-tool-calls" className={cn("mb-3", className)}>
-        {list}
-      </div>
-    )
+  const args = parseToolArgs(tool.input)
+  const startLine = asPositiveInt(args.offset) ?? 1
+
+  const headed = output.match(/^(\d+)\s+lines?\n([\s\S]*)$/i)
+  if (headed) {
+    const body = headed[2]
+    if (!body.trim()) return null
+    return {
+      content: body.replace(/\n$/, ""),
+      lineCount: Number(headed[1]),
+      startLine,
+    }
   }
 
+  // Don't treat leftover JSON dumps as file content.
+  if (output.trimStart().startsWith("{")) return null
+  return { content: output.replace(/\n$/, ""), startLine }
+}
+
+function splitChangeLines(value: string): string[] {
+  const parts = value.split("\n")
+  if (parts.length > 0 && parts[parts.length - 1] === "") {
+    parts.pop()
+  }
+  return parts
+}
+
+function wordSegments(
+  before: string,
+  after: string
+): { removed: DiffSegment[]; added: DiffSegment[] } {
+  const parts = diffWords(before, after)
+  return {
+    removed: parts
+      .filter((part) => !part.added)
+      .map((part) => ({ text: part.value, highlight: !!part.removed })),
+    added: parts
+      .filter((part) => !part.removed)
+      .map((part) => ({ text: part.value, highlight: !!part.added })),
+  }
+}
+
+function buildDiffLines(oldText: string, newText: string): ToolDiffLine[] {
+  const changes = diffLines(oldText, newText) as Change[]
+  const lines: ToolDiffLine[] = []
+  let oldLine = 1
+  let newLine = 1
+
+  for (let i = 0; i < changes.length; i++) {
+    const change = changes[i]
+    const next = changes[i + 1]
+
+    if (change.removed && next?.added) {
+      const removedLines = splitChangeLines(change.value)
+      const addedLines = splitChangeLines(next.value)
+      const count = Math.max(removedLines.length, addedLines.length)
+      for (let j = 0; j < count; j++) {
+        const rem = removedLines[j]
+        const add = addedLines[j]
+        if (rem !== undefined && add !== undefined) {
+          const segments = wordSegments(rem, add)
+          lines.push({
+            type: "remove",
+            text: rem,
+            oldLine: oldLine++,
+            segments: segments.removed,
+          })
+          lines.push({
+            type: "add",
+            text: add,
+            newLine: newLine++,
+            segments: segments.added,
+          })
+        } else if (rem !== undefined) {
+          lines.push({ type: "remove", text: rem, oldLine: oldLine++ })
+        } else if (add !== undefined) {
+          lines.push({ type: "add", text: add, newLine: newLine++ })
+        }
+      }
+      i++
+      continue
+    }
+
+    const chunkLines = splitChangeLines(change.value)
+    for (const text of chunkLines) {
+      if (change.added) {
+        lines.push({ type: "add", text, newLine: newLine++ })
+      } else if (change.removed) {
+        lines.push({ type: "remove", text, oldLine: oldLine++ })
+      } else {
+        lines.push({
+          type: "context",
+          text,
+          oldLine: oldLine++,
+          newLine: newLine++,
+        })
+      }
+    }
+  }
+
+  return lines
+}
+
+function looksLikeUnifiedPatch(text: string) {
+  return /^(diff --git |--- |\+\+\+ |@@ )/m.test(text)
+}
+
+function parseUnifiedPatch(patch: string): ToolDiffLine[] | null {
+  if (!looksLikeUnifiedPatch(patch)) return null
+  const lines: ToolDiffLine[] = []
+  let oldLine = 0
+  let newLine = 0
+
+  for (const raw of patch.split("\n")) {
+    if (raw.startsWith("@@")) {
+      const match = raw.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+      if (match) {
+        oldLine = Number(match[1])
+        newLine = Number(match[2])
+      }
+      continue
+    }
+    if (
+      raw.startsWith("diff ") ||
+      raw.startsWith("index ") ||
+      raw.startsWith("--- ") ||
+      raw.startsWith("+++ ")
+    ) {
+      continue
+    }
+    if (raw.startsWith("+")) {
+      lines.push({ type: "add", text: raw.slice(1), newLine: newLine++ })
+    } else if (raw.startsWith("-")) {
+      lines.push({ type: "remove", text: raw.slice(1), oldLine: oldLine++ })
+    } else if (raw.startsWith("\\")) {
+      continue
+    } else {
+      const text = raw.startsWith(" ") ? raw.slice(1) : raw
+      lines.push({
+        type: "context",
+        text,
+        oldLine: oldLine || undefined,
+        newLine: newLine || undefined,
+      })
+      if (oldLine) oldLine++
+      if (newLine) newLine++
+    }
+  }
+
+  return lines.length > 0 ? applyWordHighlights(lines) : null
+}
+
+/** Pair adjacent remove/add rows so changed tokens get Cursor-style chips. */
+function applyWordHighlights(lines: ToolDiffLine[]): ToolDiffLine[] {
+  const out: ToolDiffLine[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const next = lines[i + 1]
+    if (
+      line.type === "remove" &&
+      next?.type === "add" &&
+      !line.segments &&
+      !next.segments
+    ) {
+      const segments = wordSegments(line.text, next.text)
+      out.push({ ...line, segments: segments.removed })
+      out.push({ ...next, segments: segments.added })
+      i++
+      continue
+    }
+    out.push(line)
+  }
+  return out
+}
+
+/** Build a Cursor-style unified diff from Edit / Write / ApplyPatch tool args. */
+function extractToolDiff(tool: MessageToolCallData): ToolDiffLine[] | null {
+  if (!isFileMutationTool(tool.name)) return null
+  const args = parseToolArgs(tool.input)
+
+  // Cursor editToolCall result folds `diffString` into args.diff (see cursor-agent).
+  const patch =
+    asString(args.patch) ??
+    asString(args.diff) ??
+    (tool.output && looksLikeUnifiedPatch(tool.output) ? tool.output : undefined)
+  if (patch) {
+    const parsed = parseUnifiedPatch(patch)
+    if (parsed) return parsed
+  }
+
+  const oldText =
+    asRawString(args.old_string) ??
+    asRawString(args.oldString) ??
+    asRawString(args.old_str) ??
+    asRawString(args.oldText)
+  const newText =
+    asRawString(args.new_string) ??
+    asRawString(args.newString) ??
+    asRawString(args.new_str) ??
+    asRawString(args.newText)
+
+  if (oldText !== undefined && newText !== undefined) {
+    return buildDiffLines(oldText, newText)
+  }
+
+  // Cursor streams the after-file as streamContent; writeToolCall uses fileText.
+  const contents =
+    asRawString(args.contents) ??
+    asRawString(args.content) ??
+    asRawString(args.file_text) ??
+    asRawString(args.fileText) ??
+    asRawString(args.streamContent)
+
+  if (contents !== undefined && oldText === undefined) {
+    return buildDiffLines("", contents)
+  }
+
+  return null
+}
+
+function formatDiffStats(lines: ToolDiffLine[]) {
+  let added = 0
+  let removed = 0
+  for (const line of lines) {
+    if (line.type === "add") added++
+    else if (line.type === "remove") removed++
+  }
+  return { added, removed }
+}
+
+function DiffStats({
+  added,
+  removed,
+  className,
+}: {
+  added: number
+  removed: number
+  className?: string
+}) {
+  if (added === 0 && removed === 0) return null
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      data-slot="message-tool-calls"
-      className={cn("mb-3 animate-in fade-in duration-150", className)}
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 font-mono text-[12px] tabular-nums",
+        className
+      )}
     >
-      <CollapsibleTrigger asChild>
-        <button type="button" className={cn(disclosureTrigger, "w-full")}>
-          <span>
-            Used {tools.length} tool{tools.length === 1 ? "" : "s"}
-          </span>
-          <ChevronDown
-            className={cn(
-              "size-3.5 opacity-50 transition-transform duration-150",
-              open && "rotate-180"
-            )}
-          />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>{list}</CollapsibleContent>
-    </Collapsible>
+      {added > 0 ? (
+        <span className="text-emerald-600 dark:text-emerald-400">+{added}</span>
+      ) : null}
+      {removed > 0 ? (
+        <span className="text-red-500 dark:text-red-400">-{removed}</span>
+      ) : null}
+    </span>
   )
+}
+
+function langFromPath(path?: string) {
+  if (!path) return undefined
+  const base = path.split(/[\\/]/).pop() ?? path
+  const ext = base.includes(".") ? base.split(".").pop()?.toLowerCase() : undefined
+  if (!ext) return undefined
+  if (ext === "ts") return "ts"
+  if (ext === "tsx") return "tsx"
+  if (ext === "js" || ext === "mjs" || ext === "cjs") return "js"
+  if (ext === "jsx") return "jsx"
+  if (ext === "json") return "json"
+  if (ext === "css") return "css"
+  if (ext === "html") return "html"
+  if (ext === "md" || ext === "mdx") return "markdown"
+  if (ext === "py") return "py"
+  if (ext === "rs") return "rust"
+  if (ext === "go") return "go"
+  if (ext === "yml" || ext === "yaml") return "yaml"
+  if (ext === "toml") return "toml"
+  if (ext === "sql") return "sql"
+  if (ext === "sh" || ext === "bash") return "bash"
+  return undefined
 }
 
 const SHIKI_LANGS = new Set([
@@ -412,25 +611,436 @@ function normalizeLang(lang?: string) {
  */
 let shikiModule: Promise<typeof import("shiki")> | null = null
 const highlightCache = new Map<string, string>()
-const HIGHLIGHT_CACHE_MAX = 100
+const HIGHLIGHT_CACHE_MAX = 200
 
 function loadShiki() {
   shikiModule ??= import("shiki")
   return shikiModule
 }
 
-async function highlight(code: string, lang: string, theme: string) {
-  const key = `${theme} ${lang} ${code}`
+async function highlight(
+  code: string,
+  lang: string,
+  theme: string,
+  structure: "classic" | "inline" = "classic"
+) {
+  const key = `${theme}\0${lang}\0${structure}\0${code}`
   const cached = highlightCache.get(key)
   if (cached !== undefined) return cached
   const { codeToHtml } = await loadShiki()
-  const html = await codeToHtml(code, { lang, theme })
+  const html = await codeToHtml(code, {
+    lang,
+    theme,
+    ...(structure === "inline" ? { structure: "inline" as const } : {}),
+  })
   if (highlightCache.size >= HIGHLIGHT_CACHE_MAX) {
     const oldest = highlightCache.keys().next().value
     if (oldest !== undefined) highlightCache.delete(oldest)
   }
   highlightCache.set(key, html)
   return html
+}
+
+function InlineDiffCode({
+  code,
+  language,
+}: {
+  code: string
+  language?: string
+}) {
+  const { resolvedTheme } = useTheme()
+  const lang = normalizeLang(language)
+  const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
+  const cacheKey = `${theme}\0${lang}\0inline\0${code}`
+  const [html, setHtml] = React.useState<string | null>(
+    () => highlightCache.get(cacheKey) ?? null
+  )
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!code) {
+      setHtml(null)
+      return
+    }
+    highlight(code, lang, theme, "inline")
+      .then((out) => {
+        if (!cancelled) setHtml(out)
+      })
+      .catch(() => {
+        if (!cancelled) setHtml(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [code, lang, theme])
+
+  if (!html) {
+    return <>{code || "\u00a0"}</>
+  }
+
+  return (
+    <span
+      className="lc-diff-shiki [&_span]:!bg-transparent"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+}
+
+function ToolDiff({
+  lines,
+  language,
+}: {
+  lines: ToolDiffLine[]
+  language?: string
+}) {
+  return (
+    <div
+      data-slot="message-tool-diff"
+      className="max-h-[min(22rem,55vh)] overflow-auto rounded-md border border-border/60 bg-muted/30 font-mono text-[12.5px] leading-[1.7]"
+    >
+      {lines.map((line, index) => {
+        const lineNo =
+          line.type === "remove"
+            ? line.oldLine
+            : (line.newLine ?? line.oldLine)
+        return (
+          <div
+            key={index}
+            className={cn(
+              "flex",
+              line.type === "add" && "bg-emerald-500/10",
+              line.type === "remove" && "bg-red-500/10"
+            )}
+          >
+            <span className="w-9 shrink-0 select-none border-r border-border/50 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/45">
+              {lineNo ?? ""}
+            </span>
+            <span
+              className={cn(
+                "w-5 shrink-0 select-none text-center",
+                line.type === "add" &&
+                  "text-emerald-600/80 dark:text-emerald-400/80",
+                line.type === "remove" && "text-red-500/80",
+                line.type === "context" && "text-muted-foreground/40"
+              )}
+            >
+              {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
+            </span>
+            <span className="min-w-0 flex-1 break-words whitespace-pre-wrap px-1 text-foreground/90">
+              {line.segments ? (
+                line.segments.map((segment, segmentIndex) => (
+                  <span
+                    key={segmentIndex}
+                    className={cn(
+                      segment.highlight &&
+                        (line.type === "add"
+                          ? "rounded-[2px] bg-emerald-500/25"
+                          : "rounded-[2px] bg-red-500/25")
+                    )}
+                  >
+                    {segment.text}
+                  </span>
+                ))
+              ) : (
+                <InlineDiffCode code={line.text} language={language} />
+              )}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Same chrome as ToolDiff, for Read — line gutter + Shiki, no +/- column. */
+function ToolFileView({
+  content,
+  language,
+  startLine = 1,
+}: {
+  content: string
+  language?: string
+  startLine?: number
+}) {
+  const lines = content.length === 0 ? [""] : content.split("\n")
+  return (
+    <div
+      data-slot="message-tool-file"
+      className="max-h-[min(22rem,55vh)] overflow-auto rounded-md border border-border/60 bg-muted/30 font-mono text-[12.5px] leading-[1.7]"
+    >
+      {lines.map((text, index) => (
+        <div key={index} className="flex">
+          <span className="w-9 shrink-0 select-none border-r border-border/50 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/45">
+            {startLine + index}
+          </span>
+          <span className="min-w-0 flex-1 break-words whitespace-pre-wrap px-2 text-foreground/90">
+            <InlineDiffCode code={text} language={language} />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Single Cursor-style tool row — no card chrome. */
+export const MessageToolCall = React.memo(function MessageToolCall({
+  tool,
+  defaultOpen = false,
+  onAskAnswer,
+  className,
+}: {
+  tool: MessageToolCallData
+  defaultOpen?: boolean
+  /** Called when an Ask Question tool is submitted or skipped. */
+  onAskAnswer?: (result: AskQuestionResult) => void
+  className?: string
+}) {
+  const [open, setOpen] = React.useState(defaultOpen)
+  const [askResult, setAskResult] = React.useState<AskQuestionResult | null>(
+    null
+  )
+  const ask = React.useMemo(
+    () =>
+      isAskToolName(tool.name) ? parseAskQuestionInput(tool.input) : null,
+    [tool.name, tool.input]
+  )
+  const resolvedAsk = askResult ?? parseAskQuestionResult(tool.output)
+  const displayTool = React.useMemo((): MessageToolCallData => {
+    if (!askResult) return tool
+    return {
+      ...tool,
+      status: "done",
+      output: formatAskQuestionOutput(askResult),
+    }
+  }, [askResult, tool])
+  const status = displayTool.status ?? "done"
+  const running = status === "running" || status === "pending"
+  const errored = status === "error"
+  const diff = React.useMemo(() => extractToolDiff(displayTool), [displayTool])
+  const showDiff = !!diff && diff.length > 0
+  const readFile = React.useMemo(
+    () => extractReadFile(displayTool),
+    [displayTool]
+  )
+  const showFile = !!readFile
+  const showAskSummary = !!ask && !!resolvedAsk && !running
+  const hasBody =
+    showDiff ||
+    showFile ||
+    showAskSummary ||
+    !!(displayTool.input || displayTool.output)
+  const headline = toolHeadline(displayTool)
+  const args = React.useMemo(
+    () => parseToolArgs(displayTool.input),
+    [displayTool.input]
+  )
+
+  const answerAsk = React.useCallback(
+    (result: AskQuestionResult) => {
+      setAskResult(result)
+      onAskAnswer?.(result)
+    },
+    [onAskAnswer]
+  )
+
+  if (ask && running && !askResult) {
+    return (
+      <AskQuestion
+        title={ask.title}
+        questions={ask.questions}
+        onSubmit={answerAsk}
+        onSkip={() => answerAsk({ skipped: true, answers: {} })}
+        className={className}
+      />
+    )
+  }
+
+  const path =
+    asString(args.path) ??
+    asString(args.filePath) ??
+    asString(args.target_file) ??
+    asString(args.file)
+  const language = langFromPath(path)
+  const stats = showDiff ? formatDiffStats(diff) : null
+  const readMeta =
+    showFile && readFile.lineCount != null
+      ? `${readFile.lineCount} lines`
+      : showFile
+        ? `${readFile.content.split("\n").length} lines`
+        : null
+  const shortOutput =
+    !stats &&
+    !readMeta &&
+    displayTool.output &&
+    displayTool.output.length < 28 &&
+    !displayTool.output.includes("\n") &&
+    !/^[+\d\s−-]+$/.test(displayTool.output)
+      ? displayTool.output
+      : null
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      data-slot="message-tool-call"
+      data-status={status}
+      className={cn("group animate-in fade-in duration-150", className)}
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          disabled={!hasBody}
+          className={cn(
+            disclosureTrigger,
+            "py-[3px]",
+            hasBody
+              ? "cursor-pointer"
+              : "cursor-default hover:text-muted-foreground"
+          )}
+        >
+          {running ? (
+            <Loader2 className="size-3 animate-spin opacity-70" />
+          ) : errored ? (
+            <TriangleAlert className="size-3 text-destructive" />
+          ) : null}
+          <span className="shrink-0">{headline.label}</span>
+          {headline.detail ? (
+            <span
+              className={cn(
+                "min-w-0 truncate font-mono text-[12px] font-medium",
+                errored ? "text-destructive" : "text-foreground/90"
+              )}
+              title={headline.detail}
+            >
+              {headline.detail}
+            </span>
+          ) : null}
+          {stats ? (
+            <DiffStats added={stats.added} removed={stats.removed} />
+          ) : readMeta ? (
+            <span className="shrink-0 text-[12px] text-muted-foreground">
+              {readMeta}
+            </span>
+          ) : shortOutput ? (
+            <span className="shrink-0 text-[12px] text-muted-foreground">
+              {shortOutput}
+            </span>
+          ) : null}
+          {hasBody ? (
+            <ChevronDown
+              className={cn(
+                "size-3 opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-40",
+                open && "rotate-180 opacity-40"
+              )}
+            />
+          ) : null}
+        </button>
+      </CollapsibleTrigger>
+      {hasBody ? (
+        <CollapsibleContent>
+          <div className="mb-1.5 ml-0.5 space-y-1.5 border-l border-border/70 pl-3">
+            {showAskSummary && ask && resolvedAsk ? (
+              <AskQuestionSummary
+                questions={ask.questions}
+                result={resolvedAsk}
+              />
+            ) : null}
+            {showDiff ? <ToolDiff lines={diff} language={language} /> : null}
+            {showFile && readFile ? (
+              <ToolFileView
+                content={readFile.content}
+                language={language}
+                startLine={readFile.startLine}
+              />
+            ) : null}
+            {!showDiff &&
+            !showFile &&
+            !showAskSummary &&
+            displayTool.input ? (
+              <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
+                {displayTool.input}
+              </pre>
+            ) : null}
+            {displayTool.output &&
+            (errored ||
+              (!showDiff && !showFile && !showAskSummary)) ? (
+              <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
+                {displayTool.output}
+              </pre>
+            ) : null}
+          </div>
+        </CollapsibleContent>
+      ) : null}
+    </Collapsible>
+  )
+})
+
+/** Stack of minimal tool rows; collapses behind “Used N tools” when many. */
+export function MessageToolCalls({
+  tools,
+  className,
+  collapseAt = 3,
+  defaultOpen,
+  onAskAnswer,
+}: {
+  tools: MessageToolCallData[]
+  className?: string
+  /** Collapse the list behind a summary when tool count ≥ this. */
+  collapseAt?: number
+  defaultOpen?: boolean
+  onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
+}) {
+  const pendingAsk = tools.some(isPendingAskTool)
+  const many = !pendingAsk && tools.length >= collapseAt
+  const [open, setOpen] = React.useState(defaultOpen ?? !many)
+
+  if (tools.length === 0) return null
+
+  const list = (
+    <div className="flex flex-col">
+      {tools.map((tool) => (
+        <MessageToolCall
+          key={tool.id}
+          tool={tool}
+          onAskAnswer={
+            onAskAnswer ? (result) => onAskAnswer(tool.id, result) : undefined
+          }
+        />
+      ))}
+    </div>
+  )
+
+  if (!many) {
+    return (
+      <div data-slot="message-tool-calls" className={cn("mb-3", className)}>
+        {list}
+      </div>
+    )
+  }
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      data-slot="message-tool-calls"
+      className={cn("mb-3 animate-in fade-in duration-150", className)}
+    >
+      <CollapsibleTrigger asChild>
+        <button type="button" className={cn(disclosureTrigger, "w-full")}>
+          <span>
+            Used {tools.length} tool{tools.length === 1 ? "" : "s"}
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-3.5 opacity-50 transition-transform duration-150",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>{list}</CollapsibleContent>
+    </Collapsible>
+  )
 }
 
 function HighlightedCode({
@@ -443,14 +1053,15 @@ function HighlightedCode({
   const { resolvedTheme } = useTheme()
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
+  const cacheKey = `${theme}\0${lang}\0classic\0${code}`
   // Paint straight from cache when we have it — no flash of unhighlighted code.
   const [html, setHtml] = React.useState<string | null>(
-    () => highlightCache.get(`${theme} ${lang} ${code}`) ?? null
+    () => highlightCache.get(cacheKey) ?? null
   )
 
   React.useEffect(() => {
     let cancelled = false
-    highlight(code, lang, theme)
+    highlight(code, lang, theme, "classic")
       .then((out) => {
         if (!cancelled) setHtml(out)
       })

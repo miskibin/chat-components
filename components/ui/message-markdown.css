@@ -7,6 +7,17 @@
   overflow-wrap: anywhere;
 }
 
+/* Reasoning stays quieter than the answer — inherit the muted wrapper. */
+[data-slot="message-reasoning"] .lc-markdown,
+[data-slot="message-reasoning"] .lc-markdown h1,
+[data-slot="message-reasoning"] .lc-markdown h2,
+[data-slot="message-reasoning"] .lc-markdown h3,
+[data-slot="message-reasoning"] .lc-markdown h4,
+[data-slot="message-reasoning"] .lc-markdown strong,
+[data-slot="message-reasoning"] .lc-markdown code:not(pre code) {
+  color: inherit;
+}
+
 /* Wide content scrolls inside its own box instead of the page. */
 .lc-markdown [data-streamdown="table-wrapper"] {
   max-width: 100%;

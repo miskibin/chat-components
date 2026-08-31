@@ -3,6 +3,7 @@
 import { arrayMove } from "@dnd-kit/sortable"
 import {
   Copy,
+  HelpCircle,
   Palette,
   PanelLeft,
   Paperclip,
@@ -38,6 +39,11 @@ import {
 import type { GenerationStage } from "@/components/ui/generation-status"
 import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
 import {
+  formatAskQuestionOutput,
+  isPendingAskTool,
+  type AskQuestionResult,
+} from "@/components/ui/ask-question"
+import {
   DEFAULT_MODEL_EFFORTS,
   ModelPicker,
   type ModelOption,
@@ -48,6 +54,7 @@ import {
 } from "@/components/ui/prompt-suggestions"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
+import { runLayoutTransition } from "@/lib/layout-transition"
 import { streamCursorChat } from "@/lib/cursor-stream"
 import { cn } from "@/lib/utils"
 
@@ -78,10 +85,52 @@ function relativeTime(from: number, now: number) {
   return `${Math.floor(hours / 24)}d`
 }
 
-/** Second sidebar line: the model that answered last, or an empty-chat hint. */
+/** Elapsed wall time for a live Working label — "12s", "1m 04s". */
+function formatElapsed(from: number, now: number) {
+  const seconds = Math.max(0, Math.floor((now - from) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const rem = seconds % 60
+  return `${minutes}m ${String(rem).padStart(2, "0")}s`
+}
+
+const STAGE_SUBTITLES: Record<Exclude<GenerationStage, "idle">, string> = {
+  thinking: "Thinking",
+  searching: "Searching",
+  responding: "Responding",
+}
+
+/** Second sidebar line: stage while generating, else model / empty hint. */
 function sessionSubtitle(session: ChatSession, models: ModelOption[]) {
+  if (session.run && session.run.stage !== "idle") {
+    return STAGE_SUBTITLES[session.run.stage]
+  }
   if (!session.model || !session.messages?.length) return "New chat"
   return models.find((m) => m.id === session.model)?.name ?? session.model
+}
+
+/** Trailing meta: Working / Failed label, or the relative timestamp. */
+function sessionMeta(
+  session: ChatSession,
+  now: number,
+  isActive: boolean
+): ReactNode {
+  if (session.run) {
+    return (
+      <span
+        className={cn(
+          "font-medium text-sky-600 dark:text-sky-400",
+          !isActive && "opacity-75"
+        )}
+      >
+        Working · {formatElapsed(session.run.startedAt, now)}
+      </span>
+    )
+  }
+  if (session.lastError) {
+    return <span className="font-medium text-destructive">Failed</span>
+  }
+  return relativeTime(session.updatedAt, now)
 }
 
 /** Desktop-first so SSR and the first paint agree on the wide layout. */
@@ -107,6 +156,11 @@ type MessageData = ChatMessageData & {
   }
 }
 
+type SessionRun = {
+  startedAt: number
+  stage: GenerationStage
+}
+
 type ChatSession = ChatSidebarItemData & {
   messages?: MessageData[]
   cursorSessionId?: string
@@ -114,6 +168,10 @@ type ChatSession = ChatSidebarItemData & {
   updatedAt: number
   /** Model used for the last turn — drives the sidebar `subtitle`. */
   model?: string
+  /** Live generation for this thread; absent / null when idle. */
+  run?: SessionRun | null
+  /** Last turn ended in error — drives the Failed meta until the next send. */
+  lastError?: boolean
 }
 
 const DEMO_SKILLS = [
@@ -153,6 +211,11 @@ const DEMO_SUGGESTIONS: PromptSuggestion[] = [
     label: "Walk me through the markdown, math and mermaid rendering",
     icon: <Sparkles />,
   },
+  {
+    id: "ask",
+    label: "Use the ask tool so I can try the UI",
+    icon: <HelpCircle />,
+  },
 ]
 
 const FALLBACK_MODELS: ModelOption[] = [
@@ -180,31 +243,35 @@ export default function ChatExample() {
   ])
   const [activeId, setActiveId] = useState("1")
   const [messages, setMessages] = useState<MessageData[]>([])
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [generationStage, setGenerationStage] =
-    useState<GenerationStage>("idle")
   const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODELS)
   const [selectedModel, setSelectedModel] = useState("composer-2.5")
   // Effort is UI-only here — the mock agent ignores it.
   const [effort, setEffort] = useState("high")
   // Set by /api/models when no local `agent` binary is available.
   const [isMock, setIsMock] = useState(false)
-  // One clock for every sidebar timestamp, so "now" ages into "2m" together.
+  // One clock for every sidebar timestamp / Working elapsed label.
   const [clock, setClock] = useState(() => nowMs())
-  const abortRef = useRef<AbortController | null>(null)
+  const abortBySessionRef = useRef(new Map<string, AbortController>())
   const activeIdRef = useRef(activeId)
 
   useEffect(() => {
     activeIdRef.current = activeId
   }, [activeId])
 
-  useEffect(() => {
-    const timer = setInterval(() => setClock(nowMs()), 30_000)
-    return () => clearInterval(timer)
-  }, [])
-
   const activeSession = sessions.find((s) => s.id === activeId)
+  const isGenerating = !!activeSession?.run
+  const generationStage = activeSession?.run?.stage ?? "idle"
+  const anyRunning = sessions.some((session) => !!session.run)
+
+  // Tick every second while something is Working so elapsed labels stay fresh;
+  // otherwise age "now" into "2m" on a slower cadence.
+  useEffect(() => {
+    const timer = setInterval(() => setClock(nowMs()), anyRunning ? 1_000 : 30_000)
+    return () => clearInterval(timer)
+  }, [anyRunning])
+
   const isEmptyChat = messages.length === 0
+  const pendingAsk = findPendingAsk(messages)
   // The drawer only exists below md; derive it so a resize can't strand it open.
   const drawerOpen = mobileNavOpen && !isDesktop
 
@@ -213,9 +280,13 @@ export default function ChatExample() {
     id: session.id,
     title: session.title,
     pinned: session.pinned,
-    status: session.status,
+    status: session.run
+      ? "streaming"
+      : session.lastError
+        ? "fault"
+        : undefined,
     subtitle: sessionSubtitle(session, modelOptions),
-    meta: relativeTime(session.updatedAt, clock),
+    meta: sessionMeta(session, clock, session.id === activeId),
   }))
 
   useEffect(() => {
@@ -240,13 +311,6 @@ export default function ChatExample() {
     }
   }, [])
 
-  const stopGeneration = () => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    setIsGenerating(false)
-    setGenerationStage("idle")
-  }
-
   const persistSession = (
     sessionId: string,
     patch: (session: ChatSession) => ChatSession
@@ -258,8 +322,18 @@ export default function ChatExample() {
     )
   }
 
+  const abortSession = (sessionId: string) => {
+    abortBySessionRef.current.get(sessionId)?.abort()
+    abortBySessionRef.current.delete(sessionId)
+  }
+
+  const stopSession = (sessionId: string) => {
+    abortSession(sessionId)
+    persistSession(sessionId, (session) => ({ ...session, run: null }))
+  }
+
   const handleNewChat = () => {
-    stopGeneration()
+    // Leave other sessions' streams running — the sidebar shows their Working state.
     setMobileNavOpen(false)
     const id = String(nowMs())
     setSessions((prev) => [
@@ -267,28 +341,46 @@ export default function ChatExample() {
       ...prev,
     ])
     setActiveId(id)
-    setMessages([])
+    if (messages.length > 0) runLayoutTransition(() => setMessages([]))
+    else setMessages([])
   }
 
   const selectSession = (id: string) => {
-    stopGeneration()
+    // Do not abort — background chats keep streaming and stay labeled Working.
     setMobileNavOpen(false)
     const session = sessions.find((s) => s.id === id)
     setActiveId(id)
-    setMessages(session?.messages ?? [])
+    const next = session?.messages ?? []
+    const crossing = (messages.length === 0) !== (next.length === 0)
+    if (crossing) runLayoutTransition(() => setMessages(next))
+    else setMessages(next)
+  }
+
+  const removeSession = (id: string) => {
+    abortSession(id)
+    setSessions((prev) => {
+      const next = prev.filter((s) => s.id !== id)
+      if (activeId === id) {
+        setActiveId(next[0]?.id ?? "")
+        setMessages(next[0]?.messages ?? [])
+      }
+      return next
+    })
   }
 
   const runPrompt = async (
     prompt: string,
     sessionId: string,
     priorMessages: MessageData[],
-    cursorSessionId?: string
+    cursorSessionId?: string,
+    animateOpening = false
   ) => {
     const assistantId = crypto.randomUUID()
     const started = nowMs()
     const model = selectedModel
+    abortSession(sessionId)
     const controller = new AbortController()
-    abortRef.current = controller
+    abortBySessionRef.current.set(sessionId, controller)
 
     const seedAssistant: MessageData = {
       id: assistantId,
@@ -305,18 +397,27 @@ export default function ChatExample() {
         model,
         updatedAt: nowMs(),
         cursorSessionId: nextSessionId ?? session.cursorSessionId,
+        lastError: false,
+        run: { startedAt: started, stage: "thinking" },
       }))
       if (activeIdRef.current === sessionId) setMessages(next)
     }
 
-    applyMessages([...priorMessages, seedAssistant])
+    const paint = () => applyMessages([...priorMessages, seedAssistant])
+    if (animateOpening) runLayoutTransition(paint)
+    else paint()
 
-    setIsGenerating(true)
-    setGenerationStage("thinking")
+    const setRunStage = (stage: GenerationStage) => {
+      persistSession(sessionId, (session) =>
+        session.run
+          ? { ...session, run: { ...session.run, stage } }
+          : session
+      )
+    }
 
     const patchAssistant = (
       updater: (message: MessageData) => MessageData,
-      cursorSessionId?: string
+      nextCursorSessionId?: string
     ) => {
       persistSession(sessionId, (session) => {
         const current = session.messages ?? []
@@ -327,12 +428,22 @@ export default function ChatExample() {
         return {
           ...session,
           messages: next,
-          cursorSessionId: cursorSessionId ?? session.cursorSessionId,
+          cursorSessionId: nextCursorSessionId ?? session.cursorSessionId,
         }
       })
     }
 
+    const markFailed = () => {
+      persistSession(sessionId, (session) => ({
+        ...session,
+        lastError: true,
+        run: null,
+        updatedAt: nowMs(),
+      }))
+    }
+
     const onEvent = (event: AgentStreamEvent) => {
+      if (controller.signal.aborted) return
       if (event.type === "session") {
         persistSession(sessionId, (session) => ({
           ...session,
@@ -341,16 +452,20 @@ export default function ChatExample() {
         return
       }
       if (event.type === "thinking") {
-        setGenerationStage("thinking")
-        patchAssistant((message) => ({
-          ...message,
-          reasoning: `${message.reasoning ?? ""}${event.text}`,
-          reasoningDefaultOpen: true,
-        }))
+        setRunStage("thinking")
+        patchAssistant((message) => {
+          const parts = appendThinkingPart(message.parts ?? [], event.text)
+          return {
+            ...message,
+            parts,
+            content: textFromParts(parts),
+            tools: toolsFromParts(parts),
+          }
+        })
         return
       }
       if (event.type === "text") {
-        setGenerationStage("responding")
+        setRunStage("responding")
         patchAssistant((message) => {
           const parts = appendTextPart(message.parts ?? [], event.text)
           return {
@@ -363,7 +478,7 @@ export default function ChatExample() {
         return
       }
       if (event.type === "tool") {
-        setGenerationStage("searching")
+        setRunStage("searching")
         patchAssistant((message) => {
           const nextTool: MessageToolCallData = {
             id: event.id,
@@ -390,12 +505,14 @@ export default function ChatExample() {
             `Cursor agent error: ${event.message}`,
         }))
         toast.error(event.message)
+        markFailed()
         return
       }
       if (event.type === "done") {
         patchAssistant(
           (message) => ({
             ...message,
+            workedFor: (nowMs() - started) / 1000,
             metadata: {
               model,
               responseTime: (nowMs() - started) / 1000,
@@ -424,24 +541,33 @@ export default function ChatExample() {
           ...item,
           content: item.content.trim() || `Cursor agent error: ${message}`,
         }))
+        markFailed()
       }
     } finally {
-      if (abortRef.current === controller) abortRef.current = null
-      setIsGenerating(false)
-      setGenerationStage("idle")
+      if (abortBySessionRef.current.get(sessionId) === controller) {
+        abortBySessionRef.current.delete(sessionId)
+      }
+      persistSession(sessionId, (session) =>
+        session.run?.startedAt === started
+          ? { ...session, run: null, updatedAt: nowMs() }
+          : session
+      )
     }
   }
 
   const handleSend = (payload: ChatInputPayload) => {
     if (payload.text.trim() === "/clear") {
+      stopSession(activeId)
       persistSession(activeId, (session) => ({
         ...session,
         messages: [],
         model: undefined,
         updatedAt: nowMs(),
         cursorSessionId: undefined,
+        lastError: false,
+        run: null,
       }))
-      setMessages([])
+      runLayoutTransition(() => setMessages([]))
       return
     }
 
@@ -468,25 +594,59 @@ export default function ChatExample() {
       content,
       sender: "user",
     }
-    const next = [...messages, userMessage]
+    const pending = findPendingAsk(messages)
+    const prior = pending
+      ? completeAsk(messages, pending.messageId, pending.toolId, {
+          skipped: true,
+          answers: {},
+        })
+      : messages
+    const next = [...prior, userMessage]
     persistSession(sessionId, (session) => ({
       ...session,
       messages: next,
       model: selectedModel,
       updatedAt: nowMs(),
+      lastError: false,
     }))
-    setMessages(next)
-    void runPrompt(content, sessionId, next, activeSession?.cursorSessionId)
+    void runPrompt(
+      content,
+      sessionId,
+      next,
+      activeSession?.cursorSessionId,
+      messages.length === 0
+    )
   }
 
-  const handleStop = () => {
-    stopGeneration()
+    const handleStop = () => {
+    stopSession(activeId)
+  }
+
+  const handleAskAnswer = (
+    messageId: string,
+    toolId: string,
+    result: AskQuestionResult
+  ) => {
+    const next = completeAsk(messages, messageId, toolId, result)
+    persistSession(activeId, (session) => ({
+      ...session,
+      messages: next,
+      updatedAt: nowMs(),
+    }))
+    setMessages(next)
+    void runPrompt(
+      result.skipped
+        ? "AskQuestion result: skipped"
+        : `AskQuestion result: ${JSON.stringify(result.answers)}`,
+      activeId,
+      next,
+      activeSession?.cursorSessionId
+    )
   }
 
   /**
-   * One composer for both layouts. Moving it between the centered opening and
-   * the docked conversation remounts the element, but the handlers, tools and
-   * placeholder are declared exactly once.
+   * Same composer in both layouts so the first send can slide it from the
+   * centered opening down to the docked conversation.
    */
   const composer = (
     <ChatInput
@@ -494,13 +654,18 @@ export default function ChatExample() {
       onStop={handleStop}
       isGenerating={isGenerating}
       placeholder={
-        isMock
-          ? "Ask the simulated agent — try “how does streaming work?”"
-          : "Ask Cursor Agent — try listing files in this repo"
+        pendingAsk
+          ? "Add more optional details…"
+          : isMock
+            ? "Ask the simulated agent — try “use the ask tool”"
+            : "Ask Cursor Agent — try listing files in this repo"
       }
       skills={DEMO_SKILLS}
       slashCommands={DEMO_COMMANDS}
-      className={isEmptyChat ? "max-w-3xl pb-0 sm:pb-0" : undefined}
+      className={cn(
+        "transition-[max-width,padding] duration-300 ease-out",
+        isEmptyChat && "max-w-3xl pb-0 sm:pb-0"
+      )}
       tools={
         <ModelPicker
           value={selectedModel}
@@ -516,7 +681,15 @@ export default function ChatExample() {
     />
   )
 
-  useEffect(() => () => abortRef.current?.abort(), [])
+  useEffect(
+    () => () => {
+      for (const controller of abortBySessionRef.current.values()) {
+        controller.abort()
+      }
+      abortBySessionRef.current.clear()
+    },
+    []
+  )
 
   // Escape closes the drawer.
   useEffect(() => {
@@ -552,15 +725,7 @@ export default function ChatExample() {
             } else if (drop.action === "pin") {
               setSessions((prev) => pinToTop(prev, drop.itemId))
             } else if (drop.action === "delete") {
-              stopGeneration()
-              setSessions((prev) => {
-                const next = prev.filter((s) => s.id !== drop.itemId)
-                if (activeId === drop.itemId) {
-                  setActiveId(next[0]?.id ?? "")
-                  setMessages(next[0]?.messages ?? [])
-                }
-                return next
-              })
+              removeSession(drop.itemId)
               toast.message("Chat deleted")
             }
           }}
@@ -637,17 +802,7 @@ export default function ChatExample() {
                     : prev.map((s) => (s.id === id ? { ...s, pinned } : s))
                 )
               }
-              onDelete={(id) => {
-                if (id === activeId) stopGeneration()
-                setSessions((prev) => {
-                  const next = prev.filter((s) => s.id !== id)
-                  if (activeId === id) {
-                    setActiveId(next[0]?.id ?? "")
-                    setMessages(next[0]?.messages ?? [])
-                  }
-                  return next
-                })
-              }}
+              onDelete={removeSession}
             />
           </ChatSidebar>
         </ChatSidebarDnd>
@@ -664,31 +819,22 @@ export default function ChatExample() {
         </button>
         <ThemeToggle />
 
-        {isEmptyChat ? (
-          <div
-            data-slot="demo-opening"
-            className="flex min-h-0 flex-1 flex-col overflow-y-auto"
-          >
-            <div className="my-auto w-full py-6">
-              <div className="mx-auto w-full max-w-3xl px-3 pb-5 sm:px-4">
-                <h2 className="text-center text-2xl font-semibold tracking-tight text-balance text-foreground sm:text-3xl">
-                  How can I help?
-                </h2>
-              </div>
-
-              {composer}
-
-              <PromptSuggestions
-                items={DEMO_SUGGESTIONS}
-                onSelect={(item) =>
-                  handleSend({ text: item.label, files: [], skills: [] })
-                }
-                className="max-w-3xl px-3 pt-2 sm:px-4"
-              />
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col overflow-x-hidden",
+            isEmptyChat && "justify-center"
+          )}
+        >
+          {isEmptyChat ? (
+            <div
+              data-slot="demo-opening"
+              className="mx-auto w-full max-w-3xl px-3 pb-5 sm:px-4"
+            >
+              <h2 className="text-center text-2xl font-semibold tracking-tight text-balance text-foreground sm:text-3xl">
+                How can I help?
+              </h2>
             </div>
-          </div>
-        ) : (
-          <>
+          ) : (
             <MessageList
               messages={messages}
               isGenerating={isGenerating}
@@ -705,6 +851,7 @@ export default function ChatExample() {
                   return next
                 })
               }
+              onAskAnswer={handleAskAnswer}
               renderActions={(message) => {
                 if (message.sender !== "assistant") return null
                 return (
@@ -770,10 +917,21 @@ export default function ChatExample() {
                 )
               }}
             />
+          )}
 
+          <div data-slot="chat-composer" className="w-full shrink-0">
             {composer}
-          </>
-        )}
+            {isEmptyChat ? (
+              <PromptSuggestions
+                items={DEMO_SUGGESTIONS}
+                onSelect={(item) =>
+                  handleSend({ text: item.label, files: [], skills: [] })
+                }
+                className="max-w-3xl px-3 pt-2 sm:px-4"
+              />
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -847,6 +1005,49 @@ function appendTextPart(parts: MessagePart[], text: string): MessagePart[] {
     return [...parts.slice(0, -1), { ...last, text: last.text + text }]
   }
   return [...parts, { type: "text", id: crypto.randomUUID(), text }]
+}
+
+function appendThinkingPart(parts: MessagePart[], text: string): MessagePart[] {
+  const last = parts.at(-1)
+  if (last?.type === "thinking") {
+    return [...parts.slice(0, -1), { ...last, text: last.text + text }]
+  }
+  return [...parts, { type: "thinking", id: crypto.randomUUID(), text }]
+}
+
+function findPendingAsk(messages: MessageData[]) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    const tools = message.tools?.length
+      ? message.tools
+      : toolsFromParts(message.parts ?? [])
+    const tool = tools.find(isPendingAskTool)
+    if (tool) return { messageId: message.id, toolId: tool.id }
+  }
+  return null
+}
+
+function completeAsk(
+  messages: MessageData[],
+  messageId: string,
+  toolId: string,
+  result: AskQuestionResult
+): MessageData[] {
+  const output = formatAskQuestionOutput(result)
+  return messages.map((message) => {
+    if (message.id !== messageId) return message
+    const patchTool = (tool: MessageToolCallData) =>
+      tool.id === toolId ? { ...tool, status: "done" as const, output } : tool
+    return {
+      ...message,
+      tools: message.tools?.map(patchTool),
+      parts: message.parts?.map((part) =>
+        part.type === "tool" && part.tool.id === toolId
+          ? { ...part, tool: patchTool(part.tool) }
+          : part
+      ),
+    }
+  })
 }
 
 function upsertToolPart(

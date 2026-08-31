@@ -55,6 +55,12 @@ export default function DocsIntroductionPage() {
             fold behind &ldquo;Used N tools&rdquo;.
           </li>
           <li>
+            <strong className="text-foreground">Ask the user.</strong>{" "}
+            <DocsCode>AskQuestion</DocsCode> is the Cursor questionnaire —
+            radios, checkboxes, Other…, Skip and Continue. A pending Ask
+            Question tool call renders it in the transcript.
+          </li>
+          <li>
             <strong className="text-foreground">Real ordering.</strong>{" "}
             <DocsCode>parts</DocsCode> interleaves text and tool segments, so the
             turn reads in the order the agent produced it.

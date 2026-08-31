@@ -9,11 +9,14 @@ import {
 } from "@/components/ui/generation-status"
 import {
   Message,
+  isPendingAskTool,
+  type ChangeSummaryFile,
   type MessageArtifactData,
   type MessageCodeBlockData,
   type MessagePart,
   type MessageToolCallData,
   type PatternHandler,
+  type AskQuestionResult,
 } from "@/components/ui/message"
 
 const BOTTOM_SCROLL_THRESHOLD_PX = 48
@@ -30,6 +33,8 @@ export type ChatMessageData = {
   parts?: MessagePart[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
+  workedFor?: number
+  changes?: ChangeSummaryFile[]
 }
 
 export type MessageListProps = React.ComponentProps<"div"> & {
@@ -38,6 +43,11 @@ export type MessageListProps = React.ComponentProps<"div"> & {
   generationStage?: GenerationStage
   patternHandlers?: PatternHandler[]
   onEditMessage?: (id: string, content: string) => void
+  onAskAnswer?: (
+    messageId: string,
+    toolId: string,
+    result: AskQuestionResult
+  ) => void
   renderActions?: (message: ChatMessageData) => React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -87,6 +97,7 @@ export function MessageList({
   generationStage = "idle",
   patternHandlers = EMPTY_PATTERNS,
   onEditMessage,
+  onAskAnswer,
   renderActions,
   emptyState,
   className,
@@ -120,6 +131,12 @@ export function MessageList({
                 (isGenerating || generationStage !== "idle") &&
                 index === lastIndex &&
                 message.sender === "assistant"
+              const pendingAsk =
+                message.tools?.some(isPendingAskTool) ||
+                message.parts?.some(
+                  (part) =>
+                    part.type === "tool" && isPendingAskTool(part.tool)
+                )
               const waiting =
                 isStreaming &&
                 !message.reasoning &&
@@ -139,14 +156,20 @@ export function MessageList({
                     parts={message.parts}
                     codeBlocks={message.codeBlocks}
                     artifacts={message.artifacts}
+                    workedFor={message.workedFor}
+                    changes={message.changes}
                     patternHandlers={patternHandlers}
                     isAnimating={isStreaming}
                     editable={isUser && !!onEditMessage}
-                    /* Assistant rows never take a callback prop, so the
-                       memoized Message keeps its render between updates. */
                     onEdit={
                       isUser && onEditMessage
                         ? (content) => onEditMessage(message.id, content)
+                        : undefined
+                    }
+                    onAskAnswer={
+                      onAskAnswer
+                        ? (toolId, result) =>
+                            onAskAnswer(message.id, toolId, result)
                         : undefined
                     }
                   />
@@ -154,7 +177,7 @@ export function MessageList({
                     <div className="mb-4">
                       <GenerationStatus active stage={generationStage} />
                     </div>
-                  ) : isStreaming ? null : (
+                  ) : isStreaming || pendingAsk ? null : (
                     renderActions?.(message)
                   )}
                 </div>

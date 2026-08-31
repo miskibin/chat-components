@@ -42,9 +42,12 @@
   --sidebar-accent-foreground: oklch(0.38 0.14 265.52);
   --sidebar-border: oklch(0.93 0.01 264.53);
   --sidebar-ring: oklch(0.62 0.19 259.81);
-  --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
   --font-serif: Source Serif 4, serif;
-  --font-mono: var(--font-mono), ui-monospace, monospace;
+  --font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas,
+    monospace;
   --radius: 0.375rem;
   --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
   --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
@@ -71,7 +74,7 @@
   --code-ink: oklch(0.28 0 0);
   --density-msg-gap: 28px;
   --density-line: 1.65;
-  --lc-body-font: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
+  --lc-body-font: var(--font-sans);
 }
 
 .dark {
@@ -107,9 +110,12 @@
   --sidebar-accent-foreground: oklch(0.88 0.06 254.13);
   --sidebar-border: oklch(0.37 0 0);
   --sidebar-ring: oklch(0.62 0.19 259.81);
-  --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
   --font-serif: Source Serif 4, serif;
-  --font-mono: var(--font-mono), ui-monospace, monospace;
+  --font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, Consolas,
+    monospace;
   --radius: 0.375rem;
   --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
   --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
@@ -137,7 +143,7 @@
   --code-ink: oklch(0.92 0 0);
   --density-msg-gap: 28px;
   --density-line: 1.65;
-  --lc-body-font: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
+  --lc-body-font: var(--font-sans);
 }
 
 @theme inline {
@@ -212,8 +218,8 @@
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-family: var(--lc-body-font);
+    @apply bg-background text-foreground font-sans;
+    font-family: var(--font-sans);
   }
 }
 

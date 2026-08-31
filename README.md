@@ -16,6 +16,7 @@ A chatbot renders one text stream. An agent turn is a *transcript*: it thinks, c
 | --- | --- |
 | Thinks before answering | `MessageReasoning` — collapsed "Thought for N seconds", streams markdown inside. Explicit `reasoning` prop, or parsed out of `<think>` tags. |
 | Calls tools | `MessageToolCall` rows with a `pending / running / done / error` lifecycle, collapsible input and output, and human headlines ("Read file `nav.ts`", "Command failed"). Many calls collapse behind "Used N tools". |
+| Asks the user a structured question | `AskQuestion` — Cursor-style questionnaire (single-select, multi-select, Other…, Skip / Continue). A pending `Ask Question` tool call swaps in the card automatically. |
 | Interleaves thinking, tools, and prose | `parts: MessagePart[]` — a chronological list of `text` and `tool` segments, so the transcript stays in the order it happened instead of tools-then-answer. |
 | Emits files, tables, documents | `MessageArtifact` — titled card, kind + summary meta, inline preview, optional `onOpen` to hand off to your own viewer. |
 | Writes code and diagrams | Streamdown markdown (GFM, Shiki highlighting, Mermaid, KaTeX) plus a standalone `MessageCode` block with copy. |
@@ -127,6 +128,7 @@ npx shadcn@latest add miskibin/chat-components/prompt-suggestions
 npx shadcn@latest add miskibin/chat-components/message
 npx shadcn@latest add miskibin/chat-components/message-list
 npx shadcn@latest add miskibin/chat-components/message-parts
+npx shadcn@latest add miskibin/chat-components/ask-question
 npx shadcn@latest add miskibin/chat-components/message-markdown
 npx shadcn@latest add miskibin/chat-components/generation-status
 npx shadcn@latest add miskibin/chat-components/model-picker
@@ -150,7 +152,8 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **chat-input** | Composer textarea with attachments, drag-and-drop, optional skills/slash menu, `tools` slot, send/stop | [chat-input](https://chat-input-azure.vercel.app/docs/components/chat-input) |
 | **prompt-suggestions** | Minimal starter-prompt list for the empty chat state | [prompt-suggestions](https://chat-input-azure.vercel.app/docs/components/prompt-suggestions) |
 | **message** | User bubble + assistant turn (reasoning, tools, code, artifacts, think tags, interleaved `parts`, edit) | [message](https://chat-input-azure.vercel.app/docs/components/message) |
-| **message-parts** | `MessageReasoning`, `MessageToolCall(s)`, `MessageCode`, `MessageArtifact` | [message-parts](https://chat-input-azure.vercel.app/docs/components/message-parts) |
+| **message-parts** | `MessageReasoning`, `MessageToolCall(s)`, `MessageCode`, `MessageArtifact`; Ask Question tools render `AskQuestion` | [message-parts](https://chat-input-azure.vercel.app/docs/components/message-parts) |
+| **ask-question** | Cursor-style questionnaire: radios, checkboxes, Other…, Skip / Continue | [ask-question](https://chat-input-azure.vercel.app/docs/components/ask-question) |
 | **message-markdown** | Streamdown renderer (GFM, Shiki code, Mermaid, KaTeX) + styles | [message-markdown](https://chat-input-azure.vercel.app/docs/components/message-markdown) |
 | **message-list** | Scroll container with smart auto-scroll | [message-list](https://chat-input-azure.vercel.app/docs/components/message-list) |
 | **generation-status** | Braille spinner | [generation-status](https://chat-input-azure.vercel.app/docs/components/generation-status) |

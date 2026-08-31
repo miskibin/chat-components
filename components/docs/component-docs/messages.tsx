@@ -1,5 +1,8 @@
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
+import { AskQuestionExample } from "@/components/examples/ask-question-example"
+import { AskQuestionToolExample } from "@/components/examples/ask-question-tool-example"
+import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { MessageExample } from "@/components/examples/message-example"
 import { MessageListExample } from "@/components/examples/message-list-example"
@@ -13,7 +16,7 @@ export const messageDocs = {
     description:
       "One conversation turn: a user bubble with inline editing, or an assistant answer that assembles reasoning, tool calls, markdown, code, and artifacts.",
     registry: "message",
-    registryDependencies: ["message-parts"],
+    registryDependencies: ["message-parts", "change-summary"],
     preview: { name: "message-example", node: <MessageExample /> },
     usage: `import { Message } from "@/components/ui/message"
 
@@ -67,7 +70,7 @@ export function Turn() {
             name: "reasoningDefaultOpen",
             type: "boolean",
             default: "false",
-            description: "Start the reasoning disclosure expanded.",
+            description: "Start the reasoning disclosure expanded. The latest thought still opens while it streams, then collapses when the turn finishes.",
           },
           {
             name: "reasoningDuration",
@@ -85,7 +88,7 @@ export function Turn() {
             name: "parts",
             type: "MessagePart[]",
             description:
-              "Chronological text/tool segments. When set, it replaces the tools-then-content layout.",
+              "Chronological thinking, text, and tool segments. When set, it replaces the tools-then-content layout. Consecutive thinking chunks merge; a tool or text in between starts a new thinking span.",
           },
           {
             name: "codeBlocks",
@@ -138,6 +141,29 @@ export function Turn() {
               "Inline replacements applied to paragraph and list text — citations, mentions, ticket links.",
           },
           {
+            name: "onAskAnswer",
+            type: "(toolId: string, result: AskQuestionResult) => void",
+            description:
+              "Fired when an Ask Question tool on this turn is submitted or skipped.",
+          },
+          {
+            name: "workedFor",
+            type: "number",
+            description:
+              'Elapsed seconds. After the turn settles, rendered as “Worked for 12s”.',
+          },
+          {
+            name: "changes",
+            type: "ChangeSummaryFile[]",
+            description:
+              "File-change card. When omitted, Edit / Write / ApplyPatch tools are summarised automatically.",
+          },
+          {
+            name: "onReviewChanges",
+            type: "() => void",
+            description: "Makes the Review label on the change card a button.",
+          },
+          {
             name: "isAnimating",
             type: "boolean",
             default: "false",
@@ -170,6 +196,10 @@ export function Turn() {
       },
       { slot: "message-content", description: "Bubble or answer body." },
       { slot: "message-actions", description: "Hover action row." },
+      {
+        slot: "message-turn-summary",
+        description: "Worked-for badge and file-change card after a settled turn.",
+      },
     ],
     customization: [
       {
@@ -294,6 +324,12 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             description: "Enables inline editing on user turns.",
           },
           {
+            name: "onAskAnswer",
+            type: "(messageId: string, toolId: string, result: AskQuestionResult) => void",
+            description:
+              "Fired when an Ask Question tool is submitted or skipped. Hide the composer send-as-skip yourself if you want Cursor's extra-details behavior.",
+          },
+          {
             name: "renderActions",
             type: "(message: ChatMessageData) => React.ReactNode",
             description:
@@ -395,9 +431,9 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
   "message-parts": {
     title: "Message Parts",
     description:
-      "The atoms an assistant turn is made of — reasoning, tool calls, highlighted code, and artifact cards. Use them directly when you build your own turn layout.",
+      "The atoms an assistant turn is made of — reasoning, tool calls, ask questions, highlighted code, and artifact cards. Use them directly when you build your own turn layout.",
     registry: "message-parts",
-    registryDependencies: ["collapsible", "message-markdown"],
+    registryDependencies: ["collapsible", "message-markdown", "ask-question"],
     preview: { name: "message-parts-example", node: <MessagePartsExample /> },
     usage: `import {
   MessageArtifact,
@@ -430,7 +466,14 @@ export function Answer() {
             name: "defaultOpen",
             type: "boolean",
             default: "false",
-            description: "Start expanded.",
+            description: "Start expanded. Ignored while `streaming` is driving the open state.",
+          },
+          {
+            name: "streaming",
+            type: "boolean",
+            default: "false",
+            description:
+              "Keep the body open while this thought is still arriving. When it flips to false the disclosure collapses — same as Cursor after a turn finishes.",
           },
           {
             name: "duration",
@@ -453,7 +496,12 @@ export function Answer() {
                 <DocsCode>
                   {"{ id, name, status?, input?, output? }"}
                 </DocsCode>
-                . The headline is derived from the tool name and arguments.
+                . The headline is derived from the tool name and arguments. Edit
+                / Write rows expand into a unified diff when{" "}
+                <DocsCode>input</DocsCode> carries Cursor{" "}
+                <DocsCode>diff</DocsCode>/<DocsCode>streamContent</DocsCode>/
+                <DocsCode>fileText</DocsCode>, or classic{" "}
+                <DocsCode>old_string</DocsCode>/<DocsCode>new_string</DocsCode>.
               </>
             ),
           },
@@ -462,6 +510,12 @@ export function Answer() {
             type: "MessageToolCallData[]",
             required: true,
             description: "Stack of rows (MessageToolCalls).",
+          },
+          {
+            name: "onAskAnswer",
+            type: "(result: AskQuestionResult) => void",
+            description:
+              "Ask Question tools only. Continue and Skip both fire this — check result.skipped.",
           },
           {
             name: "collapseAt",
@@ -527,6 +581,21 @@ export function Answer() {
         ),
       },
       { slot: "message-tool-calls", description: "The stack of rows." },
+      {
+        slot: "ask-question",
+        description:
+          "Questionnaire card rendered in place of a pending Ask Question tool row.",
+      },
+      {
+        slot: "message-tool-diff",
+        description:
+          "Unified diff body inside an Edit / Write / ApplyPatch row.",
+      },
+      {
+        slot: "message-tool-file",
+        description:
+          "Read-file body — line gutter and syntax highlight, same chrome as the diff.",
+      },
       { slot: "message-code", description: "Code card." },
       { slot: "message-artifact", description: "Artifact card." },
     ],
@@ -576,6 +645,177 @@ export function Answer() {
             module-level singleton and caches the last 100 rendered snippets, so
             re-renders and remounts never re-run the highlighter. Unknown
             languages fall back to plain text.
+          </>
+        ),
+      },
+      {
+        title: "Ask Question tools",
+        description: (
+          <>
+            A tool named <DocsCode>Ask Question</DocsCode> (or{" "}
+            <DocsCode>ask</DocsCode>) whose <DocsCode>input</DocsCode> is
+            Cursor&apos;s <DocsCode>{`{ title?, questions }`}</DocsCode> payload
+            renders the questionnaire while it is{" "}
+            <DocsCode>pending</DocsCode>/<DocsCode>running</DocsCode>, then
+            collapses to the usual &ldquo;Done Ask Question&rdquo; row.
+          </>
+        ),
+      },
+      {
+        title: "Tool call diffs",
+        description: (
+          <>
+            File mutation tools render a compact unified diff (via{" "}
+            <DocsCode>diff</DocsCode>) instead of dumping JSON. Read tools use
+            the same chrome for the file body (line numbers + Shiki). Word-level
+            highlights mark changed tokens inside paired diff lines.
+          </>
+        ),
+      },
+    ],
+  },
+
+  "ask-question": {
+    title: "Ask Question",
+    description:
+      "Cursor-style questionnaire the agent can drop into a turn: single-select radios, multi-select checkboxes, an Other… field, Skip, and Continue.",
+    registry: "ask-question",
+    registryDependencies: ["collapsible"],
+    preview: { name: "ask-question-example", node: <AskQuestionExample /> },
+    usage: `"use client"
+
+import { AskQuestion } from "@/components/ui/ask-question"
+
+export function Clarify() {
+  return (
+    <AskQuestion
+      title="A couple of questions"
+      questions={[
+        {
+          id: "next",
+          prompt: "What would you like to test next?",
+          options: [
+            { id: "options", label: "Different options (Recommended)" },
+            { id: "one", label: "One question only" },
+          ],
+        },
+      ]}
+      onSubmit={(result) => {
+        if (result.skipped) return
+        save(result.answers)
+      }}
+    />
+  )
+}`,
+    props: [
+      {
+        caption: "AskQuestion",
+        rows: [
+          {
+            name: "questions",
+            type: "AskQuestionItem[]",
+            required: true,
+            description: (
+              <>
+                Each item is{" "}
+                <DocsCode>
+                  {"{ id, prompt, options: [{ id, label }], allowMultiple? }"}
+                </DocsCode>
+                . Append{" "}
+                <DocsCode>(Recommended)</DocsCode> to a label to badge it.
+                Other… is added automatically unless{" "}
+                <DocsCode>hideOther</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "title",
+            type: "string",
+            description: 'Header label. Defaults to "Questions".',
+          },
+          {
+            name: "value",
+            type: "Record<string, AskQuestionSelection>",
+            description: "Controlled selections keyed by question id.",
+          },
+          {
+            name: "defaultValue",
+            type: "Record<string, AskQuestionSelection>",
+            description: "Initial selections when uncontrolled.",
+          },
+          {
+            name: "onChange",
+            type: "(value: Record<string, AskQuestionSelection>) => void",
+            description: "Fired on every option or Other… edit.",
+          },
+          {
+            name: "onSubmit",
+            type: "(result: AskQuestionResult) => void",
+            description:
+              "Continue. If onSkip is omitted, Skip also fires this with skipped: true.",
+          },
+          {
+            name: "onSkip",
+            type: "() => void",
+            description: "Skip. Continue stays disabled until every question has a selection.",
+          },
+          {
+            name: "hideOther",
+            type: "boolean",
+            default: "false",
+            description: "Do not append the Other… option.",
+          },
+          {
+            name: "disabled",
+            type: "boolean",
+            default: "false",
+            description: "Locks the form after a parent has recorded the answer.",
+          },
+          {
+            name: "defaultOpen",
+            type: "boolean",
+            default: "true",
+            description: "Start the panel expanded. Collapse it to read the turn behind it.",
+          },
+          { name: "className", type: "string", description: "Merged last." },
+        ],
+      },
+    ],
+    dataSlots: [
+      { slot: "ask-question", description: "The questionnaire card." },
+      {
+        slot: "ask-question-summary",
+        description: "Read-only recap after Skip or Continue.",
+      },
+    ],
+    customization: [
+      {
+        title: "Render it from a tool call",
+        description: (
+          <>
+            <DocsCode>MessageToolCall</DocsCode> swaps in this card when the
+            tool name is Ask Question and the status is{" "}
+            <DocsCode>pending</DocsCode> or <DocsCode>running</DocsCode>. After
+            Skip or Continue it becomes the usual &ldquo;Done Ask
+            Question&rdquo; row.
+          </>
+        ),
+        example: {
+          name: "ask-question-tool-example",
+          node: <AskQuestionToolExample />,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Tool payload",
+        description: (
+          <>
+            <DocsCode>parseAskQuestionInput</DocsCode> reads Cursor&apos;s{" "}
+            <DocsCode>{`{ title?, questions: [{ id, prompt, options, allow_multiple? }] }`}</DocsCode>{" "}
+            JSON. <DocsCode>allow_multiple</DocsCode> and{" "}
+            <DocsCode>allowMultiple</DocsCode> both work. Continue stays disabled
+            until every question has at least one option.
           </>
         ),
       },
@@ -684,6 +924,133 @@ $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
             Next.js needs the packages in{" "}
             <DocsCode>transpilePackages</DocsCode>. Both snippets are on the{" "}
             <a href="/docs/installation">Installation</a> page.
+          </>
+        ),
+      },
+    ],
+  },
+
+  "change-summary": {
+    title: "Change Summary",
+    description:
+      "The card Cursor shows after a coding turn: file count, a Review action, a few rows with +/- stats, and “Show N more”. Pair it with WorkedFor for the elapsed-time badge.",
+    registry: "change-summary",
+    registryDependencies: ["collapsible"],
+    preview: {
+      name: "change-summary-example",
+      node: <ChangeSummaryExample />,
+    },
+    usage: `import {
+  ChangeSummary,
+  WorkedFor,
+} from "@/components/ui/change-summary"
+
+export function AfterTurn() {
+  return (
+    <>
+      <WorkedFor seconds={72} />
+      <ChangeSummary
+        files={[
+          { path: "lib/reducer.ts", additions: 4, deletions: 2 },
+          { path: "lib/reducer.test.ts", additions: 11 },
+        ]}
+        onAction={() => openReview()}
+      />
+    </>
+  )
+}`,
+    props: [
+      {
+        caption: "ChangeSummary",
+        rows: [
+          {
+            name: "files",
+            type: "ChangeSummaryFile[]",
+            required: true,
+            description: (
+              <>
+                Each item is{" "}
+                <DocsCode>{"{ path, additions?, deletions? }"}</DocsCode>. The
+                filename is derived from the path.
+              </>
+            ),
+          },
+          {
+            name: "title",
+            type: "string",
+            description: 'Defaults to “N Files Changed”.',
+          },
+          {
+            name: "actionLabel",
+            type: "string",
+            default: '"Review"',
+            description: "Right-aligned header label.",
+          },
+          {
+            name: "onAction",
+            type: "() => void",
+            description:
+              "Makes the header label a button. Omit it to keep Review as plain text.",
+          },
+          {
+            name: "previewCount",
+            type: "number",
+            default: "4",
+            description: "How many rows to show before “Show N more”.",
+          },
+          { name: "className", type: "string", description: "Merged last." },
+        ],
+      },
+      {
+        caption: "WorkedFor",
+        rows: [
+          {
+            name: "seconds",
+            type: "number",
+            required: true,
+            description: "Elapsed time for the finished turn.",
+          },
+          { name: "className", type: "string", description: "Merged last." },
+        ],
+      },
+    ],
+    dataSlots: [
+      { slot: "change-summary", description: "The card." },
+      { slot: "change-summary-header", description: "Title + Review." },
+      { slot: "change-summary-list", description: "Visible file rows." },
+      { slot: "change-summary-file", description: "One file row." },
+      { slot: "change-summary-more", description: "Show N more / Show less." },
+      { slot: "worked-for", description: "The elapsed-time badge." },
+    ],
+    customization: [
+      {
+        title: "Derive files from tools",
+        description: (
+          <>
+            <DocsCode>fileChangesFromTools</DocsCode> reads Edit / Write /
+            ApplyPatch rows (path + output stats or a unified diff) so you do
+            not have to assemble the list by hand.{" "}
+            <DocsCode>Message</DocsCode> already does this when{" "}
+            <DocsCode>changes</DocsCode> is omitted.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `import { fileChangesFromTools } from "@/components/ui/change-summary"
+
+<ChangeSummary files={fileChangesFromTools(tools)} />`,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Where it appears",
+        description: (
+          <>
+            After a turn finishes, <DocsCode>Message</DocsCode> renders{" "}
+            <DocsCode>WorkedFor</DocsCode> (when <DocsCode>workedFor</DocsCode>{" "}
+            is set) and this card under the answer. Thinking stays collapsed
+            unless the reader opens it.
           </>
         ),
       },

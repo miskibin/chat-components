@@ -5,14 +5,17 @@ import { Toaster } from "sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 
+/** ChatGPT ships Klim’s Söhne (paid). Inter is the closest webfont we can distribute. */
 const fontSansUi = Inter({
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   variable: "--font-sans-ui",
+  display: "swap",
 })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+  display: "swap",
 })
 
 export const metadata: Metadata = {
@@ -33,7 +36,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontSansUi.variable, fontMono.variable)}
+      className={cn(
+        "antialiased",
+        fontSansUi.variable,
+        fontMono.variable,
+        fontSansUi.className
+      )}
     >
       <body className="min-h-svh" suppressHydrationWarning>
         <ThemeProvider

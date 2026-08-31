@@ -11,6 +11,7 @@ import {
   PromptSuggestions,
   type PromptSuggestion,
 } from "@/components/ui/prompt-suggestions"
+import { runLayoutTransition } from "@/lib/layout-transition"
 import { cn } from "@/lib/utils"
 
 const DEFAULT_SUGGESTIONS: PromptSuggestion[] = [
@@ -32,9 +33,8 @@ export type ChatProps = React.ComponentProps<"div"> & {
  * as siblings — compose them around this block.
  *
  * Empty conversations open centered — greeting, composer, then suggestions.
- * The first send swaps the greeting for the message list and the same
- * composer settles at the bottom; only the layout changes, so the textarea
- * keeps its focus and any half-typed draft.
+ * The first send fades the opening chrome and slides the same composer to
+ * the bottom, so the textarea keeps its focus and any half-typed draft.
  */
 export function Chat({
   greeting = "How can I help?",
@@ -49,12 +49,16 @@ export function Chat({
   const send = React.useCallback((text: string) => {
     const value = text.trim()
     if (!value) return
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), content: value, sender: "user" },
-    ])
-    setIsGenerating(true)
-  }, [])
+    const commit = () => {
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), content: value, sender: "user" },
+      ])
+      setIsGenerating(true)
+    }
+    if (messages.length === 0) runLayoutTransition(commit)
+    else commit()
+  }, [messages.length])
 
   const stop = React.useCallback(() => setIsGenerating(false), [])
 
@@ -82,8 +86,6 @@ export function Chat({
       )}
 
       <div data-slot="chat-composer" className="w-full">
-        {/* Same element in both states: only its box changes, so the swap
-            eases instead of jumping and the composer is never remounted. */}
         <ChatInput
           className={cn(
             "transition-[max-width,padding] duration-300 ease-out",

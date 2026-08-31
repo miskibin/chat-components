@@ -33,7 +33,7 @@ type CliEvent = {
   text?: string
 }
 
-const MAX_FIELD = 4000
+const MAX_FIELD = 50_000
 
 export async function* runCursorAgent(
   options: AgentRunOptions
@@ -250,9 +250,32 @@ function mapToolEvent(event: CliEvent): AgentStreamEvent {
     id: event.call_id as string,
     name: parsed.name,
     status: running ? "running" : failed ? "error" : "done",
-    input: stringifyField(parsed.args),
+    input: stringifyField(enrichToolArgs(parsed.args, parsed.result)),
     output: running ? undefined : formatToolResult(parsed.result),
   }
+}
+
+/**
+ * Cursor's editToolCall streams `{ path, streamContent }` and only puts the
+ * real unified diff on `result.success.diffString` when the call completes.
+ * Fold that into args so the UI can render a diff without a wider protocol.
+ */
+function enrichToolArgs(args: unknown, result: unknown): unknown {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return args
+  const record = { ...(args as Record<string, unknown>) }
+
+  if (result && typeof result === "object") {
+    const success = (result as Record<string, unknown>).success
+    if (success && typeof success === "object") {
+      const s = success as Record<string, unknown>
+      if (typeof s.diffString === "string" && s.diffString.trim()) {
+        record.diff = s.diffString
+        delete record.streamContent
+      }
+    }
+  }
+
+  return record
 }
 
 function parseToolPayload(toolCall: Record<string, unknown> | undefined): {
@@ -317,8 +340,19 @@ function formatToolResult(result: unknown): string | undefined {
   if (success && typeof success === "object") {
     const s = success as Record<string, unknown>
     if (typeof s.totalLines === "number") {
-      const body = typeof s.content === "string" ? s.content.slice(0, 3000) : ""
+      const body =
+        typeof s.content === "string"
+          ? s.content.slice(0, MAX_FIELD - 64)
+          : ""
       return body ? `${s.totalLines} lines\n${body}` : `${s.totalLines} lines`
+    }
+    if (typeof s.linesAdded === "number" || typeof s.linesRemoved === "number") {
+      const added = typeof s.linesAdded === "number" ? s.linesAdded : 0
+      const removed = typeof s.linesRemoved === "number" ? s.linesRemoved : 0
+      const parts: string[] = []
+      if (added > 0) parts.push(`+${added}`)
+      if (removed > 0) parts.push(`−${removed}`)
+      if (parts.length > 0) return parts.join(" ")
     }
     if (typeof s.linesCreated === "number") return `+${s.linesCreated}`
     if (typeof s.path === "string") {
@@ -341,10 +375,35 @@ function stringifyField(value: unknown): string | undefined {
   if (value == null) return undefined
   if (typeof value === "string") return value.slice(0, MAX_FIELD)
   try {
-    return JSON.stringify(value, null, 2).slice(0, MAX_FIELD)
+    return JSON.stringify(capLargeToolFields(value), null, 2).slice(
+      0,
+      MAX_FIELD
+    )
   } catch {
     return String(value).slice(0, MAX_FIELD)
   }
+}
+
+/** Keep JSON parseable when a streamed file body would blow the field budget. */
+function capLargeToolFields(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const record = { ...(value as Record<string, unknown>) }
+  for (const key of [
+    "streamContent",
+    "fileText",
+    "contents",
+    "content",
+    "file_text",
+    "diff",
+    "diffString",
+    "patch",
+  ]) {
+    const field = record[key]
+    if (typeof field === "string" && field.length > MAX_FIELD - 500) {
+      record[key] = `${field.slice(0, MAX_FIELD - 500)}\n…`
+    }
+  }
+  return record
 }
 
 function killAgent(child: ChildProcess) {
