@@ -16,6 +16,7 @@ export function PromptSuggestionsExample() {
   return (
     <div className="w-full max-w-lg">
       <PromptSuggestions
+        className="px-0 sm:px-0"
         items={SUGGESTIONS}
         onSelect={(item) => toast(item.label)}
       />

@@ -69,7 +69,7 @@
       "name": "prompt-suggestions",
       "type": "registry:ui",
       "title": "Prompt Suggestions",
-      "description": "Minimal starter-prompt list for an empty chat.",
+      "description": "Minimal starter-prompt list for an empty chat — full-width rows with optional icons.",
       "files": [
         {
           "path": "components/ui/prompt-suggestions.tsx",
@@ -95,9 +95,9 @@
       "name": "model-picker",
       "type": "registry:ui",
       "title": "Model Picker",
-      "description": "Collision-aware model selector with badge, description, and disabled options.",
+      "description": "Searchable model selector with badges, descriptions, disabled options, and an optional reasoning-effort row.",
       "dependencies": ["lucide-react"],
-      "registryDependencies": ["dropdown-menu"],
+      "registryDependencies": ["popover", "command"],
       "files": [
         {
           "path": "components/ui/model-picker.tsx",
@@ -218,7 +218,7 @@
       "name": "sidebar-item",
       "type": "registry:ui",
       "title": "Sidebar Item",
-      "description": "Memoized session row plus sortable list: rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
+      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta) or fully custom content, rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
       "dependencies": [
         "lucide-react",
         "@dnd-kit/core",
@@ -259,7 +259,7 @@
       "name": "chat",
       "type": "registry:block",
       "title": "Chat",
-      "description": "Responsive chat block composed from the atomic components: message list + composer.",
+      "description": "Responsive chat block composed from the atomic components: a centered greeting, composer and starter prompts that settle into the message list on the first send.",
       "registryDependencies": [
         "miskibin/chat-components/chat-input",
         "miskibin/chat-components/prompt-suggestions",

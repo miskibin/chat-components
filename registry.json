@@ -69,7 +69,7 @@
       "name": "prompt-suggestions",
       "type": "registry:ui",
       "title": "Prompt Suggestions",
-      "description": "Minimal starter-prompt list for an empty chat.",
+      "description": "Minimal starter-prompt list for an empty chat — full-width rows with optional icons.",
       "files": [
         {
           "path": "components/ui/prompt-suggestions.tsx",
@@ -259,7 +259,7 @@
       "name": "chat",
       "type": "registry:block",
       "title": "Chat",
-      "description": "Responsive chat block composed from the atomic components: message list + composer.",
+      "description": "Responsive chat block composed from the atomic components: a centered greeting, composer and starter prompts that settle into the message list on the first send.",
       "registryDependencies": [
         "miskibin/chat-components/chat-input",
         "miskibin/chat-components/prompt-suggestions",
