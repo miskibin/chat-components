@@ -472,6 +472,18 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
           { name: "id", type: "string", required: true, description: "Stable key and drag id." },
           { name: "title", type: "string", required: true, description: 'Falls back to "Untitled".' },
           {
+            name: "subtitle",
+            type: "React.ReactNode",
+            description:
+              "Second line under the title — model name, branch, snippet. Muted, ~11px, truncating; its presence is what makes the row two lines.",
+          },
+          {
+            name: "meta",
+            type: "React.ReactNode",
+            description:
+              "Trailing node on the title line — a relative time, a message count. Never shrinks; the title truncates around it.",
+          },
+          {
             name: "pinned",
             type: "boolean",
             description: "Swaps the status dot for a pin icon.",
@@ -494,16 +506,17 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
         rows: [
           {
             name: "ChatSidebarItem",
-            type: "{ item, active?, draggable?, sortable?, showDivider?, showStatusDot?, menuActions?, on… }",
+            type: "{ item, active?, draggable?, sortable?, showDivider?, showStatusDot?, renderContent?, menuActions?, on… }",
             description:
               "The single row, for lists you assemble yourself. The list component is the usual entry point.",
           },
           {
             name: "ChatSidebarItemGhost",
-            type: "{ item, active?, className? }",
+            type: "{ item, active?, renderContent?, className? }",
             description: (
               <>
-                The drag preview. Return it from{" "}
+                The drag preview — it renders subtitle, meta and custom content
+                exactly like the row. Return it from{" "}
                 <DocsCode>renderOverlay</DocsCode>.
               </>
             ),
@@ -518,6 +531,17 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             name: "SidebarItemMenuAction",
             type: "{ id, label, icon?, onSelect, destructive?, separatorBefore? }",
             description: "Shape of a custom context-menu entry.",
+          },
+          {
+            name: "SidebarItemRenderContent",
+            type: "(item: ChatSidebarItemData, ctx: SidebarItemRenderContext) => React.ReactNode",
+            description: (
+              <>
+                Type of <DocsCode>renderContent</DocsCode>;{" "}
+                <DocsCode>SidebarItemRenderContext</DocsCode> is{" "}
+                <DocsCode>{"{ active: boolean; pinned: boolean }"}</DocsCode>.
+              </>
+            ),
           },
         ],
       },
@@ -535,6 +559,14 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
       },
       { slot: "sidebar-item-button", description: "The clickable row." },
       { slot: "sidebar-item-input", description: "The rename input." },
+      {
+        slot: "sidebar-item-subtitle",
+        description: "The muted second line, when the item has a subtitle.",
+      },
+      {
+        slot: "sidebar-item-meta",
+        description: "The trailing node on the title line.",
+      },
       {
         slot: "sidebar-item-status",
         description: (
@@ -606,6 +638,27 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
 <SidebarItemStatusDot status="fault" className="size-1.5" />`,
         },
       },
+      {
+        title: "Rich rows",
+        description: (
+          <>
+            <DocsCode>subtitle</DocsCode> adds a muted second line — a model
+            name, a branch, the last message — and the row grows to the roomier
+            two-line padding on its own; <DocsCode>meta</DocsCode> pins a
+            timestamp or a message count to the end of the title line and never
+            shrinks, so the title truncates around it. Rows without a subtitle
+            render exactly as before. When the shape itself has to change,{" "}
+            <DocsCode>renderContent</DocsCode> replaces the whole body while the
+            row keeps its button shell, drag listeners, context menu and
+            rename-on-double-click; return <DocsCode>undefined</DocsCode> to let
+            that row fall back to the default body.
+          </>
+        ),
+        example: {
+          name: "sidebar-rich-example",
+          node: <SidebarRichExample />,
+        },
+      },
     ],
     notes: [
       {
@@ -613,8 +666,13 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
         description: (
           <>
             Rows are memoized and the list keeps your handler identities stable
-            internally, so a parent re-render does not re-render every row. Pass
-            handlers directly; there is no need to memoize them yourself.
+            internally — including{" "}
+            <DocsCode>renderContent</DocsCode> and{" "}
+            <DocsCode>getMenuActions</DocsCode> — so a parent re-render does not
+            re-render every row, and an inline arrow function costs nothing.
+            Pass handlers directly; there is no need to memoize them yourself.
+            Rows still re-render when their own <DocsCode>item</DocsCode> object
+            changes, so keep item identities stable across renders.
           </>
         ),
       },
