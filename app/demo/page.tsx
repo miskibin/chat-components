@@ -13,7 +13,6 @@ import {
   Trash2,
   Waves,
 } from "lucide-react"
-import Link from "next/link"
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -21,7 +20,6 @@ import {
   ChatInput,
   type ChatInputPayload,
 } from "@/components/ui/chat-input"
-import { ChatNavbar } from "@/components/ui/chat-navbar"
 import {
   ChatSidebar,
   ChatSidebarDnd,
@@ -206,7 +204,6 @@ export default function ChatExample() {
   }, [])
 
   const activeSession = sessions.find((s) => s.id === activeId)
-  const activeTitle = activeSession?.title ?? "Chat"
   const isEmptyChat = messages.length === 0
   // The drawer only exists below md; derive it so a resize can't strand it open.
   const drawerOpen = mobileNavOpen && !isDesktop
@@ -657,30 +654,15 @@ export default function ChatExample() {
       </div>
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ChatNavbar
-          title={activeTitle}
-          left={
-            <button
-              type="button"
-              aria-label="Open chats"
-              onClick={() => setMobileNavOpen(true)}
-              className="-ml-1 inline-grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 md:hidden [&_svg]:size-4"
-            >
-              <PanelLeft />
-            </button>
-          }
-          right={
-            <>
-              <Link
-                href="/"
-                className="rounded-md px-2 py-1 text-[13px] text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                Docs
-              </Link>
-              <ThemeToggle floating={false} />
-            </>
-          }
-        />
+        <button
+          type="button"
+          aria-label="Open chats"
+          onClick={() => setMobileNavOpen(true)}
+          className="fixed top-3 left-3 z-50 inline-grid size-8 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 md:hidden [&_svg]:size-4"
+        >
+          <PanelLeft />
+        </button>
+        <ThemeToggle />
 
         {isEmptyChat ? (
           <div
@@ -692,26 +674,6 @@ export default function ChatExample() {
                 <h2 className="text-center text-2xl font-semibold tracking-tight text-balance text-foreground sm:text-3xl">
                   How can I help?
                 </h2>
-                <p className="mx-auto mt-2 max-w-md text-center text-[13.5px] text-balance text-muted-foreground">
-                  {isMock ? (
-                    <>
-                      No local{" "}
-                      <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
-                        agent
-                      </code>{" "}
-                      CLI here, so replies are a scripted run — reasoning, tool
-                      calls and streamed markdown.
-                    </>
-                  ) : (
-                    <>
-                      Real LLM + tool calls via the local{" "}
-                      <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs">
-                        agent
-                      </code>{" "}
-                      CLI, running against this repository.
-                    </>
-                  )}
-                </p>
               </div>
 
               {composer}
