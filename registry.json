@@ -95,9 +95,9 @@
       "name": "model-picker",
       "type": "registry:ui",
       "title": "Model Picker",
-      "description": "Collision-aware model selector with badge, description, and disabled options.",
+      "description": "Searchable model selector with badges, descriptions, disabled options, and an optional reasoning-effort row.",
       "dependencies": ["lucide-react"],
-      "registryDependencies": ["dropdown-menu"],
+      "registryDependencies": ["popover", "command"],
       "files": [
         {
           "path": "components/ui/model-picker.tsx",

@@ -1,12 +1,113 @@
 # Chat Components
 
-A shadcn/ui registry of chat primitives. Install one atom, or pull the whole kit. Components use standard shadcn CSS variables (`--background`, `--foreground`, `--muted`, `--border`, `--primary`, `--sidebar`, `--radius`) — no custom theme required.
+Agent-grade chat UI you own. A shadcn/ui registry of the primitives an agent app actually needs — reasoning streams, tool-call rows, artifacts, a session sidebar with drag-and-drop — installed as source into your repo and themed by your existing shadcn tokens (`--background`, `--foreground`, `--muted`, `--border`, `--primary`, `--sidebar`, `--radius`).
 
 [![CI](https://github.com/miskibin/chat-components/actions/workflows/ci.yml/badge.svg)](https://github.com/miskibin/chat-components/actions/workflows/ci.yml)
 
 **[Docs](https://chat-input-azure.vercel.app/docs)** · [Playground](https://chat-input-azure.vercel.app/demo)
 
 Every component has its own page with a live preview, the example source, an accurate props table, and customization recipes.
+
+## Agent UIs are not chat bubbles
+
+A chatbot renders one text stream. An agent turn is a *transcript*: it thinks, calls tools, fails and retries, produces files, and keeps going for minutes across sessions you can come back to. Each of those needs a real surface.
+
+| The agent does this | You render this |
+| --- | --- |
+| Thinks before answering | `MessageReasoning` — collapsed "Thought for N seconds", streams markdown inside. Explicit `reasoning` prop, or parsed out of `<think>` tags. |
+| Calls tools | `MessageToolCall` rows with a `pending / running / done / error` lifecycle, collapsible input and output, and human headlines ("Read file `nav.ts`", "Command failed"). Many calls collapse behind "Used N tools". |
+| Interleaves thinking, tools, and prose | `parts: MessagePart[]` — a chronological list of `text` and `tool` segments, so the transcript stays in the order it happened instead of tools-then-answer. |
+| Emits files, tables, documents | `MessageArtifact` — titled card, kind + summary meta, inline preview, optional `onOpen` to hand off to your own viewer. |
+| Writes code and diagrams | Streamdown markdown (GFM, Shiki highlighting, Mermaid, KaTeX) plus a standalone `MessageCode` block with copy. |
+| Streams for a long time | `MessageList` with smart auto-scroll: it sticks to the bottom while streaming, and stops the moment the reader scrolls up. `GenerationStatus` covers the dead air before the first token; `ChatInput` swaps send for stop. |
+| Runs under different models and modes | `ModelPicker` with cmdk search, badges, disabled reasons, and a reasoning-effort selector (Low / Medium / High / Extra High). `ModePicker` for Ask / Plan / Agent. |
+| Takes context from the user | Composer with attachments (button, paste, drag-and-drop), skills, and slash commands — all in-memory, no network. |
+| Accumulates sessions | `ChatSidebar` + `ChatSidebarItemList`: rename, pin, delete, status dots, multi-line rows (subtitle, meta, or a fully custom body), drag-to-reorder, declarative drop zones, keyboard dragging. |
+
+The starter block ties it together: `Chat` opens ChatGPT-style — centered greeting with the composer and prompt suggestions in the middle — then settles into the normal conversation layout once the first message lands.
+
+## Why not the AI SDK / AI Elements?
+
+Vercel's AI SDK is a good stack and this is not a replacement for it. It is a different bet about where the seam should be.
+
+- **Protocol-agnostic.** These components take plain props and callbacks. There is no `useChat`, no `UIMessage`, no required stream format — the `ai` package is not even a dependency. AI Elements is designed around the AI SDK's message parts and hooks, which means zero glue *if* your backend speaks that protocol. If it doesn't — a CLI agent, a LangGraph service, a raw SSE endpoint, your own event union — you write one small adapter and everything downstream is normal React. The playground in this repo does exactly that: it streams a custom event union (`session | text | thinking | tool | done | error`) over SSE from a mock agent, with no AI SDK anywhere.
+- **Agent-first depth.** The tool-call lifecycle, reasoning disclosure, artifacts, and the session sidebar with drop zones and keyboard DnD are the core of this registry, not extras around a message bubble.
+- **UI only.** The flip side: the AI SDK also gives you providers, tool calling, structured output, and the server runtime. This gives you none of that. Bring your own backend.
+- **Same ownership model.** Both copy source into your repo via a shadcn registry. Nothing here upgrades behind your back, and everything themes off the shadcn variables you already have.
+
+They are not mutually exclusive. Keep `useChat` and map its parts to props:
+
+```tsx
+"use client"
+
+import { useChat } from "@ai-sdk/react"
+
+import type { MessagePart } from "@/components/ui/message"
+import { MessageList, type ChatMessageData } from "@/components/ui/message-list"
+
+// AI SDK v5 UIMessage parts -> ChatMessageData. Tool parts are named `tool-<name>`.
+function toChatMessage(message: {
+  id: string
+  role: string
+  parts: Array<Record<string, unknown> & { type: string }>
+}): ChatMessageData {
+  const parts: MessagePart[] = []
+  let text = ""
+  let reasoning = ""
+
+  message.parts.forEach((part, i) => {
+    const id = `${message.id}-${i}`
+    if (part.type === "text") {
+      text += part.text as string
+      parts.push({ type: "text", id, text: part.text as string })
+    } else if (part.type === "reasoning") {
+      reasoning += part.text as string
+    } else if (part.type.startsWith("tool-")) {
+      const state = part.state as string
+      parts.push({
+        type: "tool",
+        id,
+        tool: {
+          id: part.toolCallId as string,
+          name: part.type.slice("tool-".length),
+          status:
+            state === "output-available"
+              ? "done"
+              : state === "output-error"
+                ? "error"
+                : "running",
+          input: JSON.stringify(part.input ?? {}, null, 2),
+          output:
+            part.output === undefined
+              ? (part.errorText as string | undefined)
+              : JSON.stringify(part.output, null, 2),
+        },
+      })
+    }
+  })
+
+  return {
+    id: message.id,
+    sender: message.role === "user" ? "user" : "assistant",
+    content: text,
+    reasoning: reasoning || null,
+    parts,
+  }
+}
+
+export function Chat() {
+  const { messages, status } = useChat()
+
+  return (
+    <MessageList
+      messages={messages.map(toChatMessage)}
+      isGenerating={status === "streaming" || status === "submitted"}
+    />
+  )
+}
+```
+
+The same shape works for anything else: whatever your agent emits, produce `ChatMessageData` and the UI follows.
 
 ## Install
 
@@ -45,18 +146,18 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 
 | Item | What you get | Docs |
 | --- | --- | --- |
-| **chat** | Starter `Chat` block: empty-state composer + `PromptSuggestions`, then `MessageList` + `ChatInput`. Also installs the kit atoms. | [/docs/components/chat](https://chat-input-azure.vercel.app/docs/components/chat) |
+| **chat** | Starter `Chat` block: centered greeting with composer + `PromptSuggestions`, then `MessageList` + `ChatInput`. Also installs the kit atoms. | [/docs/components/chat](https://chat-input-azure.vercel.app/docs/components/chat) |
 | **chat-input** | Composer textarea with attachments, drag-and-drop, optional skills/slash menu, `tools` slot, send/stop | [chat-input](https://chat-input-azure.vercel.app/docs/components/chat-input) |
 | **prompt-suggestions** | Minimal starter-prompt list for the empty chat state | [prompt-suggestions](https://chat-input-azure.vercel.app/docs/components/prompt-suggestions) |
-| **message** | User bubble + assistant turn (reasoning, tools, code, artifacts, think tags, edit) | [message](https://chat-input-azure.vercel.app/docs/components/message) |
+| **message** | User bubble + assistant turn (reasoning, tools, code, artifacts, think tags, interleaved `parts`, edit) | [message](https://chat-input-azure.vercel.app/docs/components/message) |
 | **message-parts** | `MessageReasoning`, `MessageToolCall(s)`, `MessageCode`, `MessageArtifact` | [message-parts](https://chat-input-azure.vercel.app/docs/components/message-parts) |
 | **message-markdown** | Streamdown renderer (GFM, Shiki code, Mermaid, KaTeX) + styles | [message-markdown](https://chat-input-azure.vercel.app/docs/components/message-markdown) |
 | **message-list** | Scroll container with smart auto-scroll | [message-list](https://chat-input-azure.vercel.app/docs/components/message-list) |
 | **generation-status** | Braille spinner | [generation-status](https://chat-input-azure.vercel.app/docs/components/generation-status) |
-| **model-picker** | Dropdown model selector with badges and disabled reasons | [model-picker](https://chat-input-azure.vercel.app/docs/components/model-picker) |
+| **model-picker** | Searchable model selector with badges, disabled reasons, and a reasoning-effort selector | [model-picker](https://chat-input-azure.vercel.app/docs/components/model-picker) |
 | **mode-picker** | Ask / Plan / Agent switch | [mode-picker](https://chat-input-azure.vercel.app/docs/components/mode-picker) |
 | **chat-sidebar** | Collapsible sidebar chrome (brand / nav / rail / sections / footer slots) and the single import surface for the family | [chat-sidebar](https://chat-input-azure.vercel.app/docs/components/chat-sidebar) |
-| **sidebar-item** | Session row + sortable list (rename, pin, delete, status dots, context menu) | [sidebar-item](https://chat-input-azure.vercel.app/docs/components/sidebar-item) |
+| **sidebar-item** | Session row + sortable list (rename, pin, delete, status dots, multi-line rows, context menu) | [sidebar-item](https://chat-input-azure.vercel.app/docs/components/sidebar-item) |
 | **sidebar-dnd** | Drag-and-drop context: declarative zones + drag-to-reorder events | [sidebar-dnd](https://chat-input-azure.vercel.app/docs/components/sidebar-dnd) |
 | **sidebar-drop-zones** | Edge and inline drop-zone renderers with tone variants | [sidebar-drop-zones](https://chat-input-azure.vercel.app/docs/components/sidebar-drop-zones) |
 | **chat-navbar** | Thin top bar with title and left/right slots | [chat-navbar](https://chat-input-azure.vercel.app/docs/components/chat-navbar) |
@@ -101,6 +202,27 @@ export function Chat() {
 ```
 
 Skills and slash menus mount only when those arrays are non-empty. Full props tables live on the [docs site](https://chat-input-azure.vercel.app/docs).
+
+### Streaming an agent turn
+
+Append one assistant message, then mutate it as events arrive — `parts` keeps text and tool rows in the order the agent produced them, and `MessageList` handles the scrolling.
+
+```tsx
+setMessages((prev) =>
+  prev.map((m) =>
+    m.id !== assistantId
+      ? m
+      : {
+          ...m,
+          reasoning: (m.reasoning ?? "") + (event.type === "thinking" ? event.text : ""),
+          parts:
+            event.type === "tool"
+              ? upsertTool(m.parts, event) // replace by tool id, or append
+              : appendText(m.parts, event.text),
+        }
+  )
+)
+```
 
 ### Composer toolbar
 
@@ -244,18 +366,6 @@ transpilePackages: [
 
 Each component page lists its slots under *API reference → Data slots*.
 
-## Features
-
-- Composer-style input matching modern chat UIs
-- File attachments via button, paste, and drag-and-drop
-- Optional in-memory skills / slash commands (no network)
-- Think-tag / explicit reasoning collapsed above the answer
-- Tool calls, code blocks, and optional artifacts on assistant turns
-- Sidebar drag-and-drop: declarative zones, drag-to-reorder, keyboard support
-- Keyboard shortcuts (Enter to send, Shift+Enter for newline)
-- Accessible labels and focus handling
-- Themed with Tailwind CSS + shadcn CSS variables
-
 ## Local development
 
 ```bash
@@ -265,7 +375,7 @@ npm run dev
 
 - `/` — landing page with a live `chat` block
 - `/docs` — the documentation site (Get Started + a page per component)
-- `/demo` — Cursor Agent CLI proof of concept (not part of the published registry)
+- `/demo` — agent playground: a scripted agent streams a full run (reasoning, tool calls, answer) over SSE, or drives a real Cursor Agent CLI when one is installed. Not part of the published registry.
 
 ```bash
 npm run lint        # eslint

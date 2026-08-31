@@ -6,7 +6,8 @@ import { ModelPicker, type ModelOption } from "@/components/ui/model-picker"
 
 /**
  * A disabled option stays visible and explains itself through
- * `disabledReason`, instead of quietly disappearing from the menu.
+ * `disabledReason`, instead of quietly disappearing from the list.
+ * Search still matches it — it just cannot be picked.
  */
 const MODELS: ModelOption[] = [
   {

@@ -4,6 +4,7 @@ import { SidebarExample } from "@/components/examples/sidebar-example"
 import { SidebarItemExample } from "@/components/examples/sidebar-item-example"
 import { SidebarMobileExample } from "@/components/examples/sidebar-mobile-example"
 import { SidebarReorderExample } from "@/components/examples/sidebar-reorder-example"
+import { SidebarRichExample } from "@/components/examples/sidebar-rich-example"
 import { SidebarZonesExample } from "@/components/examples/sidebar-zones-example"
 
 export const sidebarDocs = {
@@ -330,7 +331,7 @@ export function Nav() {
   "sidebar-item": {
     title: "Sidebar Item",
     description:
-      "The session row and its list: rename in place, pin, delete, status dots, a context menu, and drag-to-reorder.",
+      "The session row and its list: one line or two, rename in place, pin, delete, status dots, a context menu, drag-to-reorder, and a full render escape hatch.",
     registry: "sidebar-item",
     registryDependencies: ["context-menu", "sidebar-dnd"],
     preview: { name: "sidebar-item-example", node: <SidebarItemExample /> },
@@ -444,6 +445,19 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             name: "getMenuActions",
             type: "(item) => SidebarItemMenuAction[]",
             description: "Extra context-menu entries, prepended to the built-ins.",
+          },
+          {
+            name: "renderContent",
+            type: "(item, ctx: { active, pinned }) => React.ReactNode",
+            description: (
+              <>
+                Replaces the body of every row — the shell, drag listeners,
+                context menu and renaming stay. Return{" "}
+                <DocsCode>undefined</DocsCode> for a row to keep the default
+                body. Its identity is stabilized internally, so an inline
+                callback still leaves rows memoized.
+              </>
+            ),
           },
           {
             name: "className / itemClassName",

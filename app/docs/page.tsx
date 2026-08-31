@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 export const metadata: Metadata = {
   title: "Introduction",
   description:
-    "A shadcn/ui registry of chat primitives: install one atom or the whole kit, then compose and restyle it in your own repo.",
+    "A shadcn/ui registry of agent chat primitives: reasoning, tool calls, artifacts, and session management. Install one atom or the whole kit, then compose and restyle it in your own repo.",
 }
 
 const componentSections = docsNav.filter(
@@ -30,8 +30,53 @@ export default function DocsIntroductionPage() {
     <article className="flex flex-col gap-12">
       <DocsPageHeader
         title="Chat Components"
-        description="A shadcn/ui registry of chat primitives — composer, message list, markdown, sidebar, pickers. Install one atom or the whole kit; the code lands in your repo and stays yours."
+        description="Agent-grade chat UI you own. A shadcn/ui registry of the primitives an agent app needs — reasoning streams, tool-call rows, artifacts, streaming markdown, a session sidebar with drag-and-drop. Install one atom or the whole kit; the code lands in your repo and stays yours."
       />
+
+      <section className="flex flex-col gap-4">
+        <DocsH2>Built for agent turns</DocsH2>
+        <DocsP>
+          A chatbot renders one text stream. An agent turn is a transcript: it
+          thinks, calls tools, fails and retries, produces files, and runs long
+          enough that the session itself becomes something you manage. Each of
+          those has a real surface here.
+        </DocsP>
+        <DocsList>
+          <li>
+            <strong className="text-foreground">Reasoning.</strong> Collapsed
+            &ldquo;Thought for N seconds&rdquo; above the answer, from an
+            explicit <DocsCode>reasoning</DocsCode> prop or parsed out of{" "}
+            <DocsCode>&lt;think&gt;</DocsCode> tags.
+          </li>
+          <li>
+            <strong className="text-foreground">Tool calls.</strong> Rows with a{" "}
+            <DocsCode>pending / running / done / error</DocsCode> lifecycle,
+            collapsible input and output, and readable headlines. Many calls
+            fold behind &ldquo;Used N tools&rdquo;.
+          </li>
+          <li>
+            <strong className="text-foreground">Real ordering.</strong>{" "}
+            <DocsCode>parts</DocsCode> interleaves text and tool segments, so the
+            turn reads in the order the agent produced it.
+          </li>
+          <li>
+            <strong className="text-foreground">Artifacts and code.</strong>{" "}
+            Titled artifact cards with an optional preview and{" "}
+            <DocsCode>onOpen</DocsCode> handoff, plus Streamdown markdown — GFM,
+            Shiki, Mermaid, KaTeX.
+          </li>
+          <li>
+            <strong className="text-foreground">Long streams.</strong> The
+            message list sticks to the bottom while tokens arrive and lets go
+            the moment the reader scrolls up; the composer swaps send for stop.
+          </li>
+          <li>
+            <strong className="text-foreground">Sessions.</strong> A sidebar
+            with rename, pin, delete, status dots, multi-line rows,
+            drag-to-reorder, declarative drop zones, and keyboard dragging.
+          </li>
+        </DocsList>
+      </section>
 
       <section className="flex flex-col gap-4">
         <DocsH2>Quick start</DocsH2>
@@ -86,6 +131,48 @@ export default function DocsIntroductionPage() {
       </section>
 
       <section className="flex flex-col gap-4">
+        <DocsH2>Why not the AI SDK?</DocsH2>
+        <DocsP>
+          Vercel&rsquo;s AI SDK is a good stack, and this is not a replacement
+          for it — it is a different bet about where the seam belongs.
+        </DocsP>
+        <DocsList>
+          <li>
+            <strong className="text-foreground">Protocol-agnostic.</strong>{" "}
+            These components take plain props and callbacks. No{" "}
+            <DocsCode>useChat</DocsCode>, no <DocsCode>UIMessage</DocsCode>, no
+            required stream format — the <DocsCode>ai</DocsCode> package
+            isn&rsquo;t even a dependency. AI Elements is designed around the AI
+            SDK&rsquo;s message parts and hooks, which is zero glue if your
+            backend speaks that protocol. If it doesn&rsquo;t — a CLI agent, a
+            LangChain service, a raw SSE endpoint, your own event union — you
+            write one small adapter and the rest is normal React.
+          </li>
+          <li>
+            <strong className="text-foreground">Agent-first depth.</strong> The
+            tool-call lifecycle, reasoning disclosure, artifacts, and the
+            session sidebar are the core of this registry, not extras around a
+            message bubble.
+          </li>
+          <li>
+            <strong className="text-foreground">UI only.</strong> The flip side:
+            the AI SDK also gives you providers, tool calling, structured
+            output, and a server runtime. This gives you none of that. Bring
+            your own backend.
+          </li>
+          <li>
+            <strong className="text-foreground">Not exclusive.</strong> Keep{" "}
+            <DocsCode>useChat</DocsCode> and map its parts onto{" "}
+            <DocsCode>ChatMessageData</DocsCode> — the{" "}
+            <Link href="https://github.com/miskibin/chat-components#why-not-the-ai-sdk--ai-elements">
+              README
+            </Link>{" "}
+            has the adapter.
+          </li>
+        </DocsList>
+      </section>
+
+      <section className="flex flex-col gap-4">
         <DocsH2>Components</DocsH2>
         <div className="flex flex-col gap-6">
           {componentSections.map((section) => (
@@ -132,10 +219,11 @@ export default function DocsIntroductionPage() {
         <DocsH2>Try it first</DocsH2>
         <DocsCallout title="Playground">
           <p>
-            <Link href="/demo">/demo</Link> runs the whole kit against a live
-            agent backend — streaming answers, reasoning, tool calls, a sortable
-            sidebar with drop zones, and the off-canvas mobile layout. It is a
-            proof of concept, not part of the published registry.
+            <Link href="/demo">/demo</Link> runs the whole kit against an agent
+            backend that streams its own SSE event union — no AI SDK involved.
+            Reasoning, tool calls, streaming answers, a sortable sidebar with
+            drop zones, and the off-canvas mobile layout. It is a proof of
+            concept, not part of the published registry.
           </p>
         </DocsCallout>
       </section>
