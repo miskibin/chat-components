@@ -420,6 +420,9 @@ type ModelSection = {
   options: ModelOption[]
 }
 
+/** React key for the headingless leading section; not a group id. */
+const UNGROUPED_KEY = "__ungrouped__"
+
 /**
  * Sections in `groups` order. Options with an unknown or absent group keep
  * their relative order and lead the list without a heading, so a partly
@@ -441,7 +444,7 @@ function sectionize(
   }
 
   const sections: ModelSection[] = ungrouped.length
-    ? [{ key: " ungrouped", group: null, options: ungrouped }]
+    ? [{ key: UNGROUPED_KEY, group: null, options: ungrouped }]
     : []
   for (const group of groups) {
     const bucket = buckets.get(group.id)
