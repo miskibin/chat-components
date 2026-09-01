@@ -8,6 +8,7 @@ import { MessageExample } from "@/components/examples/message-example"
 import { MessageListExample } from "@/components/examples/message-list-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
+import { MessageProcessExample } from "@/components/examples/message-process-example"
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
 
 export const messageDocs = {
@@ -164,7 +165,7 @@ export function Turn() {
             name: "workedFor",
             type: "number",
             description:
-              'Elapsed seconds. After the turn settles, rendered as “Worked for 12s”.',
+              'Elapsed seconds. Labels the “Worked for 12s” row the thinking and tool parts collapse into once the turn settles.',
           },
           {
             name: "changes",
@@ -215,8 +216,17 @@ export function Turn() {
       },
       { slot: "message-actions", description: "Hover action row." },
       {
+        slot: "message-process",
+        description: (
+          <>
+            The “Worked for 12s” group above the answer, stamped by{" "}
+            <DocsCode>MessageProcess</DocsCode>.
+          </>
+        ),
+      },
+      {
         slot: "message-turn-summary",
-        description: "Worked-for badge and file-change card after a settled turn.",
+        description: "The file-change card under a settled turn.",
       },
     ],
     customization: [
@@ -297,6 +307,24 @@ export function Turn() {
     ],
     notes: [
       {
+        title: "How a turn settles",
+        description: (
+          <>
+            While <DocsCode>isAnimating</DocsCode> is true the parts render live
+            and flat, in order. When it flips to false everything up to the last
+            thinking or tool part folds into one{" "}
+            <DocsCode>Worked for 12s</DocsCode> disclosure above the answer —{" "}
+            <DocsCode>workedFor</DocsCode> supplies the label, and expanding it
+            replays the whole chronological stack. Turns that only produced text
+            get no group at all, and an Ask Question nobody has answered yet
+            holds the group open so the form stays reachable. The legacy{" "}
+            <DocsCode>reasoning</DocsCode> prop and{" "}
+            <DocsCode>tools</DocsCode> array land in the same group, so both
+            shapes read alike.
+          </>
+        ),
+      },
+      {
         title: "Memoization",
         description: (
           <>
@@ -349,13 +377,13 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             type: "boolean",
             default: "false",
             description:
-              "Marks the last assistant turn as streaming and shows the spinner while it is still empty.",
+              "Marks the last assistant turn as streaming and shows the generation status while it is still empty.",
           },
           {
             name: "generationStage",
             type: '"thinking" | "searching" | "responding" | "idle"',
             default: '"idle"',
-            description: "Label for that spinner.",
+            description: "Label for that status.",
           },
           {
             name: "onEditMessage",
@@ -501,11 +529,17 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
     description:
       "The atoms an assistant turn is made of — reasoning, tool calls, ask questions, highlighted code, and artifact cards. Use them directly when you build your own turn layout.",
     registry: "message-parts",
-    registryDependencies: ["collapsible", "message-markdown", "ask-question"],
+    registryDependencies: [
+      "collapsible",
+      "message-markdown",
+      "ask-question",
+      "change-summary",
+    ],
     preview: { name: "message-parts-example", node: <MessagePartsExample /> },
     usage: `import {
   MessageArtifact,
   MessageCode,
+  MessageProcess,
   MessageReasoning,
   MessageToolCalls,
 } from "@/components/ui/message-parts"
@@ -513,14 +547,58 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
 export function Answer() {
   return (
     <>
-      <MessageReasoning duration={7}>Checking the reducer…</MessageReasoning>
-      <MessageToolCalls tools={tools} />
+      <MessageProcess seconds={12}>
+        <MessageReasoning duration={7}>Checking the reducer…</MessageReasoning>
+        <MessageToolCalls tools={tools} />
+      </MessageProcess>
       <MessageCode block={{ language: "ts", code: source }} />
       <MessageArtifact artifact={{ id: "a1", title: "coverage.csv" }} />
     </>
   )
 }`,
     props: [
+      {
+        caption: "MessageProcess",
+        rows: [
+          {
+            name: "children",
+            type: "React.ReactNode",
+            required: true,
+            description:
+              "The turn's chronological thinking and tool stack, in render order.",
+          },
+          {
+            name: "seconds",
+            type: "number",
+            description: 'Elapsed time — becomes the “Worked for 12s” label.',
+          },
+          {
+            name: "label",
+            type: "React.ReactNode",
+            description: (
+              <>
+                Overrides the derived label. Without either prop the row reads
+                &ldquo;Worked for a while&rdquo;.
+              </>
+            ),
+          },
+          {
+            name: "streaming",
+            type: "boolean",
+            default: "false",
+            description:
+              "True while the turn is still arriving: the stack stays open and the trigger is withheld, so live parts read as a flat list. When it flips to false the group folds into the labelled row.",
+          },
+          {
+            name: "defaultOpen",
+            type: "boolean",
+            default: "false",
+            description:
+              "Keep the stack expanded once the turn settles, instead of collapsing it.",
+          },
+          { name: "className", type: "string", description: "Merged last." },
+        ],
+      },
       {
         caption: "MessageReasoning",
         rows: [
@@ -655,6 +733,25 @@ export function Answer() {
       },
     ],
     dataSlots: [
+      {
+        slot: "message-process",
+        description: (
+          <>
+            The “Worked for 12s” group around a settled turn&apos;s thinking and
+            tool stack. Carries <DocsCode>data-state</DocsCode> —{" "}
+            <DocsCode>open</DocsCode> or <DocsCode>closed</DocsCode>.
+          </>
+        ),
+      },
+      {
+        slot: "message-process-trigger",
+        description:
+          "The labelled row. Absent while the turn is still streaming.",
+      },
+      {
+        slot: "message-process-content",
+        description: "The stack the group folds away.",
+      },
       { slot: "message-reasoning", description: "Reasoning disclosure." },
       {
         slot: "message-reasoning-trigger",
@@ -755,6 +852,27 @@ export function Answer() {
       },
     ],
     customization: [
+      {
+        title: "Collapse a finished turn",
+        description: (
+          <>
+            <DocsCode>MessageProcess</DocsCode> is the shape a settled turn
+            takes: everything it did before answering behind one{" "}
+            <DocsCode>Worked for 12s</DocsCode> row.{" "}
+            <DocsCode>streaming</DocsCode> is the whole state machine — true
+            while the run is live (open, unlabelled, reading as a flat stack),
+            false once it settles (collapsed, labelled).{" "}
+            <DocsCode>Message</DocsCode> wires this for you from{" "}
+            <DocsCode>isAnimating</DocsCode> and{" "}
+            <DocsCode>workedFor</DocsCode>; mount it yourself only in a custom
+            turn layout.
+          </>
+        ),
+        example: {
+          name: "message-process-example",
+          node: <MessageProcessExample />,
+        },
+      },
       {
         title: "Style by tool status",
         description: (
@@ -1379,10 +1497,12 @@ export function AfterTurn() {
         title: "Where it appears",
         description: (
           <>
-            After a turn finishes, <DocsCode>Message</DocsCode> renders{" "}
-            <DocsCode>WorkedFor</DocsCode> (when <DocsCode>workedFor</DocsCode>{" "}
-            is set) and this card under the answer. Thinking stays collapsed
-            unless the reader opens it.
+            After a turn finishes, <DocsCode>Message</DocsCode> renders this
+            card under the answer. The elapsed time goes the other way:{" "}
+            <DocsCode>workedFor</DocsCode> labels the process disclosure above
+            the answer (see <DocsCode>MessageProcess</DocsCode>), and{" "}
+            <DocsCode>WorkedFor</DocsCode> stays exported for the badge on its
+            own — a turn header, a run list, your own layout.
           </>
         ),
       },
@@ -1392,7 +1512,7 @@ export function AfterTurn() {
   "generation-status": {
     title: "Generation Status",
     description:
-      "Braille spinner with an optional label, for the gap between sending a message and the first token.",
+      "A single breathing dot with an optional label, for the gap between sending a message and the first token.",
     registry: "generation-status",
     preview: {
       name: "generation-status-example",
@@ -1412,7 +1532,7 @@ export function Pending({ busy }: { busy: boolean }) {
             type: "boolean",
             description: (
               <>
-                Shows the spinner. Prefer this over{" "}
+                Shows the indicator. Prefer this over{" "}
                 <DocsCode>stage</DocsCode>; when both are omitted nothing
                 renders.
               </>
@@ -1423,18 +1543,19 @@ export function Pending({ busy }: { busy: boolean }) {
             type: '"thinking" | "searching" | "responding" | "idle"',
             default: '"idle"',
             description:
-              "Legacy stage. Any non-idle stage shows the spinner and supplies a default label.",
+              "Legacy stage. Any non-idle stage shows the indicator and supplies a default label.",
           },
           {
             name: "label",
             type: "string",
-            description: "Overrides the stage label. Omit for a bare spinner.",
+            description: "Overrides the stage label. Omit for a bare dot.",
           },
           {
             name: "size",
             type: "number",
             default: "16",
-            description: "Spinner font size in pixels.",
+            description:
+              "Indicator box size in pixels; the dot fills half of it.",
           },
           {
             name: "className",
@@ -1459,7 +1580,14 @@ export function Pending({ busy }: { busy: boolean }) {
           </>
         ),
       },
-      { slot: "generation-status-spinner", description: "The braille glyph." },
+      {
+        slot: "generation-status-spinner",
+        description: "The dot's box — size it, recolor it, or replace the dot.",
+      },
+      {
+        slot: "generation-status-label",
+        description: "The stage label, when there is one.",
+      },
     ],
     customization: [
       {
@@ -1474,6 +1602,25 @@ export function Pending({ busy }: { busy: boolean }) {
 />`,
         },
       },
+      {
+        title: "Hold it still",
+        description: (
+          <>
+            The pulse is a CSS animation behind{" "}
+            <DocsCode>motion-safe</DocsCode>, so it is already off for readers
+            with reduced motion — no timer, no frame state, nothing to clean
+            up. Drop it for everyone by overriding the animation.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<GenerationStatus
+  active
+  label="Thinking"
+  className="[&_*]:animate-none"
+/>`,
+        },
+      },
     ],
     notes: [
       {
@@ -1482,8 +1629,8 @@ export function Pending({ busy }: { busy: boolean }) {
           <>
             <DocsCode>MessageList</DocsCode> renders this for you: while{" "}
             <DocsCode>isGenerating</DocsCode> is true and the last assistant
-            turn is still empty, the spinner sits where the answer will land.
-            You only mount it yourself in custom layouts.
+            turn is still empty, the dot sits where the answer will land. You
+            only mount it yourself in custom layouts.
           </>
         ),
       },

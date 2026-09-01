@@ -33,7 +33,7 @@
       "name": "generation-status",
       "type": "registry:ui",
       "title": "Generation Status",
-      "description": "Braille spinner for AI generation status.",
+      "description": "Quiet pulsing-dot status for a run that has not produced its first token yet, with an optional stage label.",
       "files": [
         {
           "path": "components/ui/generation-status.tsx",
@@ -167,12 +167,13 @@
       "name": "message-parts",
       "type": "registry:ui",
       "title": "Message Parts",
-      "description": "Atomic assistant parts: reasoning, tool calls, ask questions, highlighted code, and artifacts.",
+      "description": "Atomic assistant parts: the \"Worked for 12s\" process group, reasoning, tool calls, ask questions, highlighted code, and artifacts.",
       "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
       "registryDependencies": [
         "collapsible",
         "miskibin/chat-components/message-markdown",
-        "miskibin/chat-components/ask-question"
+        "miskibin/chat-components/ask-question",
+        "miskibin/chat-components/change-summary"
       ],
       "files": [
         {
@@ -185,7 +186,7 @@
       "name": "message",
       "type": "registry:ui",
       "title": "Message",
-      "description": "Memoized user bubble and assistant message with reasoning, tools, ask questions, code, artifacts, and a post-turn change summary.",
+      "description": "Memoized user bubble and assistant message: live parts while streaming, collapsed into a \"Worked for 12s\" process group with the answer and a change summary once the turn settles.",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/message-parts",
@@ -250,7 +251,7 @@
       "name": "sidebar-item",
       "type": "registry:ui",
       "title": "Sidebar Item",
-      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta) or fully custom content, rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
+      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta, folder/branch badge) or fully custom content, rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
       "dependencies": [
         "lucide-react",
         "@dnd-kit/core",

@@ -93,8 +93,15 @@ export default function ThemingPage() {
             {
               name: "--radius",
               type: "length",
-              description:
-                "Drives the whole radius scale. The composer surface is intentionally rounder than the rest.",
+              description: (
+                <>
+                  Drives the whole radius scale. Surfaces stay on it —{" "}
+                  <DocsCode>rounded-md</DocsCode> for controls,{" "}
+                  <DocsCode>rounded-lg</DocsCode> for cards, and{" "}
+                  <DocsCode>rounded-2xl</DocsCode> as the one soft step, for the
+                  composer.
+                </>
+              ),
             },
             {
               name: "--font-sans / --font-mono",
@@ -230,10 +237,13 @@ export default function ThemingPage() {
         <DocsH2>House rules</DocsH2>
         <DocsList>
           <li>
-            Focus is always a <DocsCode>3px</DocsCode>{" "}
-            <DocsCode>ring-ring/50</DocsCode> — keep it if you restyle a
-            control, and never trade it for{" "}
-            <DocsCode>outline-none</DocsCode> alone.
+            Focus on a control is always a <DocsCode>3px</DocsCode>{" "}
+            <DocsCode>ring-ring/50</DocsCode> — keep it if you restyle one, and
+            never trade it for <DocsCode>outline-none</DocsCode> alone. Large
+            surfaces that merely <em>contain</em> a focused field — the composer
+            card, the edit bubble — shift their border to{" "}
+            <DocsCode>border-ring</DocsCode> instead, because a ring that wide
+            reads as an error state.
           </li>
           <li>
             UI text sits on a <DocsCode>text-[13px]</DocsCode>—

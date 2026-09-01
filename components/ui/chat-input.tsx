@@ -229,7 +229,7 @@ export function ChatInput({
     <div
       data-slot="chat-input"
       className={cn(
-        "mx-auto w-full max-w-4xl px-3 pt-1 pb-3 sm:px-4 sm:pb-4",
+        "mx-auto w-full max-w-3xl px-3 pt-1 pb-3 sm:px-4 sm:pb-4",
         className
       )}
     >
@@ -246,8 +246,11 @@ export function ChatInput({
           data-slot="chat-input-surface"
           data-drag-over={dragOver || undefined}
           className={cn(
-            "rounded-3xl border bg-background px-3 pt-2.5 pb-2 shadow-xs transition-colors has-[textarea:focus]:border-ring has-[textarea:focus]:ring-[3px] has-[textarea:focus]:ring-ring/50 sm:px-3.5",
-            dragOver && "border-primary ring-[3px] ring-primary/20"
+            /* A hairline card, not a pill: the focus state is a border-color
+               shift rather than a ring, so a 700px-wide surface never lights
+               up like a text field. */
+            "rounded-2xl border bg-background px-3 pt-2.5 pb-2 shadow-xs transition-colors has-[textarea:focus]:border-ring sm:px-3.5",
+            dragOver && "border-primary ring-1 ring-primary/20"
           )}
           onDragOver={(e) => {
             e.preventDefault()

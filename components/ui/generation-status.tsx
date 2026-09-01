@@ -4,19 +4,16 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-const FRAME_MS = 80
-
 export type GenerationStage = "thinking" | "searching" | "responding" | "idle"
 
 export type GenerationStatusProps = React.ComponentProps<"span"> & {
-  /** When true, shows the spinner. Prefer this over stage for simple UIs. */
+  /** When true, shows the indicator. Prefer this over stage for simple UIs. */
   active?: boolean
-  /** Optional legacy stage. Non-idle stages show the spinner. */
+  /** Optional legacy stage. Non-idle stages show the indicator. */
   stage?: GenerationStage
-  /** Optional label next to the spinner. */
+  /** Optional label next to the indicator. */
   label?: string
-  /** Spinner font size in px. */
+  /** Indicator box size in px; the dot fills half of it. */
   size?: number
 }
 
@@ -27,25 +24,25 @@ const STAGE_LABELS: Record<GenerationStage, string | undefined> = {
   idle: undefined,
 }
 
-function BrailleSpinner({ size = 16 }: { size?: number }) {
-  const [frame, setFrame] = React.useState(0)
-
-  React.useEffect(() => {
-    const id = window.setInterval(() => {
-      setFrame((f) => (f + 1) % FRAMES.length)
-    }, FRAME_MS)
-    return () => window.clearInterval(id)
-  }, [])
-
+/**
+ * One dot, breathing. No timers and no frame state: the browser owns the
+ * animation, and `motion-safe` drops it entirely for readers who asked for
+ * less motion — the dot simply sits there instead.
+ */
+function PulseDot({ size = 16 }: { size?: number }) {
   return (
     <span
       data-slot="generation-status-spinner"
       aria-label="Loading"
       role="status"
-      className="font-mono leading-none text-muted-foreground"
-      style={{ fontSize: size }}
+      className="inline-grid shrink-0 place-items-center text-muted-foreground"
+      style={{ width: size, height: size }}
     >
-      {FRAMES[frame]}
+      <span
+        aria-hidden
+        style={{ width: size / 2, height: size / 2 }}
+        className="rounded-full bg-current motion-safe:animate-pulse"
+      />
     </span>
   )
 }
@@ -70,13 +67,20 @@ export function GenerationStatus({
       aria-live="polite"
       aria-busy="true"
       className={cn(
-        "inline-flex items-center gap-2 text-[13px] text-muted-foreground",
+        "inline-flex items-center gap-1.5 text-[13px] text-muted-foreground",
         className
       )}
       {...props}
     >
-      <BrailleSpinner size={size} />
-      {text ? <span className="truncate">{text}</span> : null}
+      <PulseDot size={size} />
+      {text ? (
+        <span
+          data-slot="generation-status-label"
+          className="truncate motion-safe:animate-pulse"
+        >
+          {text}
+        </span>
+      ) : null}
     </span>
   )
 }
