@@ -30,6 +30,7 @@ import {
   SideRow,
   SidebarCollapsibleSection,
   SidebarEmptyState,
+  SidebarItemBadge,
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
 import {
@@ -100,10 +101,19 @@ const STAGE_SUBTITLES: Record<Exclude<GenerationStage, "idle">, string> = {
   responding: "Responding",
 }
 
-/** Second sidebar line: stage while generating, else model / empty hint. */
-function sessionSubtitle(session: ChatSession, models: ModelOption[]) {
+/**
+ * Second sidebar line: the stage while generating, otherwise where the
+ * session lives — folder and branch, the way a coding agent labels its work.
+ */
+function sessionSubtitle(
+  session: ChatSession,
+  models: ModelOption[]
+): ReactNode {
   if (session.run && session.run.stage !== "idle") {
     return STAGE_SUBTITLES[session.run.stage]
+  }
+  if (session.folder || session.branch) {
+    return <SidebarItemBadge folder={session.folder} branch={session.branch} />
   }
   if (!session.model || !session.messages?.length) return "New chat"
   return models.find((m) => m.id === session.model)?.name ?? session.model
@@ -165,11 +175,19 @@ type ChatSession = ChatSidebarItemData & {
   updatedAt: number
   /** Model used for the last turn — drives the sidebar `subtitle`. */
   model?: string
+  /** Working folder for the thread — shown on the row as a folder badge. */
+  folder?: string
+  /** Branch the thread is working on, paired with the folder. */
+  branch?: string
   /** Live generation for this thread; absent / null when idle. */
   run?: SessionRun | null
   /** Last turn ended in error — drives the Failed meta until the next send. */
   lastError?: boolean
 }
+
+/** Stand-ins for whatever the host app knows about a session's workspace. */
+const DEMO_FOLDER = "~/code/chat-components"
+const DEMO_BRANCH = "main"
 
 const DEMO_SKILLS = [
   { name: "summarize", description: "Condense long text into key points" },
@@ -236,7 +254,14 @@ export default function ChatExample() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [chatsOpen, setChatsOpen] = useState(true)
   const [sessions, setSessions] = useState<ChatSession[]>(() => [
-    { id: "1", title: "Welcome chat", pinned: true, updatedAt: nowMs() },
+    {
+      id: "1",
+      title: "Welcome chat",
+      pinned: true,
+      updatedAt: nowMs(),
+      folder: DEMO_FOLDER,
+      branch: DEMO_BRANCH,
+    },
   ])
   const [activeId, setActiveId] = useState("1")
   const [messages, setMessages] = useState<MessageData[]>([])
@@ -334,7 +359,15 @@ export default function ChatExample() {
     setMobileNavOpen(false)
     const id = String(nowMs())
     setSessions((prev) => [
-      { id, title: "New chat", pinned: false, messages: [], updatedAt: nowMs() },
+      {
+        id,
+        title: "New chat",
+        pinned: false,
+        messages: [],
+        updatedAt: nowMs(),
+        folder: DEMO_FOLDER,
+        branch: DEMO_BRANCH,
+      },
       ...prev,
     ])
     setActiveId(id)

@@ -251,7 +251,7 @@
       "name": "sidebar-item",
       "type": "registry:ui",
       "title": "Sidebar Item",
-      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta) or fully custom content, rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
+      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta, folder/branch badge) or fully custom content, rename, pin, delete, status dots, context menu, drag and drag-to-reorder.",
       "dependencies": [
         "lucide-react",
         "@dnd-kit/core",
