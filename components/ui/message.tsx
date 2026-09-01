@@ -333,6 +333,83 @@ export const Message = React.memo(function Message({
     )
   }
 
+  const legacyReasoning =
+    reasoning && !parts?.some((part) => part.type === "thinking") ? (
+      <MessageReasoning
+        key="reasoning"
+        defaultOpen={reasoningDefaultOpen}
+        duration={reasoningDuration}
+        streaming={isAnimating}
+      >
+        {reasoning}
+      </MessageReasoning>
+    ) : null
+
+  const partNodes = parts?.map((part, index) => {
+    if (part.type === "tool") {
+      // onAskAnswer is forwarded as-is: MessageToolCall reports its
+      // own id, so a stable handler keeps every row memoized.
+      return (
+        <MessageToolCall
+          key={part.id}
+          tool={part.tool}
+          onAskAnswer={onAskAnswer}
+        />
+      )
+    }
+    if (part.type === "thinking") {
+      if (!part.text) return null
+      const isLatestThinking = index === lastThinkingIndex
+      return (
+        <MessageReasoning
+          key={part.id}
+          defaultOpen={reasoningDefaultOpen}
+          streaming={isAnimating && isLatestThinking}
+        >
+          {part.text}
+        </MessageReasoning>
+      )
+    }
+    return part.text ? (
+      <MessageMarkdown
+        key={part.id}
+        isAnimating={isAnimating}
+        patternHandlers={patternHandlers}
+      >
+        {part.text}
+      </MessageMarkdown>
+    ) : null
+  })
+
+  /* Same shape either way: the process above, the answer below. The legacy
+     `tools` array is one stack, already expanded — the group around it is
+     the collapse. */
+  const process = partNodes
+    ? partNodes.slice(0, processEnd + 1)
+    : tools.length > 0
+      ? [
+          <MessageToolCalls
+            key="tools"
+            tools={tools}
+            defaultOpen
+            onAskAnswer={onAskAnswer}
+          />,
+        ]
+      : []
+  const answer = partNodes
+    ? partNodes.slice(processEnd + 1)
+    : displayContent
+      ? [
+          <MessageMarkdown
+            key="content"
+            isAnimating={isAnimating}
+            patternHandlers={patternHandlers}
+          >
+            {displayContent}
+          </MessageMarkdown>,
+        ]
+      : []
+
   return (
     <div
       data-slot="message"
@@ -346,99 +423,16 @@ export const Message = React.memo(function Message({
           contentClassName
         )}
       >
-        {(() => {
-          const legacyReasoning =
-            reasoning && !parts?.some((part) => part.type === "thinking") ? (
-              <MessageReasoning
-                key="reasoning"
-                defaultOpen={reasoningDefaultOpen}
-                duration={reasoningDuration}
-                streaming={isAnimating}
-              >
-                {reasoning}
-              </MessageReasoning>
-            ) : null
-
-          const partNodes = parts?.map((part, index) => {
-            if (part.type === "tool") {
-              // onAskAnswer is forwarded as-is: MessageToolCall reports its
-              // own id, so a stable handler keeps every row memoized.
-              return (
-                <MessageToolCall
-                  key={part.id}
-                  tool={part.tool}
-                  onAskAnswer={onAskAnswer}
-                />
-              )
-            }
-            if (part.type === "thinking") {
-              if (!part.text) return null
-              const isLatestThinking = index === lastThinkingIndex
-              return (
-                <MessageReasoning
-                  key={part.id}
-                  defaultOpen={reasoningDefaultOpen}
-                  streaming={isAnimating && isLatestThinking}
-                >
-                  {part.text}
-                </MessageReasoning>
-              )
-            }
-            return part.text ? (
-              <MessageMarkdown
-                key={part.id}
-                isAnimating={isAnimating}
-                patternHandlers={patternHandlers}
-              >
-                {part.text}
-              </MessageMarkdown>
-            ) : null
-          })
-
-          /* Same shape either way: the process above, the answer below. The
-             legacy `tools` array is one stack, already expanded — the group
-             around it is the collapse. */
-          const process = partNodes
-            ? partNodes.slice(0, processEnd + 1)
-            : tools.length > 0
-              ? [
-                  <MessageToolCalls
-                    key="tools"
-                    tools={tools}
-                    defaultOpen
-                    onAskAnswer={onAskAnswer}
-                  />,
-                ]
-              : []
-          const answer = partNodes
-            ? partNodes.slice(processEnd + 1)
-            : displayContent
-              ? [
-                  <MessageMarkdown
-                    key="content"
-                    isAnimating={isAnimating}
-                    patternHandlers={patternHandlers}
-                  >
-                    {displayContent}
-                  </MessageMarkdown>,
-                ]
-              : []
-
-          return (
-            <>
-              {hasProcess || legacyReasoning ? (
-                <MessageProcess
-                  streaming={isAnimating || hasOpenAsk}
-                  seconds={workedFor}
-                >
-                  {legacyReasoning}
-                  {process}
-                </MessageProcess>
-              ) : null}
-              {answer}
-            </>
-          )
-        })()}
+        {hasProcess || legacyReasoning ? (
+          <MessageProcess
+            streaming={isAnimating || hasOpenAsk}
+            seconds={workedFor}
+          >
+            {legacyReasoning}
+            {process}
+          </MessageProcess>
+        ) : null}
+        {answer}
 
         {codeBlocks.map((block, i) => (
           <MessageCode key={`${block.language ?? "code"}-${i}`} block={block} />
