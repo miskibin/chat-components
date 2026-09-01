@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useTheme } from "next-themes"
-import { Streamdown } from "streamdown"
+import { Streamdown, defaultRehypePlugins } from "streamdown"
 import { code } from "@streamdown/code"
 import { mermaid } from "@streamdown/mermaid"
 import { createMathPlugin } from "@streamdown/math"
@@ -16,6 +16,40 @@ const math = createMathPlugin({
 })
 
 const plugins = { code, mermaid, math }
+
+type RehypePlugins = React.ComponentProps<typeof Streamdown>["rehypePlugins"]
+type SanitizeSchema = { protocols?: Record<string, string[]> }
+
+/**
+ * Streamdown's sanitizer only lets `http` and `https` through on `src`, so an
+ * answer that inlines an image as a `data:` URI — how an agent hands back a
+ * screenshot or a rendered chart — loses the `<img>` entirely.
+ *
+ * Putting that one protocol back is the whole change: the `harden` pass that
+ * runs straight after the sanitizer already narrows `data:` down to
+ * `data:image/*`, so nothing but a picture can ride in on it.
+ */
+function withDataImages(): RehypePlugins {
+  const { raw, sanitize, harden } = defaultRehypePlugins
+  if (!Array.isArray(sanitize)) return Object.values(defaultRehypePlugins)
+  const [plugin, schema] = sanitize as [typeof sanitize[0], SanitizeSchema]
+  return [
+    raw,
+    [
+      plugin,
+      {
+        ...schema,
+        protocols: {
+          ...schema.protocols,
+          src: [...(schema.protocols?.src ?? []), "data"],
+        },
+      },
+    ],
+    harden,
+  ]
+}
+
+const rehypePlugins = withDataImages()
 const shikiTheme: ["github-light", "github-dark"] = [
   "github-light",
   "github-dark",
@@ -117,6 +151,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
       <Streamdown
         className={cn("lc-markdown max-w-none", className)}
         plugins={plugins}
+        rehypePlugins={rehypePlugins}
         shikiTheme={shikiTheme}
         mermaid={mermaidConfig}
         isAnimating={isAnimating}

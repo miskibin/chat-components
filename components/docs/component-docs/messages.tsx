@@ -1231,6 +1231,26 @@ $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
         },
       },
       {
+        title: "Inline images",
+        description: (
+          <>
+            Images render from <DocsCode>http</DocsCode>,{" "}
+            <DocsCode>https</DocsCode> and <DocsCode>data:</DocsCode> URLs, so a
+            screenshot or chart an agent hands back as base64 shows up in the
+            answer instead of vanishing. Streamdown&rsquo;s hardening pass still
+            narrows <DocsCode>data:</DocsCode> to <DocsCode>data:image/*</DocsCode>
+            , and <DocsCode>message-markdown.css</DocsCode> keeps every image
+            inside the message column.
+          </>
+        ),
+        code: {
+          lang: "md",
+          code: `![a chart the agent rendered](data:image/png;base64,iVBORw0KGgo…)
+
+![or a plain URL](https://example.com/coverage.png)`,
+        },
+      },
+      {
         title: "Restyle the prose",
         description: (
           <>
