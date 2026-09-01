@@ -6,6 +6,7 @@ import * as React from "react"
 import {
   Command,
   CommandEmpty,
+  CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
@@ -29,6 +30,15 @@ export type ModelOption = {
   meta?: string
   disabled?: boolean
   disabledReason?: string
+  /** Id of the ModelPickerGroup this model belongs to. */
+  group?: string
+}
+
+export type ModelPickerGroup = {
+  id: string
+  label: string
+  /** Small leading icon for the group heading, e.g. a brand logo. */
+  icon?: React.ReactNode
 }
 
 export type ModelEffortOption = {
@@ -51,6 +61,11 @@ export const DEFAULT_MODEL_EFFORTS: ModelEffortOption[] = [
 
 export type ModelPickerProps = {
   options: ModelOption[]
+  /**
+   * Section definitions; order defines section order. Options with an unknown
+   * or absent group render first, ungrouped.
+   */
+  groups?: ModelPickerGroup[]
   value?: string
   defaultValue?: string
   onChange?: (id: string) => void
@@ -76,6 +91,7 @@ export type ModelPickerProps = {
 
 export function ModelPicker({
   options,
+  groups,
   value,
   defaultValue,
   onChange,
@@ -134,6 +150,7 @@ export function ModelPicker({
   const modelList = (
     <ModelList
       options={options}
+      groups={groups}
       selectedId={selectedId}
       onPick={pickModel}
       searchable={options.length > searchThreshold}
@@ -257,6 +274,7 @@ function SectionTrigger({ label, value }: { label: string; value: string }) {
 
 type ModelListProps = {
   options: ModelOption[]
+  groups?: ModelPickerGroup[]
   selectedId: string
   onPick: (option: ModelOption) => void
   searchable: boolean
@@ -271,6 +289,7 @@ type ModelListProps = {
  */
 function ModelList({
   options,
+  groups,
   selectedId,
   onPick,
   searchable,
@@ -279,6 +298,12 @@ function ModelList({
 }: ModelListProps) {
   const [search, setSearch] = React.useState("")
   const inputRef = React.useRef<HTMLInputElement>(null)
+
+  // No groups is the common case and stays a flat list, byte for byte as before.
+  const sections = React.useMemo(
+    () => (groups && groups.length > 0 ? sectionize(options, groups) : null),
+    [options, groups]
+  )
 
   React.useEffect(() => {
     if (!searchable) return
@@ -290,27 +315,38 @@ function ModelList({
   if (!searchable) {
     return (
       <div className="p-1">
-        {options.map((model) => (
-          <DropdownMenuItem
-            key={model.id}
-            data-slot="model-picker-item"
-            role="menuitemradio"
-            aria-checked={model.id === selectedId}
-            disabled={model.disabled}
-            title={
-              [model.description, model.disabledReason]
-                .filter(Boolean)
-                .join(" · ") || undefined
-            }
-            onSelect={() => onPick(model)}
-            className="gap-2 py-1.5 text-[13px]"
-          >
-            <ModelRow model={model} selected={model.id === selectedId} />
-          </DropdownMenuItem>
-        ))}
+        {sections
+          ? sections.map((section) => (
+              <div key={section.key} data-slot="model-picker-group">
+                {section.group ? (
+                  <GroupHeading
+                    group={section.group}
+                    className="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+                  />
+                ) : null}
+                {section.options.map((model) => (
+                  <ModelMenuItem
+                    key={model.id}
+                    model={model}
+                    selected={model.id === selectedId}
+                    onPick={onPick}
+                  />
+                ))}
+              </div>
+            ))
+          : options.map((model) => (
+              <ModelMenuItem
+                key={model.id}
+                model={model}
+                selected={model.id === selectedId}
+                onPick={onPick}
+              />
+            ))}
       </div>
     )
   }
+
+  const match = matches(search)
 
   return (
     <Command
@@ -334,34 +370,162 @@ function ModelList({
         <CommandEmpty className="py-6 text-center text-[12px] text-muted-foreground">
           {emptyMessage}
         </CommandEmpty>
-        {options.filter(matches(search)).map((model) => (
-          <CommandItem
-            key={model.id}
-            data-slot="model-picker-item"
-            value={model.id}
-            disabled={model.disabled}
-            title={
-              [model.description, model.disabledReason]
-                .filter(Boolean)
-                .join(" · ") || undefined
-            }
-            onSelect={() => onPick(model)}
-            className="gap-2 py-1.5 text-[13px]"
-          >
-            <ModelRow model={model} selected={model.id === selectedId} />
-          </CommandItem>
-        ))}
+        {sections
+          ? sections.map((section) => {
+              const visible = section.options.filter((model) =>
+                match(model, section.group?.label)
+              )
+              if (visible.length === 0) return null
+              return (
+                <CommandGroup
+                  key={section.key}
+                  data-slot="model-picker-group"
+                  heading={
+                    section.group ? (
+                      <GroupHeading group={section.group} />
+                    ) : undefined
+                  }
+                  // The list already pads; the group only supplies the heading.
+                  className="p-0"
+                >
+                  {visible.map((model) => (
+                    <ModelCommandItem
+                      key={model.id}
+                      model={model}
+                      selected={model.id === selectedId}
+                      onPick={onPick}
+                    />
+                  ))}
+                </CommandGroup>
+              )
+            })
+          : options
+              .filter((model) => match(model))
+              .map((model) => (
+                <ModelCommandItem
+                  key={model.id}
+                  model={model}
+                  selected={model.id === selectedId}
+                  onPick={onPick}
+                />
+              ))}
       </CommandList>
     </Command>
   )
 }
 
+type ModelSection = {
+  key: string
+  group: ModelPickerGroup | null
+  options: ModelOption[]
+}
+
+/**
+ * Sections in `groups` order. Options with an unknown or absent group keep
+ * their relative order and lead the list without a heading, so a partly
+ * grouped list still shows everything. A repeated group id renders once.
+ */
+function sectionize(
+  options: ModelOption[],
+  groups: ModelPickerGroup[]
+): ModelSection[] {
+  const buckets = new Map<string, ModelOption[]>()
+  for (const group of groups) {
+    if (!buckets.has(group.id)) buckets.set(group.id, [])
+  }
+  const ungrouped: ModelOption[] = []
+  for (const option of options) {
+    const bucket = option.group ? buckets.get(option.group) : undefined
+    if (bucket) bucket.push(option)
+    else ungrouped.push(option)
+  }
+
+  const sections: ModelSection[] = ungrouped.length
+    ? [{ key: " ungrouped", group: null, options: ungrouped }]
+    : []
+  for (const group of groups) {
+    const bucket = buckets.get(group.id)
+    if (!bucket?.length) continue
+    buckets.delete(group.id)
+    sections.push({ key: group.id, group, options: bucket })
+  }
+  return sections
+}
+
+/** Icon, then label — the same content in both render branches. */
+function GroupHeading({
+  group,
+  className,
+}: {
+  group: ModelPickerGroup
+  className?: string
+}) {
+  return (
+    <span
+      data-slot="model-picker-group-heading"
+      className={cn(
+        "flex items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0",
+        className
+      )}
+    >
+      {group.icon}
+      <span className="truncate">{group.label}</span>
+    </span>
+  )
+}
+
+type ModelItemProps = {
+  model: ModelOption
+  selected: boolean
+  onPick: (option: ModelOption) => void
+}
+
+function ModelMenuItem({ model, selected, onPick }: ModelItemProps) {
+  return (
+    <DropdownMenuItem
+      data-slot="model-picker-item"
+      role="menuitemradio"
+      aria-checked={selected}
+      disabled={model.disabled}
+      title={rowTitle(model)}
+      onSelect={() => onPick(model)}
+      className="gap-2 py-1.5 text-[13px]"
+    >
+      <ModelRow model={model} selected={selected} />
+    </DropdownMenuItem>
+  )
+}
+
+function ModelCommandItem({ model, selected, onPick }: ModelItemProps) {
+  return (
+    <CommandItem
+      data-slot="model-picker-item"
+      value={model.id}
+      disabled={model.disabled}
+      title={rowTitle(model)}
+      onSelect={() => onPick(model)}
+      className="gap-2 py-1.5 text-[13px]"
+    >
+      <ModelRow model={model} selected={selected} />
+    </CommandItem>
+  )
+}
+
+function rowTitle(model: ModelOption) {
+  return (
+    [model.description, model.disabledReason].filter(Boolean).join(" · ") ||
+    undefined
+  )
+}
+
 /** Substring match over everything the row can show, not just the name. */
-function matches(search: string) {
+function matches(
+  search: string
+): (model: ModelOption, groupLabel?: string) => boolean {
   const needle = search.trim().toLowerCase()
   if (!needle) return () => true
-  return (model: ModelOption) =>
-    [model.name, model.badge, model.description, model.meta]
+  return (model, groupLabel) =>
+    [model.name, model.badge, model.description, model.meta, groupLabel]
       .filter(Boolean)
       .join(" ")
       .toLowerCase()

@@ -7,6 +7,7 @@ import { ModePickerStyledExample } from "@/components/examples/mode-picker-style
 import { ModelPickerDisabledExample } from "@/components/examples/model-picker-disabled-example"
 import { ModelPickerEffortsExample } from "@/components/examples/model-picker-efforts-example"
 import { ModelPickerExample } from "@/components/examples/model-picker-example"
+import { ModelPickerGroupsExample } from "@/components/examples/model-picker-groups-example"
 import { ModelPickerSearchExample } from "@/components/examples/model-picker-search-example"
 import { ModelPickerStyledExample } from "@/components/examples/model-picker-styled-example"
 import { ThemeToggleExample } from "@/components/examples/theme-toggle-example"
@@ -200,8 +201,20 @@ export function Picker() {
                 The list contents. An empty array disables the trigger. Past{" "}
                 <DocsCode>searchThreshold</DocsCode> the list grows a search
                 field that matches <DocsCode>name</DocsCode>,{" "}
-                <DocsCode>badge</DocsCode>, <DocsCode>description</DocsCode> and{" "}
-                <DocsCode>meta</DocsCode>.
+                <DocsCode>badge</DocsCode>, <DocsCode>description</DocsCode>,{" "}
+                <DocsCode>meta</DocsCode> and the group label.
+              </>
+            ),
+          },
+          {
+            name: "groups",
+            type: "ModelPickerGroup[]",
+            description: (
+              <>
+                Section definitions; the array order is the section order.
+                Options with an unknown or absent <DocsCode>group</DocsCode>{" "}
+                render first, ungrouped, and a group nothing lands in is
+                dropped. Omit it and the list stays flat.
               </>
             ),
           },
@@ -370,6 +383,43 @@ export function Picker() {
             type: "string",
             description: "Why it is unavailable, joined into the row tooltip.",
           },
+          {
+            name: "group",
+            type: "string",
+            description: (
+              <>
+                Id of the <DocsCode>ModelPickerGroup</DocsCode> this model
+                belongs to. Unknown or absent means ungrouped.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "ModelPickerGroup",
+        rows: [
+          {
+            name: "id",
+            type: "string",
+            required: true,
+            description: (
+              <>
+                Stable key, referenced by <DocsCode>ModelOption.group</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "label",
+            type: "string",
+            required: true,
+            description: "Section heading, and a search keyword for its models.",
+          },
+          {
+            name: "icon",
+            type: "ReactNode",
+            description:
+              "Small leading mark in the heading, e.g. a provider logo. Sized to 3.5 by the heading.",
+          },
         ],
       },
     ],
@@ -381,6 +431,8 @@ export function Picker() {
       "model-picker-section-value",
       "model-picker-list",
       "model-picker-search",
+      "model-picker-group",
+      "model-picker-group-heading",
       "model-picker-item",
       "model-picker-badge",
       "model-picker-meta",
@@ -417,6 +469,23 @@ export function Picker() {
         example: {
           name: "model-picker-search-example",
           node: <ModelPickerSearchExample />,
+        },
+      },
+      {
+        title: "Grouped by provider",
+        description: (
+          <>
+            <DocsCode>groups</DocsCode> sections the list — each option names
+            its group by id, and the array order is the section order. Both
+            list shapes carry the headings: plain rows get a label between
+            runs, cmdk gets a real group, and the search field matches the
+            group label so typing a provider narrows to its models. Anything
+            without a known group stays at the top, unlabelled.
+          </>
+        ),
+        example: {
+          name: "model-picker-groups-example",
+          node: <ModelPickerGroupsExample />,
         },
       },
       {

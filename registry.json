@@ -134,7 +134,7 @@
       "name": "model-picker",
       "type": "registry:ui",
       "title": "Model Picker",
-      "description": "Compact model switcher on the dropdown menu: one row per thing that can change, its current value alongside, choices in a submenu, and a search field once the model list grows.",
+      "description": "Compact model switcher on the dropdown menu: one row per thing that can change, its current value alongside, choices in a submenu, optional provider sections, and a search field once the model list grows.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["dropdown-menu", "command"],
       "files": [
