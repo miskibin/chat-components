@@ -57,6 +57,14 @@ export type MessageArtifactData = {
   onOpen?: () => void
 }
 
+export type MessageAttachmentData = {
+  id: string
+  name: string
+  mimeType: string
+  /** Thumbnail and full-size source — a `data:` URL or a remote URL. */
+  url: string
+}
+
 /** Shared look for the quiet, text-only disclosure rows. */
 const disclosureTrigger =
   "inline-flex max-w-full items-center gap-1.5 rounded-sm py-0.5 text-left text-[13px] leading-snug text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
@@ -1362,6 +1370,63 @@ export const MessageArtifact = React.memo(function MessageArtifact({
           {artifact.content}
         </div>
       ) : null}
+    </div>
+  )
+})
+
+/**
+ * Thumbnail row for the images (and other files) a user attached to their
+ * turn. Images open full-size in a new tab; anything else falls back to a
+ * plain named chip.
+ */
+export const MessageAttachments = React.memo(function MessageAttachments({
+  attachments,
+  className,
+}: {
+  attachments: MessageAttachmentData[]
+  className?: string
+}) {
+  if (attachments.length === 0) return null
+
+  return (
+    <div
+      data-slot="message-attachments"
+      className={cn("flex flex-wrap justify-end gap-1.5", className)}
+    >
+      {attachments.map((attachment) =>
+        attachment.mimeType.startsWith("image/") ? (
+          <a
+            key={attachment.id}
+            href={attachment.url}
+            target="_blank"
+            rel="noreferrer"
+            data-slot="message-attachment"
+            data-kind="image"
+            title={attachment.name}
+            className="block size-20 shrink-0 overflow-hidden rounded-lg border bg-muted outline-none transition-opacity hover:opacity-90 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- data: URLs and arbitrary remote hosts, not a next/image-friendly asset */}
+            <img
+              src={attachment.url}
+              alt={attachment.name}
+              className="size-full object-cover"
+            />
+          </a>
+        ) : (
+          <span
+            key={attachment.id}
+            data-slot="message-attachment"
+            data-kind="file"
+            title={attachment.name}
+            className="inline-flex max-w-40 items-center gap-1.5 rounded-md border bg-muted px-2 py-1 text-[12px]"
+          >
+            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate text-foreground">
+              {attachment.name}
+            </span>
+          </span>
+        )
+      )}
     </div>
   )
 })

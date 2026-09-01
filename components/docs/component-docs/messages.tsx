@@ -104,6 +104,20 @@ export function Turn() {
             description: "Artifact cards appended after the code blocks.",
           },
           {
+            name: "attachments",
+            type: "MessageAttachmentData[]",
+            default: "[]",
+            description: (
+              <>
+                Files attached to a user turn —{" "}
+                <DocsCode>{"{ id, name, mimeType, url }"}</DocsCode>. Images
+                render as thumbnails above the bubble, opening full-size in a
+                new tab; other mime types fall back to a named chip. Ignored
+                on assistant turns.
+              </>
+            ),
+          },
+          {
             name: "editable",
             type: "boolean",
             default: "false",
@@ -195,6 +209,10 @@ export function Turn() {
         ),
       },
       { slot: "message-content", description: "Bubble or answer body." },
+      {
+        slot: "message-attachments",
+        description: "Attachment thumbnail row above a user bubble.",
+      },
       { slot: "message-actions", description: "Hover action row." },
       {
         slot: "message-turn-summary",
@@ -228,6 +246,27 @@ export function Turn() {
   messages={messages}
   className="[&_[data-slot=message][data-sender=user]_[data-slot=message-content]]:rounded-lg
              [&_[data-slot=message][data-sender=user]_[data-slot=message-content]]:bg-primary/10"
+/>`,
+        },
+      },
+      {
+        title: "Attach images to a user turn",
+        description: (
+          <>
+            <DocsCode>url</DocsCode> can be a <DocsCode>data:</DocsCode> URL —
+            handy when the composer reads a file with{" "}
+            <DocsCode>FileReader</DocsCode> and never needs to upload it
+            anywhere just to show a thumbnail.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<Message
+  sender="user"
+  content="What's wrong with this chart?"
+  attachments={[
+    { id: "a1", name: "chart.png", mimeType: "image/png", url: dataUrl },
+  ]}
 />`,
         },
       },
@@ -596,6 +635,24 @@ export function Answer() {
           { name: "className", type: "string", description: "Merged last." },
         ],
       },
+      {
+        caption: "MessageAttachments",
+        rows: [
+          {
+            name: "attachments",
+            type: "MessageAttachmentData[]",
+            required: true,
+            description: (
+              <>
+                <DocsCode>{"{ id, name, mimeType, url }"}</DocsCode> per file.
+                Images render as a thumbnail linking to the full-size{" "}
+                <DocsCode>url</DocsCode>; anything else is a named chip.
+              </>
+            ),
+          },
+          { name: "className", type: "string", description: "Merged last." },
+        ],
+      },
     ],
     dataSlots: [
       { slot: "message-reasoning", description: "Reasoning disclosure." },
@@ -685,6 +742,16 @@ export function Answer() {
       {
         slot: "message-artifact-content",
         description: "Inline artifact preview.",
+      },
+      { slot: "message-attachments", description: "The thumbnail row." },
+      {
+        slot: "message-attachment",
+        description: (
+          <>
+            One attachment. Carries <DocsCode>data-kind</DocsCode> —{" "}
+            <DocsCode>image</DocsCode> or <DocsCode>file</DocsCode>.
+          </>
+        ),
       },
     ],
     customization: [
