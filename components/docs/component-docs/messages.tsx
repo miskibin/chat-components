@@ -385,6 +385,35 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
       { slot: "message-list", description: "The scroll container." },
       { slot: "message-list-item", description: "Wrapper around each turn." },
     ],
+    notes: [
+      {
+        title: "Streaming cost",
+        description: (
+          <>
+            Rows are memoized and the event callbacks you pass —{" "}
+            <DocsCode>onEditMessage</DocsCode> and{" "}
+            <DocsCode>onAskAnswer</DocsCode> — are held at one identity
+            internally, so a parent that re-renders on each streamed token only
+            reaches the row whose message object actually changed. Keep the
+            message objects themselves stable (patch the streaming turn, map the
+            rest through) and the list stays flat as it grows.{" "}
+            <DocsCode>renderActions</DocsCode> is a render prop, not a callback:
+            it runs on every render with your current closure, outside the
+            memoized row, so the buttons it returns never go stale.
+          </>
+        ),
+      },
+      {
+        title: "Auto-scroll",
+        description: (
+          <>
+            Following is coalesced into one animation frame, so a burst of
+            tokens schedules one scroll rather than dozens. Growing text tracks
+            the bottom instantly; a whole new message animates.
+          </>
+        ),
+      },
+    ],
     customization: [
       {
         title: "Per-message actions",
@@ -609,7 +638,7 @@ export function Answer() {
       {
         slot: "ask-question",
         description:
-          "Questionnaire card rendered in place of a pending Ask Question tool row.",
+          "Questionnaire card rendered in place of an unanswered Ask Question tool row.",
       },
       {
         slot: "message-tool-diff",
@@ -632,6 +661,11 @@ export function Answer() {
           "Read-file body — line gutter and syntax highlight, same chrome as the diff.",
       },
       { slot: "message-tool-file-line", description: "One read-file line." },
+      {
+        slot: "message-tool-show-all",
+        description:
+          "Reveals the rest of a diff or file body past the 300-line preview cap.",
+      },
       { slot: "message-code", description: "Code card." },
       { slot: "message-code-header", description: "Language chip + copy row." },
       {
@@ -696,9 +730,12 @@ export function Answer() {
         description: (
           <>
             <DocsCode>MessageCode</DocsCode> loads Shiki once per page through a
-            module-level singleton and caches the last 100 rendered snippets, so
-            re-renders and remounts never re-run the highlighter. Unknown
-            languages fall back to plain text.
+            module-level singleton and caches what it renders, so re-renders and
+            remounts never re-run the highlighter. Diff and read-file bodies are
+            tokenized one block at a time rather than one line at a time — a
+            500-line file is a single Shiki pass, not 500 — and both cap the
+            preview at 300 lines behind a Show all button. Unknown languages fall
+            back to plain text.
           </>
         ),
       },
@@ -709,9 +746,11 @@ export function Answer() {
             A tool named <DocsCode>Ask Question</DocsCode> (or{" "}
             <DocsCode>ask</DocsCode>) whose <DocsCode>input</DocsCode> is
             Cursor&apos;s <DocsCode>{`{ title?, questions }`}</DocsCode> payload
-            renders the questionnaire while it is{" "}
-            <DocsCode>pending</DocsCode>/<DocsCode>running</DocsCode>, then
-            collapses to the usual &ldquo;Done Ask Question&rdquo; row.
+            renders the questionnaire for as long as it is unanswered — while it
+            is <DocsCode>pending</DocsCode>/<DocsCode>running</DocsCode>, and
+            also when the agent closed it with nothing selected — then collapses
+            to the usual &ldquo;Done Ask Question&rdquo; row once the user picks
+            or skips.
           </>
         ),
       },
@@ -939,11 +978,11 @@ export function Clarify() {
         title: "Render it from a tool call",
         description: (
           <>
-            <DocsCode>MessageToolCall</DocsCode> swaps in this card when the
-            tool name is Ask Question and the status is{" "}
-            <DocsCode>pending</DocsCode> or <DocsCode>running</DocsCode>. After
-            Skip or Continue it becomes the usual &ldquo;Done Ask
-            Question&rdquo; row.
+            <DocsCode>MessageToolCall</DocsCode> swaps in this card whenever{" "}
+            <DocsCode>isOpenAskTool</DocsCode> holds: the tool name is Ask
+            Question and it is either still running or already closed by the
+            agent with nothing selected. After the user hits Skip or Continue it
+            becomes the usual &ldquo;Done Ask Question&rdquo; row.
           </>
         ),
         example: {
@@ -962,6 +1001,24 @@ export function Clarify() {
             JSON. <DocsCode>allow_multiple</DocsCode> and{" "}
             <DocsCode>allowMultiple</DocsCode> both work. Continue stays disabled
             until every question has at least one option.
+          </>
+        ),
+      },
+      {
+        title: "Who closed the questions",
+        description: (
+          <>
+            Headless backends answer their own ask tool — a CLI running
+            non-interactively skips it the moment it is emitted — which used to
+            make the card flash past and land as an unanswerable &ldquo;No
+            selection&rdquo; summary. <DocsCode>isOpenAskTool</DocsCode> treats
+            an ask closed with no answers as still open, so the user can pick —
+            on the latest turn only, so an ask from an earlier turn stays
+            history rather than reopening on every reload.{" "}
+            <DocsCode>formatAskQuestionOutput</DocsCode> stamps{" "}
+            <DocsCode>{`source: "user"`}</DocsCode> on what the card produces,
+            and <DocsCode>parseAskQuestionResult</DocsCode> reads it back, so a
+            deliberate Skip stays skipped across a reload.
           </>
         ),
       },

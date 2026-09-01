@@ -33,6 +33,12 @@ export type AskQuestionSelection = {
 export type AskQuestionResult = {
   skipped: boolean
   answers: Record<string, AskQuestionSelection>
+  /**
+   * Who closed the questions. `"agent"` (the default when a result carries no
+   * marker) covers backends that answer their own ask tool — a headless CLI
+   * auto-skipping it, say — and those stay answerable in the UI.
+   */
+  source?: "user" | "agent"
 }
 
 export type AskQuestionProps = {
@@ -146,6 +152,35 @@ export function isPendingAskTool(tool: { name: string; status?: string }) {
   )
 }
 
+/**
+ * An ask with no answer on it: in flight, or already closed by the agent
+ * without a single selection. Headless backends resolve their own ask tool the
+ * moment they emit it, so keying the form off `isPendingAskTool` alone means
+ * the questions flash past and land as an unanswerable "No selection" summary.
+ *
+ * Unanswered is not the same as actionable — an agent-closed ask three turns
+ * back is history, not a prompt. Only the caller knows where the tool sits, so
+ * `MessageList` offers the form on the latest turn only, and `MessageToolCall`
+ * follows the `onAskAnswer` handler it is given.
+ */
+export function isOpenAskTool(tool: {
+  name: string
+  status?: string
+  input?: string
+  output?: string
+}) {
+  if (!isAskToolName(tool.name)) return false
+  if (tool.status === "pending" || tool.status === "running") return true
+  if (tool.status === "error") return false
+  if (!parseAskQuestionInput(tool.input)) return false
+  const result = parseAskQuestionResult(tool.output)
+  // No parsable result at all, or the agent closed it with nothing picked.
+  return (
+    result === null ||
+    (result.source !== "user" && Object.keys(result.answers).length === 0)
+  )
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   return value as Record<string, unknown>
@@ -223,10 +258,18 @@ export function parseAskQuestionInput(input?: string): {
   }
 }
 
+/** Exactly what older versions of this component wrote for a Skip. */
+const LEGACY_SKIP_OUTPUT = "Questions skipped"
+
 export function parseAskQuestionResult(
   output?: string
 ): AskQuestionResult | null {
   if (!output?.trim()) return null
+  // Matched literally, not by keyword: an agent's own free-text "skipped the
+  // questions" is not a user decision and must stay answerable.
+  if (output.trim() === LEGACY_SKIP_OUTPUT) {
+    return { skipped: true, answers: {}, source: "user" }
+  }
   if (/skip/i.test(output) && !output.trim().startsWith("{")) {
     return { skipped: true, answers: {} }
   }
@@ -234,13 +277,17 @@ export function parseAskQuestionResult(
     const value = JSON.parse(output) as unknown
     const record = asRecord(value)
     if (!record) return null
+    const source = record.source === "user" ? ("user" as const) : undefined
     if (record.skipped === true) {
-      return { skipped: true, answers: {} }
+      return { skipped: true, answers: {}, source }
     }
-    const answersRecord = asRecord(record.answers) ?? record
+    const nested = asRecord(record.answers)
+    const answersRecord = nested ?? record
     const answers: Record<string, AskQuestionSelection> = {}
     for (const [key, item] of Object.entries(answersRecord)) {
-      if (key === "skipped") continue
+      // Only the flat fallback shape can collide with the result's own keys;
+      // under `answers` they are question ids and `source` is a valid one.
+      if (!nested && (key === "skipped" || key === "source")) continue
       if (Array.isArray(item)) {
         answers[key] = {
           optionIds: item.filter((id): id is string => typeof id === "string"),
@@ -260,15 +307,19 @@ export function parseAskQuestionResult(
         answers[key] = { optionIds, other }
       }
     }
-    return { skipped: false, answers }
+    return { skipped: false, answers, source }
   } catch {
     return null
   }
 }
 
+/**
+ * The stored form of a result the user produced. The `source` marker is what
+ * tells a reload apart from an ask the agent closed on its own — see
+ * `isOpenAskTool`.
+ */
 export function formatAskQuestionOutput(result: AskQuestionResult) {
-  if (result.skipped) return "Questions skipped"
-  return JSON.stringify(result, null, 2)
+  return JSON.stringify({ ...result, source: "user" }, null, 2)
 }
 
 function selectedLabels(

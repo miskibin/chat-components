@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import * as React from "react"
+import type { BundledLanguage, BundledTheme, SpecialLanguage } from "shiki"
 
 import {
   Collapsible,
@@ -24,6 +25,7 @@ import {
   AskQuestionSummary,
   formatAskQuestionOutput,
   isAskToolName,
+  isOpenAskTool,
   isPendingAskTool,
   parseAskQuestionInput,
   parseAskQuestionResult,
@@ -612,14 +614,17 @@ const SHIKI_LANGS = new Set([
   "plaintext",
 ])
 
-function normalizeLang(lang?: string) {
+/** Everything below feeds Shiki, which only accepts languages it bundles. */
+type HighlightLang = BundledLanguage | SpecialLanguage
+
+function normalizeLang(lang?: string): HighlightLang {
   if (!lang) return "text"
   const l = lang.toLowerCase().trim()
   if (l === "typescript") return "ts"
   if (l === "javascript") return "js"
   if (l === "python") return "py"
   if (l === "shell" || l === "zsh") return "bash"
-  return SHIKI_LANGS.has(l) ? l : "text"
+  return SHIKI_LANGS.has(l) ? (l as HighlightLang) : "text"
 }
 
 /**
@@ -635,54 +640,76 @@ function loadShiki() {
   return shikiModule
 }
 
+/** Bounded, insertion-ordered cache — the oldest entry leaves when it is full. */
+function cacheSet<V>(cache: Map<string, V>, key: string, value: V, max: number) {
+  if (cache.size >= max) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+  cache.set(key, value)
+}
+
 async function highlight(
   code: string,
-  lang: string,
-  theme: string,
-  structure: "classic" | "inline" = "classic"
+  lang: HighlightLang,
+  theme: BundledTheme
 ) {
-  const key = `${theme}\0${lang}\0${structure}\0${code}`
+  const key = `${theme}\0${lang}\0${code}`
   const cached = highlightCache.get(key)
   if (cached !== undefined) return cached
   const { codeToHtml } = await loadShiki()
-  const html = await codeToHtml(code, {
-    lang,
-    theme,
-    ...(structure === "inline" ? { structure: "inline" as const } : {}),
-  })
-  if (highlightCache.size >= HIGHLIGHT_CACHE_MAX) {
-    const oldest = highlightCache.keys().next().value
-    if (oldest !== undefined) highlightCache.delete(oldest)
-  }
-  highlightCache.set(key, html)
+  const html = await codeToHtml(code, { lang, theme })
+  cacheSet(highlightCache, key, html, HIGHLIGHT_CACHE_MAX)
   return html
 }
 
-/** Memoized: a long diff mounts one of these per line. */
-const InlineDiffCode = React.memo(function InlineDiffCode({
-  code,
-  language,
-}: {
-  code: string
-  language?: string
-}) {
+type ShikiToken = { content: string; color?: string }
+
+const tokenCache = new Map<string, ShikiToken[][]>()
+const TOKEN_CACHE_MAX = 32
+
+/**
+ * Tokens for a whole block, one line per entry. Line-gutter views (diffs, file
+ * previews) used to mount one highlighter per line: a 500-line file meant 500
+ * async Shiki calls, 500 `setState`s and a cache that evicted itself before it
+ * could ever hit. One pass per block keeps that flat.
+ */
+async function highlightLines(
+  code: string,
+  lang: HighlightLang,
+  theme: BundledTheme
+) {
+  const key = `${theme}\0${lang}\0${code}`
+  const cached = tokenCache.get(key)
+  if (cached !== undefined) return cached
+  const { codeToTokens } = await loadShiki()
+  const { tokens } = await codeToTokens(code, { lang, theme })
+  const lines = tokens.map((line) =>
+    line.map((token) => ({ content: token.content, color: token.color }))
+  )
+  cacheSet(tokenCache, key, lines, TOKEN_CACHE_MAX)
+  return lines
+}
+
+/** One Shiki pass for `code`, or null until it lands (and for plain text). */
+function useHighlightedLines(code: string, language?: string) {
   const { resolvedTheme } = useTheme()
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
-  const cacheKey = `${theme}\0${lang}\0inline\0${code}`
-  // Keyed by the snippet it belongs to, so a re-keyed line never paints the
-  // previous line's HTML while its own highlight is still in flight.
+  const cacheKey = `${theme}\0${lang}\0${code}`
+  // Keyed by the block it belongs to, so a re-keyed view never paints the
+  // previous block's tokens while its own highlight is still in flight.
   const [rendered, setRendered] = React.useState<{
     key: string
-    html: string
+    lines: ShikiToken[][]
   } | null>(null)
 
   React.useEffect(() => {
-    if (!code) return
+    if (!code || lang === "text") return
     let cancelled = false
-    highlight(code, lang, theme, "inline")
-      .then((out) => {
-        if (!cancelled) setRendered({ key: cacheKey, html: out })
+    highlightLines(code, lang, theme)
+      .then((lines) => {
+        if (!cancelled) setRendered({ key: cacheKey, lines })
       })
       .catch(() => {})
     return () => {
@@ -690,21 +717,53 @@ const InlineDiffCode = React.memo(function InlineDiffCode({
     }
   }, [cacheKey, code, lang, theme])
 
-  const html =
-    highlightCache.get(cacheKey) ??
-    (rendered?.key === cacheKey ? rendered.html : null)
-
-  if (!html) {
-    return <>{code || "\u00a0"}</>
-  }
-
   return (
-    <span
-      className="lc-diff-shiki [&_span]:!bg-transparent"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    tokenCache.get(cacheKey) ??
+    (rendered?.key === cacheKey ? rendered.lines : null)
+  )
+}
+
+/** One highlighted line — plain text until (or unless) its tokens arrive. */
+const CodeLine = React.memo(function CodeLine({
+  text,
+  tokens,
+}: {
+  text: string
+  tokens?: ShikiToken[]
+}) {
+  if (!tokens || tokens.length === 0) return <>{text || "\u00a0"}</>
+  return (
+    <>
+      {tokens.map((token, index) => (
+        <span key={index} style={token.color ? { color: token.color } : undefined}>
+          {token.content}
+        </span>
+      ))}
+    </>
   )
 })
+
+/** Long outputs render behind a cap; the rest is one click away. */
+const PREVIEW_LINE_CAP = 300
+
+function ShowAllLines({
+  total,
+  onShowAll,
+}: {
+  total: number
+  onShowAll: () => void
+}) {
+  return (
+    <button
+      type="button"
+      data-slot="message-tool-show-all"
+      onClick={onShowAll}
+      className="w-full border-t border-border/50 bg-muted/40 py-1 text-center text-[12px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      Show all {total.toLocaleString()} lines
+    </button>
+  )
+}
 
 const ToolDiff = React.memo(function ToolDiff({
   lines,
@@ -713,12 +772,23 @@ const ToolDiff = React.memo(function ToolDiff({
   lines: ToolDiffLine[]
   language?: string
 }) {
+  const [showAll, setShowAll] = React.useState(false)
+  const capped = !showAll && lines.length > PREVIEW_LINE_CAP
+  const visible = capped ? lines.slice(0, PREVIEW_LINE_CAP) : lines
+  // One highlight pass for the visible block; the gutter reads it per line.
+  const source = React.useMemo(
+    () => visible.map((line) => line.text).join("\n"),
+    [visible]
+  )
+  const highlighted = useHighlightedLines(source, language)
+  const showAllLines = React.useCallback(() => setShowAll(true), [])
+
   return (
     <div
       data-slot="message-tool-diff"
       className="max-h-[min(22rem,55vh)] overflow-auto rounded-md border border-border/60 bg-muted/30 font-mono text-[12.5px] leading-[1.7]"
     >
-      {lines.map((line, index) => {
+      {visible.map((line, index) => {
         const lineNo =
           line.type === "remove"
             ? line.oldLine
@@ -764,12 +834,15 @@ const ToolDiff = React.memo(function ToolDiff({
                   </span>
                 ))
               ) : (
-                <InlineDiffCode code={line.text} language={language} />
+                <CodeLine text={line.text} tokens={highlighted?.[index]} />
               )}
             </span>
           </div>
         )
       })}
+      {capped ? (
+        <ShowAllLines total={lines.length} onShowAll={showAllLines} />
+      ) : null}
     </div>
   )
 })
@@ -784,22 +857,35 @@ const ToolFileView = React.memo(function ToolFileView({
   language?: string
   startLine?: number
 }) {
-  const lines = content.length === 0 ? [""] : content.split("\n")
+  const [showAll, setShowAll] = React.useState(false)
+  const lines = React.useMemo(
+    () => (content.length === 0 ? [""] : content.split("\n")),
+    [content]
+  )
+  const capped = !showAll && lines.length > PREVIEW_LINE_CAP
+  const visible = capped ? lines.slice(0, PREVIEW_LINE_CAP) : lines
+  const source = React.useMemo(() => visible.join("\n"), [visible])
+  const highlighted = useHighlightedLines(source, language)
+  const showAllLines = React.useCallback(() => setShowAll(true), [])
+
   return (
     <div
       data-slot="message-tool-file"
       className="max-h-[min(22rem,55vh)] overflow-auto rounded-md border border-border/60 bg-muted/30 font-mono text-[12.5px] leading-[1.7]"
     >
-      {lines.map((text, index) => (
+      {visible.map((text, index) => (
         <div key={index} data-slot="message-tool-file-line" className="flex">
           <span className="w-9 shrink-0 select-none border-r border-border/50 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/45">
             {startLine + index}
           </span>
           <span className="min-w-0 flex-1 break-words whitespace-pre-wrap px-2 text-foreground/90">
-            <InlineDiffCode code={text} language={language} />
+            <CodeLine text={text} tokens={highlighted?.[index]} />
           </span>
         </div>
       ))}
+      {capped ? (
+        <ShowAllLines total={lines.length} onShowAll={showAllLines} />
+      ) : null}
     </div>
   )
 })
@@ -844,14 +930,29 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   const status = displayTool.status ?? "done"
   const running = status === "running" || status === "pending"
   const errored = status === "error"
-  const diff = React.useMemo(() => extractToolDiff(displayTool), [displayTool])
+  /**
+   * An editing tool rewrites its args on every streamed chunk, and both derived
+   * views below re-parse the whole payload. Deferring them lets React drop the
+   * intermediate states instead of diffing a file once per chunk.
+   */
+  const deferredTool = React.useDeferredValue(displayTool)
+  const diff = React.useMemo(() => extractToolDiff(deferredTool), [deferredTool])
   const showDiff = !!diff && diff.length > 0
   const readFile = React.useMemo(
-    () => extractReadFile(displayTool),
-    [displayTool]
+    () => extractReadFile(deferredTool),
+    [deferredTool]
   )
   const showFile = !!readFile
-  const showAskSummary = !!ask && !!resolvedAsk && !running
+  /**
+   * An ask the agent closed without a selection is still the user's to answer,
+   * but only where the owner says so: `onAskAnswer` is the signal that this row
+   * is the live one. Without it an ask from an old turn would reopen on reload.
+   */
+  const askOpen =
+    !!ask &&
+    !askResult &&
+    (running || (!!onAskAnswer && isOpenAskTool(tool)))
+  const showAskSummary = !!ask && !!resolvedAsk && !askOpen && !running
   const hasBody =
     showDiff ||
     showFile ||
@@ -875,7 +976,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     answerAsk({ skipped: true, answers: {} })
   }, [answerAsk])
 
-  if (ask && running && !askResult) {
+  if (ask && askOpen) {
     return (
       <AskQuestion
         title={ask.title}
@@ -1027,7 +1128,9 @@ export function MessageToolCalls({
   defaultOpen?: boolean
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
 }) {
-  const pendingAsk = tools.some(isPendingAskTool)
+  const pendingAsk = tools.some(
+    (tool) => isPendingAskTool(tool) || (!!onAskAnswer && isOpenAskTool(tool))
+  )
   const many = !pendingAsk && tools.length >= collapseAt
   const [open, setOpen] = React.useState(defaultOpen ?? !many)
 
@@ -1090,7 +1193,7 @@ function HighlightedCode({
   const { resolvedTheme } = useTheme()
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
-  const cacheKey = `${theme}\0${lang}\0classic\0${code}`
+  const cacheKey = `${theme}\0${lang}\0${code}`
   const [rendered, setRendered] = React.useState<{
     key: string
     html: string
@@ -1098,7 +1201,7 @@ function HighlightedCode({
 
   React.useEffect(() => {
     let cancelled = false
-    highlight(code, lang, theme, "classic")
+    highlight(code, lang, theme)
       .then((out) => {
         if (!cancelled) setRendered({ key: cacheKey, html: out })
       })

@@ -40,7 +40,7 @@ import type { GenerationStage } from "@/components/ui/generation-status"
 import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
 import {
   formatAskQuestionOutput,
-  isPendingAskTool,
+  isOpenAskTool,
   type AskQuestionResult,
 } from "@/components/ui/ask-question"
 import {
@@ -1012,16 +1012,18 @@ function appendThinkingPart(parts: MessagePart[], text: string): MessagePart[] {
   return [...parts, { type: "thinking", id: crypto.randomUUID(), text }]
 }
 
+/**
+ * Only the latest turn can still be waiting on an answer — matching what
+ * `MessageList` offers a form for. An unanswered ask further back is history.
+ */
 function findPendingAsk(messages: MessageData[]) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i]
-    const tools = message.tools?.length
-      ? message.tools
-      : toolsFromParts(message.parts ?? [])
-    const tool = tools.find(isPendingAskTool)
-    if (tool) return { messageId: message.id, toolId: tool.id }
-  }
-  return null
+  const message = messages.at(-1)
+  if (!message) return null
+  const tools = message.tools?.length
+    ? message.tools
+    : toolsFromParts(message.parts ?? [])
+  const tool = tools.find(isOpenAskTool)
+  return tool ? { messageId: message.id, toolId: tool.id } : null
 }
 
 function completeAsk(
