@@ -88,9 +88,27 @@ export async function* runMockAgent(
 
   yield { type: "session", sessionId }
 
+  /* Two beats of setup before anything is generated. A real local backend
+     spends this phase loading weights, which is exactly where "Thinking" is
+     the wrong word — so the mock sends the same `status` events it does. */
+  yield { type: "status", stage: "connecting", text: "Starting the agent" }
+  await sleep(randomInt(220, 420), signal)
+  if (signal?.aborted) return
+  yield {
+    type: "status",
+    stage: "loading",
+    text: `Loading ${options.model ?? "the model"} into memory`,
+  }
+  await sleep(randomInt(500, 900), signal)
+  if (signal?.aborted) return
+  yield { type: "status", stage: "thinking", text: "Waiting for the first token" }
+
   const topic = extractTopic(options.prompt)
   const steps = pickScenario(options.prompt)(topic)
   let toolSeq = 0
+  /* Rough stand-in for a token count — the mock has no tokenizer, and the
+     metadata surfaces downstream only need a plausible order of magnitude. */
+  let producedChars = 0
 
   for (const step of steps) {
     if (signal?.aborted) return
@@ -103,6 +121,7 @@ export async function* runMockAgent(
     if (step.kind === "thinking" || step.kind === "text") {
       for (const chunk of chunkText(step.text)) {
         if (signal?.aborted) return
+        producedChars += chunk.length
         yield step.kind === "thinking"
           ? { type: "thinking", text: chunk }
           : { type: "text", text: chunk }
@@ -140,7 +159,18 @@ export async function* runMockAgent(
   }
 
   if (signal?.aborted) return
-  yield { type: "done", sessionId, durationMs: Date.now() - startedAt }
+  const durationMs = Date.now() - startedAt
+  const output = Math.round(producedChars / 4)
+  yield {
+    type: "done",
+    sessionId,
+    durationMs,
+    usage: {
+      input: Math.round(options.prompt.length / 4) + 220,
+      output,
+      tokensPerSecond: durationMs > 0 ? (output / durationMs) * 1000 : undefined,
+    },
+  }
 }
 
 /* -------------------------------------------------------------------------- */

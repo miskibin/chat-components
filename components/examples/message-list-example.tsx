@@ -29,20 +29,45 @@ export function greet(name: string) {
   },
 ]
 
+/** The turn a local backend leaves empty while it loads weights. */
+const WAITING: ChatMessageData = {
+  id: "3",
+  sender: "assistant",
+  content: "",
+}
+
 export function MessageListExample() {
   const [messages, setMessages] = useState(INITIAL)
+  const waiting = messages.at(-1)?.id === WAITING.id
 
   return (
-    <MessageList
-      className="h-[420px] w-full"
-      messages={messages}
-      onEditMessage={(id, content) =>
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === id ? { ...message, content } : message
+    <div className="flex w-full flex-col gap-3">
+      <button
+        type="button"
+        onClick={() =>
+          setMessages((prev) =>
+            prev.at(-1)?.id === WAITING.id ? INITIAL : [...prev, WAITING]
           )
-        )
-      }
-    />
+        }
+        className="self-start rounded-md border px-2.5 py-1 text-[12px] font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        {waiting ? "Reset" : "Simulate a slow first token"}
+      </button>
+      <MessageList
+        className="h-[420px] w-full"
+        messages={messages}
+        isGenerating={waiting}
+        /* Whatever the backend last said it was doing beats "Thinking" — a
+           model being pulled into memory is not thinking about anything. */
+        generationLabel={waiting ? "Loading qwen3:8b into memory" : undefined}
+        onEditMessage={(id, content) =>
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === id ? { ...message, content } : message
+            )
+          )
+        }
+      />
+    </div>
   )
 }
