@@ -16,12 +16,24 @@
       ]
     },
     {
+      "name": "file-icon",
+      "type": "registry:ui",
+      "title": "File Icon",
+      "description": "Material Icon Theme file glyphs as inline SVG, resolved by filename then extension.",
+      "files": [
+        {
+          "path": "components/ui/file-icon.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "change-summary",
       "type": "registry:ui",
       "title": "Change Summary",
       "description": "Collapsed files-changed card with +/- stats, a Review action, and a WorkedFor elapsed-time badge.",
       "dependencies": ["lucide-react"],
-      "registryDependencies": ["collapsible"],
+      "registryDependencies": ["collapsible", "miskibin/chat-components/file-icon"],
       "files": [
         {
           "path": "components/ui/change-summary.tsx",
@@ -62,6 +74,19 @@
       "files": [
         {
           "path": "components/ui/chat-navbar.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "resizable",
+      "type": "registry:ui",
+      "title": "Resizable",
+      "description": "Panels split by a draggable, keyboard-resizable divider — pairs with the file preview panel.",
+      "dependencies": ["react-resizable-panels", "lucide-react"],
+      "files": [
+        {
+          "path": "components/ui/resizable.tsx",
           "type": "registry:ui"
         }
       ]
@@ -133,6 +158,7 @@
         "shiki",
         "next-themes"
       ],
+      "registryDependencies": ["miskibin/chat-components/file-icon"],
       "files": [
         {
           "path": "components/ui/message-markdown.tsx",
@@ -173,11 +199,29 @@
         "collapsible",
         "miskibin/chat-components/message-markdown",
         "miskibin/chat-components/ask-question",
-        "miskibin/chat-components/change-summary"
+        "miskibin/chat-components/change-summary",
+        "miskibin/chat-components/file-icon"
       ],
       "files": [
         {
           "path": "components/ui/message-parts.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "file-preview",
+      "type": "registry:ui",
+      "title": "File Preview",
+      "description": "Side panel that shows an edited file: the agent's unified diff, or the whole file with the edited lines marked and scrolled into view.",
+      "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
+      "registryDependencies": [
+        "miskibin/chat-components/message-parts",
+        "miskibin/chat-components/file-icon"
+      ],
+      "files": [
+        {
+          "path": "components/ui/file-preview.tsx",
           "type": "registry:ui"
         }
       ]

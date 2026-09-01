@@ -14,7 +14,14 @@ import {
   Trash2,
   Waves,
 } from "lucide-react"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { type Layout } from "react-resizable-panels"
 import { toast } from "sonner"
 
 import {
@@ -34,11 +41,20 @@ import {
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
 import {
+  FilePreview,
+  filePreviewFromTool,
+  type FilePreviewFile,
+} from "@/components/ui/file-preview"
+import {
   MessageList,
   type ChatMessageData,
 } from "@/components/ui/message-list"
 import type { GenerationStage } from "@/components/ui/generation-status"
-import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
+import type {
+  ChangeSummaryFile,
+  MessagePart,
+  MessageToolCallData,
+} from "@/components/ui/message"
 import {
   formatAskQuestionOutput,
   isOpenAskTool,
@@ -53,6 +69,11 @@ import {
   PromptSuggestions,
   type PromptSuggestion,
 } from "@/components/ui/prompt-suggestions"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import type {
   AgentStatusStage,
@@ -63,6 +84,21 @@ import { streamCursorChat } from "@/lib/cursor-stream"
 import { cn } from "@/lib/utils"
 
 const DESKTOP_QUERY = "(min-width: 768px)"
+
+const WORKSPACE_GROUP_ID = "demo-workspace"
+/** Where the dragged file-panel width is remembered, as a percentage. */
+const WORKSPACE_SPLIT_KEY = "demo-workspace:preview-size"
+const DEFAULT_PREVIEW_SIZE = 35
+
+/** Percentage of the workspace the file panel had last time, if it is sane. */
+function readPreviewSize() {
+  try {
+    const raw = Number(window.localStorage.getItem(WORKSPACE_SPLIT_KEY))
+    return Number.isFinite(raw) && raw >= 20 && raw <= 60 ? raw : null
+  } catch {
+    return null
+  }
+}
 
 /** Pinning floats a chat to the top; drag-to-reorder owns the order after that. */
 function pinToTop(sessions: ChatSession[], id: string) {
@@ -266,6 +302,10 @@ const FALLBACK_MODELS: ModelOption[] = [
 
 export default function ChatExample() {
   const isDesktop = useIsDesktop()
+  // Where the reader last dragged the divider; read once, after mount, because
+  // the panel it sizes is not on screen — and localStorage is not there to read
+  // while the page prerenders.
+  const [previewSize, setPreviewSize] = useState(DEFAULT_PREVIEW_SIZE)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [chatsOpen, setChatsOpen] = useState(true)
@@ -281,6 +321,8 @@ export default function ChatExample() {
   ])
   const [activeId, setActiveId] = useState("1")
   const [messages, setMessages] = useState<MessageData[]>([])
+  // The right-hand file panel — opened from a tool headline or a change row.
+  const [previewFile, setPreviewFile] = useState<FilePreviewFile | null>(null)
   const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODELS)
   const [selectedModel, setSelectedModel] = useState("composer-2.5")
   // Effort is UI-only here — the mock agent ignores it.
@@ -313,6 +355,31 @@ export default function ChatExample() {
   const pendingAsk = findPendingAsk(messages)
   // The drawer only exists below md; derive it so a resize can't strand it open.
   const drawerOpen = mobileNavOpen && !isDesktop
+  // The file panel is a resizable column on desktop and an overlay below md —
+  // derived, so only one of the two ever mounts a FilePreview.
+  const dockedPreview = isDesktop ? previewFile : null
+  const overlayPreview = isDesktop ? null : previewFile
+
+  /**
+   * The saved split rides in on the panels' own `defaultSize`: the group is
+   * mounted before the file panel exists, so a `defaultLayout` naming a panel
+   * that is not there yet would be ignored.
+   */
+  useEffect(() => {
+    const saved = readPreviewSize()
+    // Deferred: a synchronous setState in an effect body is a lint error here.
+    if (saved != null) queueMicrotask(() => setPreviewSize(saved))
+  }, [])
+
+  const saveSplit = useCallback((layout: Layout) => {
+    const size = layout.preview
+    if (size == null) return
+    try {
+      window.localStorage.setItem(WORKSPACE_SPLIT_KEY, String(size))
+    } catch {
+      // A blocked store just means the split is not remembered.
+    }
+  }, [])
 
   // Rich rows are derived at render — never stored, so they can't drift.
   const sessionItems: ChatSidebarItemData[] = sessions.map((session) => ({
@@ -688,6 +755,55 @@ export default function ChatExample() {
     stopSession(activeId)
   }
 
+  const closePreview = () => setPreviewFile(null)
+
+  const openToolFile = (_messageId: string, tool: MessageToolCallData) => {
+    const file = filePreviewFromTool(tool)
+    if (!file) {
+      toast.message("That tool call has no file to preview")
+      return
+    }
+    setPreviewFile(file)
+  }
+
+  /**
+   * A change row or an inline file reference names a path, not a tool — so
+   * reach back into the turn for the last tool that touched it. Null when the
+   * transcript no longer carries a body for that file.
+   */
+  const previewFromTurn = (messageId: string, path: string) => {
+    const message = messages.find((item) => item.id === messageId)
+    const tools = message?.tools?.length
+      ? message.tools
+      : toolsFromParts(message?.parts ?? [])
+    let match: FilePreviewFile | null = null
+    for (const tool of tools) {
+      const file = filePreviewFromTool(tool)
+      if (file?.path === path) match = file
+    }
+    return match
+  }
+
+  const openChangeFile = (messageId: string, change: ChangeSummaryFile) => {
+    setPreviewFile(
+      previewFromTurn(messageId, change.path) ?? {
+        path: change.path,
+        added: change.additions,
+        removed: change.deletions,
+      }
+    )
+  }
+
+  /**
+   * A `path.ts` chip in the answer's own text. The badge hands over the path
+   * with its `:line` suffix already dropped; stripped again here because a
+   * host, not the component, decides what a location means.
+   */
+  const openReferencedFile = (messageId: string, reference: string) => {
+    const path = reference.replace(/:\d+(?::\d+)?$/, "")
+    setPreviewFile(previewFromTurn(messageId, path) ?? { path })
+  }
+
   const handleAskAnswer = (
     messageId: string,
     toolId: string,
@@ -874,130 +990,217 @@ export default function ChatExample() {
         </ChatSidebarDnd>
       </div>
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <button
-          type="button"
-          aria-label="Open chats"
-          onClick={() => setMobileNavOpen(true)}
-          className="fixed top-3 left-3 z-50 inline-grid size-8 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 md:hidden [&_svg]:size-4"
+      {/*
+        Desktop: conversation and file panel share a draggable split. A pane's
+        content wrapper carries an inline `overflow: auto`, so the two children
+        that own their own scrolling turn it off through `style` rather than a
+        class, which inline styles would win against.
+      */}
+      <ResizablePanelGroup
+        id={WORKSPACE_GROUP_ID}
+        orientation="horizontal"
+        onLayoutChanged={saveSplit}
+        className="min-w-0 flex-1"
+      >
+        <ResizablePanel
+          id="chat"
+          defaultSize={`${100 - previewSize}%`}
+          minSize="40%"
+          className="flex min-w-0 flex-col"
+          style={{ overflow: "hidden" }}
         >
-          <PanelLeft />
-        </button>
-        <ThemeToggle />
-
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-x-hidden",
-            isEmptyChat && "justify-center"
-          )}
-        >
-          {isEmptyChat ? (
-            <div
-              data-slot="demo-opening"
-              className="mx-auto w-full max-w-3xl px-3 pb-5 sm:px-4"
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <button
+              type="button"
+              aria-label="Open chats"
+              onClick={() => setMobileNavOpen(true)}
+              className="fixed top-3 left-3 z-50 inline-grid size-8 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 md:hidden [&_svg]:size-4"
             >
-              <h2 className="text-center text-2xl font-semibold tracking-tight text-balance text-foreground sm:text-3xl">
-                How can I help?
-              </h2>
-            </div>
-          ) : (
-            <MessageList
-              messages={messages}
-              isGenerating={isGenerating}
-              generationStage={generationStage}
-              generationLabel={generationLabel}
-              onEditMessage={(id, content) =>
-                setMessages((prev) => {
-                  const next = prev.map((msg) =>
-                    msg.id === id ? { ...msg, content } : msg
-                  )
-                  persistSession(activeId, (session) => ({
-                    ...session,
-                    messages: next,
-                  }))
-                  return next
-                })
-              }
-              onAskAnswer={handleAskAnswer}
-              renderActions={(message) => {
-                if (message.sender !== "assistant") return null
-                return (
-                  <div className="-mt-2 mb-4 flex gap-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
-                    <ActionBtn
-                      title="Copy"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(message.content)
-                        toast.success("Copied")
-                      }}
-                    >
-                      <Copy />
-                    </ActionBtn>
-                    <ActionBtn
-                      title="Regenerate"
-                      onClick={() => {
-                        const idx = messages.findIndex(
-                          (m) => m.id === message.id
-                        )
-                        let userIdx = idx - 1
-                        while (
-                          userIdx >= 0 &&
-                          messages[userIdx].sender !== "user"
-                        ) {
-                          userIdx--
-                        }
-                        if (userIdx < 0) return
-                        const prompt = messages[userIdx].content
-                        const next = messages.filter(
-                          (m) => m.id !== message.id
-                        )
-                        persistSession(activeId, (session) => ({
-                          ...session,
-                          messages: next,
-                        }))
-                        setMessages(next)
-                        void runPrompt(
-                          prompt,
-                          activeId,
-                          next,
-                          activeSession?.cursorSessionId
-                        )
-                      }}
-                    >
-                      <RefreshCw />
-                    </ActionBtn>
-                    <ActionBtn
-                      title="Delete"
-                      onClick={() => {
-                        const next = messages.filter(
-                          (m) => m.id !== message.id
-                        )
-                        persistSession(activeId, (session) => ({
-                          ...session,
-                          messages: next,
-                        }))
-                        setMessages(next)
-                      }}
-                    >
-                      <Trash2 />
-                    </ActionBtn>
-                  </div>
-                )
-              }}
+              <PanelLeft />
+            </button>
+            {/*
+              Pinned to the conversation column rather than the viewport, so it
+              steps aside when the file panel takes the right edge — otherwise
+              the floating chip would sit on top of the panel's close button.
+            */}
+            <ThemeToggle
+              floating={false}
+              className="absolute top-3 right-3 z-50"
             />
-          )}
 
-          <div data-slot="chat-composer" className="w-full shrink-0">
-            {composer}
-            {isEmptyChat ? (
-              <PromptSuggestions
-                items={DEMO_SUGGESTIONS}
-                onSelect={(item) =>
-                  handleSend({ text: item.label, files: [], skills: [] })
-                }
-              />
-            ) : null}
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col overflow-x-hidden",
+                isEmptyChat && "justify-center"
+              )}
+            >
+              {isEmptyChat ? (
+                <div
+                  data-slot="demo-opening"
+                  className="mx-auto w-full max-w-3xl px-3 pb-5 sm:px-4"
+                >
+                  <h2 className="text-center text-2xl font-semibold tracking-tight text-balance text-foreground sm:text-3xl">
+                    How can I help?
+                  </h2>
+                </div>
+              ) : (
+                <MessageList
+                  messages={messages}
+                  isGenerating={isGenerating}
+                  generationStage={generationStage}
+                  generationLabel={generationLabel}
+                  onEditMessage={(id, content) =>
+                    setMessages((prev) => {
+                      const next = prev.map((msg) =>
+                        msg.id === id ? { ...msg, content } : msg
+                      )
+                      persistSession(activeId, (session) => ({
+                        ...session,
+                        messages: next,
+                      }))
+                      return next
+                    })
+                  }
+                  onAskAnswer={handleAskAnswer}
+                  onOpenFile={openToolFile}
+                  onChangeFileClick={openChangeFile}
+                  onFileReferenceClick={openReferencedFile}
+                  onReviewChanges={(messageId) => {
+                    const message = messages.find((item) => item.id === messageId)
+                    const tools = message?.tools?.length
+                      ? message.tools
+                      : toolsFromParts(message?.parts ?? [])
+                    const first = tools.map(filePreviewFromTool).find(Boolean)
+                    if (first) setPreviewFile(first)
+                    else toast.message("Wire Review to your own diff view")
+                  }}
+                  renderActions={(message) => {
+                    if (message.sender !== "assistant") return null
+                    return (
+                      <div className="-mt-2 mb-4 flex gap-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
+                        <ActionBtn
+                          title="Copy"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(message.content)
+                            toast.success("Copied")
+                          }}
+                        >
+                          <Copy />
+                        </ActionBtn>
+                        <ActionBtn
+                          title="Regenerate"
+                          onClick={() => {
+                            const idx = messages.findIndex(
+                              (m) => m.id === message.id
+                            )
+                            let userIdx = idx - 1
+                            while (
+                              userIdx >= 0 &&
+                              messages[userIdx].sender !== "user"
+                            ) {
+                              userIdx--
+                            }
+                            if (userIdx < 0) return
+                            const prompt = messages[userIdx].content
+                            const next = messages.filter(
+                              (m) => m.id !== message.id
+                            )
+                            persistSession(activeId, (session) => ({
+                              ...session,
+                              messages: next,
+                            }))
+                            setMessages(next)
+                            void runPrompt(
+                              prompt,
+                              activeId,
+                              next,
+                              activeSession?.cursorSessionId
+                            )
+                          }}
+                        >
+                          <RefreshCw />
+                        </ActionBtn>
+                        <ActionBtn
+                          title="Delete"
+                          onClick={() => {
+                            const next = messages.filter(
+                              (m) => m.id !== message.id
+                            )
+                            persistSession(activeId, (session) => ({
+                              ...session,
+                              messages: next,
+                            }))
+                            setMessages(next)
+                          }}
+                        >
+                          <Trash2 />
+                        </ActionBtn>
+                      </div>
+                    )
+                  }}
+                />
+              )}
+
+              <div data-slot="chat-composer" className="w-full shrink-0">
+                {composer}
+                {isEmptyChat ? (
+                  <PromptSuggestions
+                    items={DEMO_SUGGESTIONS}
+                    onSelect={(item) =>
+                      handleSend({ text: item.label, files: [], skills: [] })
+                    }
+                  />
+                ) : null}
+              </div>
+            </div>
           </div>
-        </div>
+        </ResizablePanel>
+
+        {dockedPreview ? (
+          <>
+            <ResizableHandle withHandle />
+            <ResizablePanel
+              id="preview"
+              defaultSize={`${previewSize}%`}
+              minSize="20%"
+              maxSize="60%"
+              className="flex min-w-0 flex-col"
+              style={{ overflow: "hidden" }}
+            >
+              <FilePreview
+                file={dockedPreview}
+                onClose={closePreview}
+                className="border-l"
+              />
+            </ResizablePanel>
+          </>
+        ) : null}
+      </ResizablePanelGroup>
+
+      {/* Mobile: the file panel slides over the conversation, like the sidebar. */}
+      <div
+        aria-hidden={!previewFile}
+        onClick={closePreview}
+        className={cn(
+          "absolute inset-0 z-40 bg-foreground/20 backdrop-blur-[1px] transition-opacity duration-200 md:hidden",
+          previewFile ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+      />
+      <div
+        data-slot="demo-file-panel"
+        className={cn(
+          "absolute inset-y-0 right-0 z-50 w-[min(30rem,100%)] overflow-hidden bg-background shadow-xl",
+          "transition-transform duration-300 ease-in-out md:hidden",
+          !previewFile && "translate-x-full"
+        )}
+      >
+        {overlayPreview ? (
+          <FilePreview
+            file={overlayPreview}
+            onClose={closePreview}
+            className="border-l"
+          />
+        ) : null}
       </div>
     </div>
   )

@@ -16,7 +16,8 @@ const FILES: ChangeSummaryFile[] = [
 
 /**
  * `previewCount` decides how many rows show before the “Show N more” toggle,
- * and the card's slots cover the header, the rows, and the +/- counts.
+ * `onFileClick` turns each row into a button, and the card's slots cover the
+ * header, the rows, and the +/- counts.
  */
 export function ChangeSummaryStyledExample() {
   return (
@@ -31,6 +32,7 @@ export function ChangeSummaryStyledExample() {
       <ChangeSummary
         files={FILES}
         previewCount={4}
+        onFileClick={(file) => toast.message(`Open ${file.path}`)}
         className="rounded-xl border-primary/30 bg-primary/5 [&_[data-slot=change-summary-file]]:font-mono [&_[data-slot=change-summary-file]]:text-[12px]"
       />
     </div>

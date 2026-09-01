@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { AskQuestionExample } from "@/components/examples/ask-question-example"
@@ -5,6 +7,8 @@ import { AskQuestionToolExample } from "@/components/examples/ask-question-tool-
 import { AskQuestionStyledExample } from "@/components/examples/ask-question-styled-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
 import { ChangeSummaryStyledExample } from "@/components/examples/change-summary-styled-example"
+import { FileIconExample } from "@/components/examples/file-icon-example"
+import { FilePreviewExample } from "@/components/examples/file-preview-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { GenerationStatusStyledExample } from "@/components/examples/generation-status-styled-example"
 import { MessageActionsExample } from "@/components/examples/message-actions-example"
@@ -191,6 +195,35 @@ export function Turn() {
             name: "onReviewChanges",
             type: "() => void",
             description: "Makes the Review label on the change card a button.",
+          },
+          {
+            name: "onOpenFile",
+            type: "(tool: MessageToolCallData) => void",
+            description: (
+              <>
+                Forwarded to every tool row: Edit / Write / Read headlines that
+                name a file become buttons that open it — pair it with{" "}
+                <DocsCode>FilePreview</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "onChangeFileClick",
+            type: "(file: ChangeSummaryFile) => void",
+            description:
+              "Makes each row of the turn's change-summary card clickable.",
+          },
+          {
+            name: "onFileReferenceClick",
+            type: "(path: string) => void",
+            description: (
+              <>
+                Makes the file references inside the answer&apos;s markdown
+                clickable — every <DocsCode>MessageMarkdown</DocsCode> in the
+                turn gets it. The path arrives without its{" "}
+                <DocsCode>:line</DocsCode> suffix.
+              </>
+            ),
           },
           {
             name: "isAnimating",
@@ -400,6 +433,39 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
               "Fired when an Ask Question tool is submitted or skipped. Hide the composer send-as-skip yourself if you want Cursor's extra-details behavior.",
           },
           {
+            name: "onReviewChanges",
+            type: "(messageId: string) => void",
+            description:
+              "Makes the Review label on a turn's change card a button.",
+          },
+          {
+            name: "onOpenFile",
+            type: "(messageId: string, tool: MessageToolCallData) => void",
+            description: (
+              <>
+                Fired when an Edit / Write / Read headline is clicked. Pair it
+                with <DocsCode>filePreviewFromTool</DocsCode> and{" "}
+                <DocsCode>FilePreview</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "onChangeFileClick",
+            type: "(messageId: string, file: ChangeSummaryFile) => void",
+            description:
+              "Fired when a row of a turn's change-summary card is clicked.",
+          },
+          {
+            name: "onFileReferenceClick",
+            type: "(messageId: string, path: string) => void",
+            description: (
+              <>
+                Fired when a file chip inside an answer&apos;s markdown is
+                clicked — see <DocsCode>MessageMarkdown</DocsCode>.
+              </>
+            ),
+          },
+          {
             name: "renderActions",
             type: "(message: ChatMessageData) => React.ReactNode",
             description:
@@ -445,8 +511,11 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         description: (
           <>
             Rows are memoized and the event callbacks you pass —{" "}
-            <DocsCode>onEditMessage</DocsCode> and{" "}
-            <DocsCode>onAskAnswer</DocsCode> — are held at one identity
+            <DocsCode>onEditMessage</DocsCode>,{" "}
+            <DocsCode>onAskAnswer</DocsCode>, <DocsCode>onOpenFile</DocsCode>,{" "}
+            <DocsCode>onChangeFileClick</DocsCode>,{" "}
+            <DocsCode>onFileReferenceClick</DocsCode> and{" "}
+            <DocsCode>onReviewChanges</DocsCode> — are held at one identity
             internally, so a parent that re-renders on each streamed token only
             reaches the row whose message object actually changed. Keep the
             message objects themselves stable (patch the streaming turn, map the
@@ -528,6 +597,7 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
       "message-markdown",
       "ask-question",
       "change-summary",
+      "file-icon",
     ],
     preview: { name: "message-parts-example", node: <MessagePartsExample /> },
     usage: `import {
@@ -656,6 +726,18 @@ export function Answer() {
               "Ask Question tools only. Continue and Skip both fire this — check result.skipped. The row reports its own id, so one handler can serve a whole turn without breaking memoization.",
           },
           {
+            name: "onOpenFile",
+            type: "(tool: MessageToolCallData) => void",
+            description: (
+              <>
+                Opt in to a clickable headline: an Edit / Write / Read row that
+                names a file splits into an open-file button plus a separate
+                chevron for the inline body. Without it the header stays one
+                disclosure, exactly as before.
+              </>
+            ),
+          },
+          {
             name: "collapseAt",
             type: "number",
             default: "3",
@@ -731,11 +813,14 @@ export function Answer() {
       "message-reasoning-content",
       "message-tool-call",
       "message-tool-call-trigger",
+      "message-tool-call-header",
+      "message-tool-call-chevron",
       "message-tool-call-body",
       "message-tool-calls",
       "message-tool-calls-trigger",
       "message-tool-list",
       "message-tool-stats",
+      "file-icon",
       "ask-question",
       "message-tool-diff",
       "message-tool-diff-line",
@@ -1091,6 +1176,7 @@ export function Clarify() {
     description:
       "Streamdown renderer tuned for streaming answers: GFM, Shiki code, Mermaid diagrams, and KaTeX math, with incomplete markdown parsed safely.",
     registry: "message-markdown",
+    registryDependencies: ["file-icon"],
     preview: {
       name: "message-markdown-example",
       node: <MessageMarkdownExample />,
@@ -1124,13 +1210,57 @@ export function Answer({ text }: { text: string }) {
             description:
               "Inline replacements applied to paragraph and list-item text.",
           },
+          {
+            name: "onFileClick",
+            type: "(path: string) => void",
+            description: (
+              <>
+                Makes every detected file chip a button. The path arrives with
+                any <DocsCode>:line:col</DocsCode> suffix stripped. Keep the
+                handler stable — it is read through context so the inline
+                renderer stays memoized while text streams.
+              </>
+            ),
+          },
         ],
       },
     ],
     dataSlots: [
       "message-markdown",
+      "message-file-ref",
+      "file-icon",
     ],
     examples: [
+      {
+        title: "File references become chips",
+        description: (
+          <>
+            Inline code that reads as a file path renders as a chip with its{" "}
+            <DocsCode>FileIcon</DocsCode> — <DocsCode>`lib/store.ts`</DocsCode>,{" "}
+            <DocsCode>`app/page.tsx:42`</DocsCode>,{" "}
+            <DocsCode>`package.json`</DocsCode>,{" "}
+            <DocsCode>`Dockerfile`</DocsCode>. Detection is deliberately
+            conservative: a recognized extension or a well-known extension-less
+            filename qualifies on its own, a slashed string needs three
+            segments (so <DocsCode>`and/or`</DocsCode> stays code), and URLs,
+            anything with whitespace, and library names like{" "}
+            <DocsCode>`Next.js`</DocsCode> never match. Fenced blocks, mermaid
+            and math are untouched — Streamdown routes them to their own
+            renderers. Everything else renders as ordinary inline code.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<MessageMarkdown onFileClick={(path) => setPreviewFile({ path })}>
+  {"Renamed \`lib/store/reducer.ts\`; the call site is \`app/page.tsx:120\`."}
+</MessageMarkdown>
+
+// Restyle them from the outside:
+<MessageMarkdown className="[&_[data-slot=message-file-ref]]:border-primary/40">
+  {text}
+</MessageMarkdown>`,
+        },
+      },
       {
         title: "Mermaid and math",
         description: (
@@ -1201,7 +1331,7 @@ export function Answer({ text }: { text: string }) {
     description:
       "The card Cursor shows after a coding turn: file count, a Review action, a few rows with +/- stats, and “Show N more”. Pair it with WorkedFor for the elapsed-time badge.",
     registry: "change-summary",
-    registryDependencies: ["collapsible"],
+    registryDependencies: ["collapsible", "file-icon"],
     preview: {
       name: "change-summary-example",
       node: <ChangeSummaryExample />,
@@ -1259,6 +1389,17 @@ export function AfterTurn() {
               "Makes the header label a button. Omit it to keep Review as plain text.",
           },
           {
+            name: "onFileClick",
+            type: "(file: ChangeSummaryFile) => void",
+            description: (
+              <>
+                Turns every row into a button — open the file in a{" "}
+                <DocsCode>FilePreview</DocsCode> panel. Rows stay plain text
+                without it.
+              </>
+            ),
+          },
+          {
             name: "previewCount",
             type: "number",
             default: "4",
@@ -1314,10 +1455,17 @@ export function AfterTurn() {
         description: (
           <>
             <DocsCode>previewCount</DocsCode> decides how many rows show before
-            the &ldquo;Show N more&rdquo; toggle, and{" "}
-            <DocsCode>onAction</DocsCode> turns the header label into a button.
-            Rows, stats, and the header each have a slot, so the card can go
-            monospace or take a tint without a fork.
+            the &ldquo;Show N more&rdquo; toggle, <DocsCode>onAction</DocsCode>{" "}
+            turns the header label into a button, and{" "}
+            <DocsCode>onFileClick</DocsCode> turns every row into one. Rows,
+            stats, and the header each have a slot, so the card can go monospace
+            or take a tint without a fork; the glyph is a{" "}
+            <DocsCode>FileIcon</DocsCode>, whose brand colours are fixed on
+            purpose, while each row also tags itself with{" "}
+            <DocsCode>data-kind</DocsCode> — <DocsCode>code</DocsCode>,{" "}
+            <DocsCode>style</DocsCode>, <DocsCode>data</DocsCode>,{" "}
+            <DocsCode>text</DocsCode> — so opt into colour from the outside when
+            you want it.
           </>
         ),
         example: {
@@ -1339,6 +1487,442 @@ export function AfterTurn() {
             own — a turn header, a run list, your own layout.
           </>
         ),
+      },
+    ],
+  },
+
+  "file-preview": {
+    title: "File Preview",
+    description:
+      "The right-hand panel Cursor opens when you click an edited file: the agent's diff, or the whole file with the edited lines marked and scrolled into view.",
+    registry: "file-preview",
+    registryDependencies: ["message-parts", "file-icon"],
+    preview: {
+      name: "file-preview-example",
+      node: <FilePreviewExample />,
+      align: "stretch",
+    },
+    usage: `"use client"
+
+import {
+  FilePreview,
+  filePreviewFromTool,
+  type FilePreviewFile,
+} from "@/components/ui/file-preview"
+import { MessageList } from "@/components/ui/message-list"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
+
+export function Workspace({ messages }: { messages: ChatMessageData[] }) {
+  const [file, setFile] = useState<FilePreviewFile | null>(null)
+
+  // The panel fills whatever it is put in; a resizable group lets the reader
+  // set the split. The handle and the panel mount together.
+  return (
+    <ResizablePanelGroup id="workspace" className="h-full min-h-0">
+      <ResizablePanel id="chat" defaultSize="65%" minSize="40%">
+        <MessageList
+          messages={messages}
+          onOpenFile={(_messageId, tool) => setFile(filePreviewFromTool(tool))}
+        />
+      </ResizablePanel>
+      {file ? (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel id="preview" defaultSize="35%" minSize="20%" maxSize="60%">
+            <FilePreview
+              file={{ ...file, content: readFromDisk(file.path) }}
+              onClose={() => setFile(null)}
+              className="border-l"
+            />
+          </ResizablePanel>
+        </>
+      ) : null}
+    </ResizablePanelGroup>
+  )
+}`,
+    props: [
+      {
+        caption: "FilePreview",
+        rows: [
+          {
+            name: "file",
+            type: "FilePreviewFile",
+            required: true,
+            description: "What to show — see the table below.",
+          },
+          {
+            name: "defaultView",
+            type: '"file" | "diff"',
+            description: (
+              <>
+                Defaults to <DocsCode>file</DocsCode> when{" "}
+                <DocsCode>content</DocsCode> is set, otherwise{" "}
+                <DocsCode>diff</DocsCode>. The toggle only appears when both
+                views are possible.
+              </>
+            ),
+          },
+          {
+            name: "onClose",
+            type: "() => void",
+            description:
+              "Renders the close button. While it is set, Escape closes the panel too.",
+          },
+          {
+            name: "classNames",
+            type: "{ root?, header?, body? }",
+            description: "Per-part overrides, merged after the defaults.",
+          },
+        ],
+      },
+      {
+        caption: "FilePreviewFile",
+        rows: [
+          {
+            name: "path",
+            type: "string",
+            required: true,
+            description:
+              "Shown in the header — directory muted, basename emphasized — and used as the panel's accessible name.",
+          },
+          {
+            name: "content",
+            type: "string",
+            description: (
+              <>
+                Full post-edit file text. <strong>Your app supplies this</strong>{" "}
+                — a transcript rarely carries the whole file. Without it the
+                panel is diff-only.
+              </>
+            ),
+          },
+          {
+            name: "diff",
+            type: "string",
+            description: (
+              <>
+                Unified diff. <DocsCode>@@</DocsCode> hunks keep their real line
+                numbers, which is what places the highlight in the File view.
+              </>
+            ),
+          },
+          {
+            name: "oldText / newText",
+            type: "string",
+            description:
+              "Before/after pair, used when there is no patch. The changed range is located inside content by matching newText.",
+          },
+          {
+            name: "diffLines",
+            type: "ToolDiffLine[]",
+            description: (
+              <>
+                Already-parsed diff lines (what{" "}
+                <DocsCode>extractToolDiff</DocsCode> returns). Wins over the
+                three fields above — <DocsCode>filePreviewFromTool</DocsCode>{" "}
+                fills it in.
+              </>
+            ),
+          },
+          {
+            name: "added / removed",
+            type: "number",
+            description: "Stat overrides; otherwise counted off the diff.",
+          },
+          {
+            name: "language",
+            type: "string",
+            description: "Falls back to the extension of the path.",
+          },
+          {
+            name: "startLine",
+            type: "number",
+            default: "1",
+            description: "First line number of content, for a partial read.",
+          },
+        ],
+      },
+      {
+        caption: "filePreviewFromTool(tool)",
+        rows: [
+          {
+            name: "tool",
+            type: "MessageToolCallData",
+            required: true,
+            description: (
+              <>
+                Returns a <DocsCode>FilePreviewFile</DocsCode>, or{" "}
+                <DocsCode>null</DocsCode> when the tool names no file. Diff and
+                read body come from the same extractors the inline tool row
+                uses, so the panel shows exactly what the row showed.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "file-preview",
+      "file-preview-header",
+      "file-preview-path",
+      "file-preview-stats",
+      "file-preview-view-toggle",
+      "file-preview-close",
+      "file-preview-body",
+      "file-preview-line",
+      "file-preview-gutter",
+      "file-preview-note",
+      "file-icon",
+    ],
+    examples: [
+      {
+        title: "Open it from a message list",
+        description: (
+          <>
+            <DocsCode>MessageList</DocsCode> takes{" "}
+            <DocsCode>onOpenFile</DocsCode> and{" "}
+            <DocsCode>onChangeFileClick</DocsCode>: the first fires from an
+            Edit / Write / Read headline, the second from a row of the
+            change-summary card. Both are bound to the message id for you.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<MessageList
+  messages={messages}
+  onOpenFile={(_messageId, tool) => setFile(filePreviewFromTool(tool))}
+  onChangeFileClick={(_messageId, change) => setFile({ path: change.path })}
+/>`,
+        },
+      },
+      {
+        title: "Dock it beside the conversation",
+        description: (
+          <>
+            The panel fills its parent, so the layout is yours. On desktop, put
+            it in a <Link href="/docs/components/resizable">Resizable</Link> group next
+            to the conversation and let the reader drag the split; below{" "}
+            <DocsCode>md</DocsCode>, mirror the sidebar — an overlay with a
+            scrim. Derive which of the two mounts, so only one panel exists at a
+            time.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `{/* Desktop: a pane in the workspace group. */}
+<ResizablePanel id="preview" defaultSize="35%" minSize="20%" maxSize="60%">
+  <FilePreview file={file} onClose={close} className="border-l" />
+</ResizablePanel>
+
+{/* Below md: an overlay that slides in over the conversation. */}
+<div
+  className={cn(
+    "absolute inset-y-0 right-0 z-50 w-[min(30rem,100%)] overflow-hidden",
+    "bg-background shadow-xl transition-transform duration-300 md:hidden",
+    !file && "translate-x-full"
+  )}
+>
+  {file ? <FilePreview file={file} onClose={close} className="border-l" /> : null}
+</div>`,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Sizing",
+        description: (
+          <>
+            Nothing here is fixed-width: the panel is{" "}
+            <DocsCode>h-full w-full</DocsCode> and takes its size from whatever
+            holds it. That is why it drops straight into a{" "}
+            <Link href="/docs/components/resizable">Resizable</Link> pane — give the
+            pane an <DocsCode>id</DocsCode> and the width the reader dragged
+            comes back the next time the file opens.
+          </>
+        ),
+      },
+      {
+        title: "Where the content comes from",
+        description: (
+          <>
+            A transcript carries the diff, not the file — so the{" "}
+            <DocsCode>File</DocsCode> view only appears once your app puts the
+            post-edit body on <DocsCode>content</DocsCode> (read it from disk,
+            or from whatever the agent streamed as{" "}
+            <DocsCode>streamContent</DocsCode>/<DocsCode>fileText</DocsCode>,
+            which <DocsCode>filePreviewFromTool</DocsCode> picks up). Changed
+            lines are verified against that body before they are highlighted: a
+            diff that does not line up highlights nothing rather than the wrong
+            line.
+          </>
+        ),
+      },
+      {
+        title: "Truncated diffs",
+        description: (
+          <>
+            Agents cut long patches off mid-hunk. Whatever parses is rendered,
+            with a muted note underneath; a patch that yields nothing at all
+            leaves the note alone. Nothing here throws on a malformed payload.
+          </>
+        ),
+      },
+      {
+        title: "Cost",
+        description: (
+          <>
+            One Shiki pass per rendered block (never one per line), rows are
+            memoized, and the parse runs behind{" "}
+            <DocsCode>useDeferredValue</DocsCode> so a streaming file does not
+            re-diff on every chunk. Bodies over ~150k characters skip
+            highlighting and render as plain lines, gutter and highlights
+            intact.
+          </>
+        ),
+      },
+    ],
+  },
+
+  "file-icon": {
+    title: "File Icon",
+    description:
+      "Material Icon Theme file glyphs, inlined as SVG: a curated subset resolved by filename, then by extension, with a generic document fallback.",
+    registry: "file-icon",
+    preview: {
+      name: "file-icon-example",
+      node: <FileIconExample />,
+      align: "stretch",
+    },
+    usage: `import { FileIcon } from "@/components/ui/file-icon"
+
+export function FileRow({ path }: { path: string }) {
+  return (
+    <span className="flex items-center gap-2 font-mono text-[12px]">
+      <FileIcon path={path} size={14} />
+      {path}
+    </span>
+  )
+}`,
+    props: [
+      {
+        caption: "FileIcon",
+        rows: [
+          {
+            name: "path",
+            type: "string",
+            required: true,
+            description:
+              "Full path or bare filename. Only the basename is inspected.",
+          },
+          {
+            name: "size",
+            type: "number",
+            default: "16",
+            description: "Rendered width and height, in px.",
+          },
+        ],
+      },
+      {
+        caption: "Helpers",
+        rows: [
+          {
+            name: "fileIconId",
+            type: "(path: string) => FileIconId",
+            description: (
+              <>
+                The icon id a path resolves to — exact filename (
+                <DocsCode>package.json</DocsCode>,{" "}
+                <DocsCode>Dockerfile</DocsCode>), then filename pattern (
+                <DocsCode>.env.local</DocsCode>), then extension, then{" "}
+                <DocsCode>&quot;document&quot;</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "ICONS",
+            type: "Record<FileIconId, FC<IconProps>>",
+            description:
+              "Every icon, keyed by id — render one directly when you already know the type.",
+          },
+        ],
+      },
+    ],
+    dataSlots: ["file-icon"],
+    examples: [
+      {
+        title: "Add an icon",
+        description: (
+          <>
+            The set is curated, not exhaustive — registry components are copied
+            into your app, so growing it is a local edit: drop the SVG path data
+            into <DocsCode>ICONS</DocsCode>, then point a filename or extension
+            at the new id. Anything unmapped falls back to the document glyph.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `const kotlin = makeIcon("0 0 24 24", [["#c087f7", "M3 3h18L3 21z"]])
+
+const ICONS = { ...  , kotlin }
+
+const EXTENSION_MAP: Record<string, FileIconId> = {
+  ...  ,
+  kt: "kotlin",
+  kts: "kotlin",
+}`,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Where it shows up already",
+        description: (
+          <>
+            <DocsCode>MessageToolCall</DocsCode> puts one in front of an
+            Edit / Write / Read file name, <DocsCode>ChangeSummary</DocsCode>{" "}
+            uses it for every row, <DocsCode>FilePreview</DocsCode> heads the
+            panel with it, and <DocsCode>MessageMarkdown</DocsCode> puts it
+            inside the file chips it detects in inline code. Install any of
+            those and this comes with them.
+          </>
+        ),
+      },
+      {
+        title: "Colours are deliberate",
+        description: (
+          <>
+            The brand colours are baked into the path data rather than taken
+            from theme tokens: they identify the technology, not the host UI,
+            so an icon reads the same in light and dark. Size with{" "}
+            <DocsCode>size</DocsCode>; leave the fills alone.
+          </>
+        ),
+      },
+      {
+        title: "Licensing",
+        description: (
+          <>
+            The SVG path data is copied from{" "}
+            <a
+              href="https://github.com/PKief/vscode-material-icon-theme"
+              target="_blank"
+              rel="noreferrer"
+            >
+              PKief/vscode-material-icon-theme
+            </a>
+            , MIT licensed (© Material Extensions). The attribution lives in the
+            file header — keep it there when you copy the component.
+          </>
+        ),
+      },
+      {
+        title: "No runtime cost",
+        description:
+          "Icons are inline SVG in one module: no icon font, no sprite sheet, no network request, and no dependency beyond React and cn().",
       },
     ],
   },
