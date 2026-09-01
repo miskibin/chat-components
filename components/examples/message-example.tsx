@@ -1,5 +1,15 @@
 import { Message, type MessagePart } from "@/components/ui/message"
 
+const SCREENSHOT_DATA_URL =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+      <rect width="200" height="200" fill="#dc2626" />
+      <rect x="24" y="24" width="152" height="18" rx="4" fill="#fecaca" />
+      <rect x="24" y="60" width="100" height="12" rx="3" fill="#fecaca" />
+    </svg>`
+  )
+
 const ANSWER = `The build fails because \`generateStaticParams\` returns \`string[]\`
 instead of \`{ slug: string }[]\`.
 
@@ -54,7 +64,18 @@ const PARTS: MessagePart[] = [
 export function MessageExample() {
   return (
     <div className="w-full max-w-2xl">
-      <Message sender="user" content="Why does the docs build fail?" />
+      <Message
+        sender="user"
+        content="Why does the docs build fail? Here's the error."
+        attachments={[
+          {
+            id: "shot-1",
+            name: "error.png",
+            mimeType: "image/svg+xml",
+            url: SCREENSHOT_DATA_URL,
+          },
+        ]}
+      />
       <Message
         sender="assistant"
         content={ANSWER}

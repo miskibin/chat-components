@@ -10,6 +10,7 @@ export type DocExample = {
   align?: "center" | "stretch"
 }
 
+/** One example block: a heading, a line of prose, then a demo or a snippet. */
 export type DocSection = {
   title: string
   description?: ReactNode
@@ -32,10 +33,14 @@ export type ComponentDoc = {
   preview?: DocExample
   usage: string
   usageLang?: string
+  /**
+   * The body of the page. Prefer a live `example` over a `code` snippet —
+   * a customization you can see beats one you have to imagine.
+   */
+  examples?: DocSection[]
+  /** Short prose blocks — keyboard maps, gotchas — rendered as callouts. */
+  notes?: { title: string; description: ReactNode }[]
   props: PropsGroup[]
   /** `data-slot` values the component stamps, for external styling. */
-  dataSlots?: { slot: string; description: ReactNode }[]
-  customization?: DocSection[]
-  /** Extra prose rendered after the customization sections. */
-  notes?: DocSection[]
+  dataSlots?: string[]
 }

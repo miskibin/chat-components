@@ -5,12 +5,14 @@ import * as React from "react"
 
 import {
   MessageArtifact,
+  MessageAttachments,
   MessageCode,
   MessageProcess,
   MessageReasoning,
   MessageToolCall,
   MessageToolCalls,
   type MessageArtifactData,
+  type MessageAttachmentData,
   type MessageCodeBlockData,
   type MessageToolCallData,
 } from "@/components/ui/message-parts"
@@ -65,6 +67,8 @@ export type MessageProps = {
   parts?: MessagePart[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
+  /** Files attached to a user turn — images render as thumbnails. */
+  attachments?: MessageAttachmentData[]
   /** True while this assistant message is still streaming. */
   isAnimating?: boolean
   /** Called when an Ask Question tool on this turn is submitted or skipped. */
@@ -86,6 +90,7 @@ const EMPTY_ACTIONS: ActionButton[] = []
 const EMPTY_TOOLS: MessageToolCallData[] = []
 const EMPTY_CODE_BLOCKS: MessageCodeBlockData[] = []
 const EMPTY_ARTIFACTS: MessageArtifactData[] = []
+const EMPTY_ATTACHMENTS: MessageAttachmentData[] = []
 const EMPTY_PATTERNS: PatternHandler[] = []
 const EMPTY_CHANGES: ChangeSummaryFile[] = []
 
@@ -124,6 +129,7 @@ export const Message = React.memo(function Message({
   parts,
   codeBlocks = EMPTY_CODE_BLOCKS,
   artifacts = EMPTY_ARTIFACTS,
+  attachments = EMPTY_ATTACHMENTS,
   isAnimating = false,
   onAskAnswer,
   workedFor,
@@ -293,40 +299,47 @@ export const Message = React.memo(function Message({
         data-slot="message"
         data-sender="user"
         className={cn(
-          "group mb-4 flex w-full min-w-0 items-center justify-end gap-1",
+          "group mb-4 flex w-full min-w-0 flex-col items-end gap-1",
           className
         )}
       >
-        {editable && onEdit && (
-          <button
-            type="button"
-            title="Edit message"
-            onClick={() => setIsEditing(true)}
-            className={cn(
-              messageActionButton,
-              "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
-            )}
-          >
-            <Pencil />
-          </button>
-        )}
-        <div
-          data-slot="message-content"
-          className={cn(
-            "max-w-[85%] min-w-0 rounded-xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
-            contentClassName
-          )}
-        >
-          {remainder && !longPromptExpanded ? preview : displayContent}
-          {remainder ? (
+        {attachments.length > 0 ? (
+          <MessageAttachments attachments={attachments} />
+        ) : null}
+        <div className="flex w-full min-w-0 items-center justify-end gap-1">
+          {editable && onEdit && (
             <button
               type="button"
-              className="mt-2 block rounded-sm py-0.5 text-left text-[13px] font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              aria-expanded={longPromptExpanded}
-              onClick={() => setLongPromptExpanded((v) => !v)}
+              title="Edit message"
+              onClick={() => setIsEditing(true)}
+              className={cn(
+                messageActionButton,
+                "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+              )}
             >
-              {longPromptExpanded ? "Show less" : "Show more"}
+              <Pencil />
             </button>
+          )}
+          {displayContent ? (
+            <div
+              data-slot="message-content"
+              className={cn(
+                "max-w-[85%] min-w-0 rounded-xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
+                contentClassName
+              )}
+            >
+              {remainder && !longPromptExpanded ? preview : displayContent}
+              {remainder ? (
+                <button
+                  type="button"
+                  className="mt-2 block rounded-sm py-0.5 text-left text-[13px] font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  aria-expanded={longPromptExpanded}
+                  onClick={() => setLongPromptExpanded((v) => !v)}
+                >
+                  {longPromptExpanded ? "Show less" : "Show more"}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>
@@ -488,6 +501,7 @@ export const Message = React.memo(function Message({
 
 export type {
   MessageArtifactData,
+  MessageAttachmentData,
   MessageCodeBlockData,
   MessageToolCallData,
 } from "@/components/ui/message-parts"
@@ -496,6 +510,7 @@ export type { AskQuestionResult } from "@/components/ui/ask-question"
 export { ChangeSummary, WorkedFor } from "@/components/ui/change-summary"
 export {
   MessageArtifact,
+  MessageAttachments,
   MessageCode,
   MessageProcess,
   MessageReasoning,
