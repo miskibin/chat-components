@@ -15,6 +15,7 @@ import { MessageListEmptyExample } from "@/components/examples/message-list-empt
 import { MessageListExample } from "@/components/examples/message-list-example"
 import { MessageListStreamingExample } from "@/components/examples/message-list-streaming-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
+import { MessageMarkdownImagesExample } from "@/components/examples/message-markdown-images-example"
 import { MessageMarkdownMermaidExample } from "@/components/examples/message-markdown-mermaid-example"
 import { MessageMarkdownStyledExample } from "@/components/examples/message-markdown-styled-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
@@ -1151,19 +1152,17 @@ export function Answer({ text }: { text: string }) {
         description: (
           <>
             Images render from <DocsCode>http</DocsCode>,{" "}
-            <DocsCode>https</DocsCode> and <DocsCode>data:</DocsCode> URLs, so a
-            screenshot or chart an agent hands back as base64 shows up in the
-            answer instead of vanishing. Streamdown&rsquo;s hardening pass still
-            narrows <DocsCode>data:</DocsCode> to <DocsCode>data:image/*</DocsCode>
-            , and <DocsCode>message-markdown.css</DocsCode> keeps every image
-            inside the message column.
+            <DocsCode>https</DocsCode> and <DocsCode>data:</DocsCode> sources, so
+            a screenshot or chart an agent hands back as base64 shows up in the
+            answer instead of vanishing. The hardening pass still narrows{" "}
+            <DocsCode>data:</DocsCode> to <DocsCode>data:image/*</DocsCode>, and{" "}
+            <DocsCode>message-markdown.css</DocsCode> keeps every image inside
+            the message column.
           </>
         ),
-        code: {
-          lang: "md",
-          code: `![a chart the agent rendered](data:image/png;base64,iVBORw0KGgo…)
-
-![or a plain URL](https://example.com/coverage.png)`,
+        example: {
+          name: "message-markdown-images-example",
+          node: <MessageMarkdownImagesExample />,
         },
       },
       {
