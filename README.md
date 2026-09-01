@@ -151,8 +151,8 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **chat** | Starter `Chat` block: centered greeting with composer + `PromptSuggestions`, then `MessageList` + `ChatInput`. Also installs the kit atoms. | [/docs/components/chat](https://chat-input-azure.vercel.app/docs/components/chat) |
 | **chat-input** | Composer textarea with attachments, drag-and-drop, optional skills/slash menu, `tools` slot, send/stop | [chat-input](https://chat-input-azure.vercel.app/docs/components/chat-input) |
 | **prompt-suggestions** | Minimal starter-prompt list for the empty chat state | [prompt-suggestions](https://chat-input-azure.vercel.app/docs/components/prompt-suggestions) |
-| **message** | User bubble + assistant turn (reasoning, tools, code, artifacts, think tags, interleaved `parts`, edit) | [message](https://chat-input-azure.vercel.app/docs/components/message) |
-| **message-parts** | `MessageReasoning`, `MessageToolCall(s)`, `MessageCode`, `MessageArtifact`; Ask Question tools render `AskQuestion` | [message-parts](https://chat-input-azure.vercel.app/docs/components/message-parts) |
+| **message** | User bubble + assistant turn (reasoning, tools, code, artifacts, think tags, interleaved `parts`, edit) — a finished turn folds its process into one “Worked for 12s” row | [message](https://chat-input-azure.vercel.app/docs/components/message) |
+| **message-parts** | `MessageProcess`, `MessageReasoning`, `MessageToolCall(s)`, `MessageCode`, `MessageArtifact`; Ask Question tools render `AskQuestion` | [message-parts](https://chat-input-azure.vercel.app/docs/components/message-parts) |
 | **ask-question** | Cursor-style questionnaire: radios, checkboxes, Other…, Skip / Continue | [ask-question](https://chat-input-azure.vercel.app/docs/components/ask-question) |
 | **message-markdown** | Streamdown renderer (GFM, Shiki code, Mermaid, KaTeX) + styles | [message-markdown](https://chat-input-azure.vercel.app/docs/components/message-markdown) |
 | **message-list** | Scroll container with smart auto-scroll | [message-list](https://chat-input-azure.vercel.app/docs/components/message-list) |
@@ -160,7 +160,7 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **model-picker** | Searchable model selector with badges, disabled reasons, and a reasoning-effort selector | [model-picker](https://chat-input-azure.vercel.app/docs/components/model-picker) |
 | **mode-picker** | Ask / Plan / Agent switch | [mode-picker](https://chat-input-azure.vercel.app/docs/components/mode-picker) |
 | **chat-sidebar** | Collapsible sidebar chrome (brand / nav / rail / sections / footer slots) and the single import surface for the family | [chat-sidebar](https://chat-input-azure.vercel.app/docs/components/chat-sidebar) |
-| **sidebar-item** | Session row + sortable list (rename, pin, delete, status dots, multi-line rows, context menu) | [sidebar-item](https://chat-input-azure.vercel.app/docs/components/sidebar-item) |
+| **sidebar-item** | Session row + sortable list (rename, pin, delete, status dots, multi-line rows with a folder/branch badge, context menu) | [sidebar-item](https://chat-input-azure.vercel.app/docs/components/sidebar-item) |
 | **sidebar-dnd** | Drag-and-drop context: declarative zones + drag-to-reorder events | [sidebar-dnd](https://chat-input-azure.vercel.app/docs/components/sidebar-dnd) |
 | **sidebar-drop-zones** | Edge and inline drop-zone renderers with tone variants | [sidebar-drop-zones](https://chat-input-azure.vercel.app/docs/components/sidebar-drop-zones) |
 | **chat-navbar** | Thin top bar with title and left/right slots | [chat-navbar](https://chat-input-azure.vercel.app/docs/components/chat-navbar) |
