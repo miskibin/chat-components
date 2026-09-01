@@ -94,6 +94,9 @@ export async function* runCursorAgent(
     let sawStreamingDelta = false
     let gotText = false
     let gotResult = false
+    // Tail of what has already gone out, so a final full assistant message
+    // that repeats the deltas is dropped instead of printed twice.
+    let emittedTail = ""
 
     for await (const line of rl) {
       if (options.signal?.aborted) break
@@ -122,8 +125,9 @@ export async function* runCursorAgent(
         if (typeof event.timestamp_ms === "number" && !event.model_call_id) {
           sawStreamingDelta = true
         }
-        if (text) {
+        if (text && !endsWithText(emittedTail, text)) {
           gotText = true
+          emittedTail = tailOf(emittedTail + text)
           yield { type: "text", text }
         }
         continue
@@ -146,6 +150,7 @@ export async function* runCursorAgent(
           typeof event.result === "string" &&
           event.result
         ) {
+          emittedTail = tailOf(emittedTail + event.result)
           yield { type: "text", text: event.result }
         }
         yield {
@@ -226,6 +231,22 @@ export async function listCursorModels(): Promise<
     .map((line) => line.match(/^(\S+)\s+-\s+(.+)$/))
     .filter((m): m is RegExpMatchArray => Boolean(m))
     .map((m) => ({ id: m[1], name: m[2] }))
+}
+
+/**
+ * The CLI is not consistent about how it marks the closing full-text message
+ * of a streamed turn, so `assistantText`'s timestamp heuristic can let one
+ * through and the UI prints the answer twice. Comparing against what actually
+ * went out settles it whatever the shape of the event.
+ */
+const EMITTED_TAIL_MAX = 64_000
+
+function tailOf(text: string) {
+  return text.length > EMITTED_TAIL_MAX ? text.slice(-EMITTED_TAIL_MAX) : text
+}
+
+function endsWithText(tail: string, text: string) {
+  return text.length <= tail.length && tail.endsWith(text)
 }
 
 function assistantText(event: CliEvent, sawStreamingDelta: boolean): string {

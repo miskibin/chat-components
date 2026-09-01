@@ -40,7 +40,7 @@ import type { GenerationStage } from "@/components/ui/generation-status"
 import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
 import {
   formatAskQuestionOutput,
-  isPendingAskTool,
+  isOpenAskTool,
   type AskQuestionResult,
 } from "@/components/ui/ask-question"
 import {
@@ -1018,7 +1018,7 @@ function findPendingAsk(messages: MessageData[]) {
     const tools = message.tools?.length
       ? message.tools
       : toolsFromParts(message.parts ?? [])
-    const tool = tools.find(isPendingAskTool)
+    const tool = tools.find(isOpenAskTool)
     if (tool) return { messageId: message.id, toolId: tool.id }
   }
   return null

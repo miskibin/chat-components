@@ -80,6 +80,7 @@ const EMPTY_TOOLS: MessageToolCallData[] = []
 const EMPTY_CODE_BLOCKS: MessageCodeBlockData[] = []
 const EMPTY_ARTIFACTS: MessageArtifactData[] = []
 const EMPTY_PATTERNS: PatternHandler[] = []
+const EMPTY_CHANGES: ChangeSummaryFile[] = []
 
 /** Small square icon button used for edit / save / custom message actions. */
 const messageActionButton =
@@ -160,8 +161,17 @@ export const Message = React.memo(function Message({
     if (onEdit && editedContent !== content) onEdit(editedContent)
   }, [content, editedContent, onEdit])
 
+  /** Scanned once per render instead of once per thinking part. */
+  const lastThinkingIndex = React.useMemo(
+    () => parts?.findLastIndex((part) => part.type === "thinking") ?? -1,
+    [parts]
+  )
+
   const derivedChanges = React.useMemo(() => {
     if (changes) return changes
+    // Only rendered once the turn settles, so parsing every streamed diff on
+    // the way there is pure waste.
+    if (isAnimating) return EMPTY_CHANGES
     const fromParts =
       parts
         ?.filter(
@@ -170,7 +180,7 @@ export const Message = React.memo(function Message({
         )
         .map((part) => part.tool) ?? []
     return fileChangesFromTools(fromParts.length > 0 ? fromParts : tools)
-  }, [changes, parts, tools])
+  }, [changes, isAnimating, parts, tools])
 
   if (sender === "user") {
     if (isEditing) {
@@ -313,9 +323,7 @@ export const Message = React.memo(function Message({
             }
             if (part.type === "thinking") {
               if (!part.text) return null
-              const isLatestThinking =
-                parts.findLastIndex((item) => item.type === "thinking") ===
-                index
+              const isLatestThinking = index === lastThinkingIndex
               return (
                 <MessageReasoning
                   key={part.id}
@@ -428,6 +436,7 @@ export {
 export {
   AskQuestion,
   isAskToolName,
+  isOpenAskTool,
   isPendingAskTool,
   parseAskQuestionInput,
 } from "@/components/ui/ask-question"
