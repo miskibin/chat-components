@@ -6,7 +6,7 @@ Agent-grade chat UI you own. A shadcn/ui registry of the primitives an agent app
 
 **[Docs](https://chat-input-azure.vercel.app/docs)** · [Playground](https://chat-input-azure.vercel.app/demo)
 
-Every component has its own page with a live preview, the example source, an accurate props table, and customization recipes.
+Every component has its own page: a live preview, then a run of examples you can flip between preview and source, then a compact API reference.
 
 ## Agent UIs are not chat bubbles
 

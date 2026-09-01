@@ -1,9 +1,13 @@
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { ModePickerExample } from "@/components/examples/mode-picker-example"
+import { ModePickerStyledExample } from "@/components/examples/mode-picker-styled-example"
 import { ModelPickerDisabledExample } from "@/components/examples/model-picker-disabled-example"
+import { ModelPickerEffortsExample } from "@/components/examples/model-picker-efforts-example"
 import { ModelPickerExample } from "@/components/examples/model-picker-example"
+import { ModelPickerStyledExample } from "@/components/examples/model-picker-styled-example"
 import { ThemeToggleExample } from "@/components/examples/theme-toggle-example"
+import { ThemeToggleStyledExample } from "@/components/examples/theme-toggle-styled-example"
 
 export const controlDocs = {
   "model-picker": {
@@ -149,11 +153,6 @@ export function Picker() {
             default: "false",
             description: "Disables the trigger.",
           },
-          {
-            name: "className",
-            type: "string",
-            description: "Merged onto the trigger button.",
-          },
         ],
       },
       {
@@ -221,40 +220,18 @@ export function Picker() {
           },
         ],
       },
-      {
-        caption: "Exports",
-        rows: [
-          {
-            name: "DEFAULT_MODEL_EFFORTS",
-            type: "ModelEffortOption[]",
-            description:
-              "low / medium / high / xhigh — “Low”, “Medium”, “High”, “Extra High”. Pass it to efforts, or copy it and rename the steps.",
-          },
-        ],
-      },
     ],
     dataSlots: [
-      { slot: "model-picker-trigger", description: "The trigger button." },
-      { slot: "model-picker-content", description: "The popover panel." },
-      { slot: "model-picker-search", description: "The search input." },
-      { slot: "model-picker-list", description: "The scrolling result list." },
-      { slot: "model-picker-item", description: "Each model row." },
-      { slot: "model-picker-badge", description: "The uppercase provider tag." },
-      {
-        slot: "model-picker-effort",
-        description: "The effort section under the divider.",
-      },
-      {
-        slot: "model-picker-effort-item",
-        description: (
-          <>
-            Each effort chip. Carries{" "}
-            <DocsCode>data-state=&quot;on&quot;</DocsCode> when active.
-          </>
-        ),
-      },
+      "model-picker-trigger",
+      "model-picker-content",
+      "model-picker-search",
+      "model-picker-list",
+      "model-picker-item",
+      "model-picker-badge",
+      "model-picker-effort",
+      "model-picker-effort-item",
     ],
-    customization: [
+    examples: [
       {
         title: "Explain unavailable models",
         description: (
@@ -274,38 +251,31 @@ export function Picker() {
         description: (
           <>
             <DocsCode>efforts</DocsCode> is plain data, so the scale is yours —
-            two steps or six, whatever your backend accepts. The row sits
+            two steps or six, whatever your backend accepts. Ship{" "}
+            <DocsCode>DEFAULT_MODEL_EFFORTS</DocsCode> for the usual
+            low/medium/high/xhigh ladder, or write your own. The row sits
             outside the filtered list, so typing in the search box never hides
-            it.
+            it, and picking an effort keeps the popover open.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<ModelPicker
-  options={MODELS}
-  efforts={[
-    { id: "fast", label: "Fast", description: "No thinking budget" },
-    { id: "think", label: "Think", description: "Reasons before answering" },
-  ]}
-  defaultEffort="think"
-  onEffortChange={(id) => setEffort(id)}
-/>`,
+        example: {
+          name: "model-picker-efforts-example",
+          node: <ModelPickerEffortsExample />,
         },
       },
       {
         title: "Restyle the trigger",
         description: (
           <>
-            The trigger is a plain button; <DocsCode>className</DocsCode> merges
-            last, and its data attributes cover the open state.
+            The trigger is a plain button:{" "}
+            <DocsCode>className</DocsCode> merges last, and{" "}
+            <DocsCode>data-state=&quot;open&quot;</DocsCode> covers the open
+            state. Everything in the popover is reachable through its own slot.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<ModelPicker
-  options={MODELS}
-  className="h-8 rounded-full border px-3 text-foreground data-[state=open]:border-ring"
-/>`,
+        example: {
+          name: "model-picker-styled-example",
+          node: <ModelPickerStyledExample />,
         },
       },
     ],
@@ -382,36 +352,15 @@ export function Picker() {
             default: "false",
             description: "Disables the trigger.",
           },
-          {
-            name: "className",
-            type: "string",
-            description: "Merged onto the trigger button.",
-          },
-        ],
-      },
-      {
-        caption: "Exports",
-        rows: [
-          {
-            name: "ChatMode",
-            type: '"ask" | "plan" | "agent"',
-            description: "The mode union.",
-          },
-          {
-            name: "CHAT_MODES",
-            type: "{ id, name, description, icon }[]",
-            description:
-              "The three modes as data. Edit this array to rename them or change the copy.",
-          },
         ],
       },
     ],
     dataSlots: [
-      { slot: "mode-picker-trigger", description: "The trigger button." },
-      { slot: "mode-picker-content", description: "The dropdown panel." },
-      { slot: "mode-picker-item", description: "Each mode row." },
+      "mode-picker-trigger",
+      "mode-picker-content",
+      "mode-picker-item",
     ],
-    customization: [
+    examples: [
       {
         title: "Rename the modes",
         description: (
@@ -428,6 +377,21 @@ export function Picker() {
   { id: "plan", name: "Review", description: "Proposes a diff", icon: ListTodo },
   { id: "agent", name: "Build", description: "Edits your repo", icon: Bot },
 ]`,
+        },
+      },
+      {
+        title: "Restyle the trigger, flip the side",
+        description: (
+          <>
+            <DocsCode>className</DocsCode> merges onto the trigger and{" "}
+            <DocsCode>side</DocsCode> decides which way the menu opens —{" "}
+            <DocsCode>top</DocsCode> for a composer, <DocsCode>bottom</DocsCode>{" "}
+            for a navbar. All three below share one selection.
+          </>
+        ),
+        example: {
+          name: "mode-picker-styled-example",
+          node: <ModePickerStyledExample />,
         },
       },
     ],
@@ -475,42 +439,28 @@ export function Header() {
               </>
             ),
           },
-          {
-            name: "...props",
-            type: 'React.ComponentProps<"button">',
-            description: "Everything else lands on the button.",
-          },
         ],
       },
     ],
-    dataSlots: [{ slot: "theme-toggle", description: "The button." }],
-    customization: [
+    dataSlots: [
+      "theme-toggle",
+    ],
+    examples: [
       {
-        title: "Square it off, tint it",
+        title: "Square it off, tint it, watch the switch",
         description: (
           <>
-            The icon only renders after hydration, so the server HTML and the
-            first client paint always agree — the button reserves its size
-            either way.
+            Size, radius, and color are all <DocsCode>className</DocsCode>. The
+            icon only renders after hydration, so the server HTML and the first
+            client paint always agree — the button reserves its size either way.{" "}
+            <DocsCode>onClick</DocsCode> runs before the flip, so{" "}
+            <DocsCode>preventDefault()</DocsCode> in it keeps the theme where it
+            is.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<ThemeToggle
-  floating={false}
-  className="size-9 rounded-md border-primary/40 bg-primary/10 text-primary
-             hover:bg-primary/15 hover:text-primary"
-/>`,
-        },
-      },
-      {
-        title: "React to the switch",
-        code: {
-          lang: "tsx",
-          code: `<ThemeToggle
-  floating={false}
-  onClick={() => analytics.track("theme_toggled")}
-/>`,
+        example: {
+          name: "theme-toggle-styled-example",
+          node: <ThemeToggleStyledExample />,
         },
       },
     ],

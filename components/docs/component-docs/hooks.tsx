@@ -58,7 +58,7 @@ export function Palette() {
         ],
       },
     ],
-    customization: [
+    examples: [
       {
         title: "Keep the handler stable",
         description: (
