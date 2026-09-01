@@ -31,6 +31,7 @@ import {
   parseAskQuestionResult,
   type AskQuestionResult,
 } from "@/components/ui/ask-question"
+import { formatWorkedFor } from "@/components/ui/change-summary"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
 
@@ -1179,6 +1180,85 @@ export function MessageToolCalls({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>{list}</CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+export type MessageProcessProps = {
+  /** The chronological thinking / tool stack for one turn. */
+  children: React.ReactNode
+  /** Elapsed seconds — becomes the “Worked for 12s” trigger label. */
+  seconds?: number
+  /** Overrides the derived label. */
+  label?: React.ReactNode
+  /**
+   * True while the turn is still streaming: the stack stays open and the
+   * trigger is withheld, so live parts read exactly as a flat stack. When it
+   * flips to false the group folds into the labelled row.
+   */
+  streaming?: boolean
+  /** Keep the stack expanded after the turn settles. */
+  defaultOpen?: boolean
+  className?: string
+}
+
+/**
+ * Everything the turn did before it answered, behind one “Worked for 12s”
+ * disclosure — the shape a finished agent turn settles into.
+ *
+ * Not memoized on purpose: `children` is a fresh element tree on every render
+ * of the turn, so a memo boundary here would never hit. The rows inside it are
+ * the memoized ones.
+ */
+export function MessageProcess({
+  children,
+  seconds,
+  label,
+  streaming = false,
+  defaultOpen = false,
+  className,
+}: MessageProcessProps) {
+  const [open, setOpen] = React.useState(defaultOpen || streaming)
+  const [wasStreaming, setWasStreaming] = React.useState(streaming)
+
+  // Adjusted while rendering rather than in an effect — the group never paints
+  // one frame of an expanded stack after the turn has already settled.
+  if (wasStreaming !== streaming) {
+    setWasStreaming(streaming)
+    if (streaming) setOpen(true)
+    else if (!defaultOpen) setOpen(false)
+  }
+
+  const text =
+    label ?? (seconds == null ? "Worked for a while" : formatWorkedFor(seconds))
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      data-slot="message-process"
+      className={cn("mb-3 animate-in fade-in duration-150", className)}
+    >
+      {streaming ? null : (
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            data-slot="message-process-trigger"
+            className={disclosureTrigger}
+          >
+            <span className="min-w-0 truncate">{text}</span>
+            <ChevronDown
+              className={cn(
+                "size-3.5 opacity-50 transition-transform duration-150",
+                open && "rotate-180"
+              )}
+            />
+          </button>
+        </CollapsibleTrigger>
+      )}
+      <CollapsibleContent data-slot="message-process-content">
+        <div className={cn(streaming ? null : "mt-1.5")}>{children}</div>
+      </CollapsibleContent>
     </Collapsible>
   )
 }
