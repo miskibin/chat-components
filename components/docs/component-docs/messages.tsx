@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { AskQuestionExample } from "@/components/examples/ask-question-example"
@@ -1528,25 +1530,38 @@ import {
   type FilePreviewFile,
 } from "@/components/ui/file-preview"
 import { MessageList } from "@/components/ui/message-list"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 
 export function Workspace({ messages }: { messages: ChatMessageData[] }) {
   const [file, setFile] = useState<FilePreviewFile | null>(null)
 
+  // The panel fills whatever it is put in; a resizable group lets the reader
+  // set the split. The handle and the panel mount together.
   return (
-    <div className="flex h-full min-h-0">
-      <MessageList
-        className="flex-1"
-        messages={messages}
-        onOpenFile={(_messageId, tool) => setFile(filePreviewFromTool(tool))}
-      />
-      {file ? (
-        <FilePreview
-          file={{ ...file, content: readFromDisk(file.path) }}
-          onClose={() => setFile(null)}
-          className="w-[30rem] shrink-0 border-l"
+    <ResizablePanelGroup id="workspace" className="h-full min-h-0">
+      <ResizablePanel id="chat" defaultSize="65%" minSize="40%">
+        <MessageList
+          messages={messages}
+          onOpenFile={(_messageId, tool) => setFile(filePreviewFromTool(tool))}
         />
+      </ResizablePanel>
+      {file ? (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel id="preview" defaultSize="35%" minSize="20%" maxSize="60%">
+            <FilePreview
+              file={{ ...file, content: readFromDisk(file.path) }}
+              onClose={() => setFile(null)}
+              className="border-l"
+            />
+          </ResizablePanel>
+        </>
       ) : null}
-    </div>
+    </ResizablePanelGroup>
   )
 }`,
     props: [
@@ -1745,17 +1760,28 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
         title: "Dock it beside the conversation",
         description: (
           <>
-            The panel fills its parent, so the layout is yours. Mirror the
-            sidebar: an in-flow column on desktop, an overlay below{" "}
-            <DocsCode>md</DocsCode>.
+            The panel fills its parent, so the layout is yours. On desktop, put
+            it in a <Link href="/docs/components/resizable">Resizable</Link> group next
+            to the conversation and let the reader drag the split; below{" "}
+            <DocsCode>md</DocsCode>, mirror the sidebar — an overlay with a
+            scrim. Derive which of the two mounts, so only one panel exists at a
+            time.
           </>
         ),
         code: {
           lang: "tsx",
-          code: `<div
-  className="z-50 h-full shrink-0 overflow-hidden transition-[width] duration-300
-             max-md:absolute max-md:inset-y-0 max-md:right-0 md:relative"
-  style={{ width: file ? "30rem" : 0 }}
+          code: `{/* Desktop: a pane in the workspace group. */}
+<ResizablePanel id="preview" defaultSize="35%" minSize="20%" maxSize="60%">
+  <FilePreview file={file} onClose={close} className="border-l" />
+</ResizablePanel>
+
+{/* Below md: an overlay that slides in over the conversation. */}
+<div
+  className={cn(
+    "absolute inset-y-0 right-0 z-50 w-[min(30rem,100%)] overflow-hidden",
+    "bg-background shadow-xl transition-transform duration-300 md:hidden",
+    !file && "translate-x-full"
+  )}
 >
   {file ? <FilePreview file={file} onClose={close} className="border-l" /> : null}
 </div>`,
@@ -1763,6 +1789,19 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
       },
     ],
     notes: [
+      {
+        title: "Sizing",
+        description: (
+          <>
+            Nothing here is fixed-width: the panel is{" "}
+            <DocsCode>h-full w-full</DocsCode> and takes its size from whatever
+            holds it. That is why it drops straight into a{" "}
+            <Link href="/docs/components/resizable">Resizable</Link> pane — give the
+            pane an <DocsCode>id</DocsCode> and the width the reader dragged
+            comes back the next time the file opens.
+          </>
+        ),
+      },
       {
         title: "Where the content comes from",
         description: (

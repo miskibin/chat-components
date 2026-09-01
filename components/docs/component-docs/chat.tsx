@@ -7,6 +7,7 @@ import { ChatInputStyledExample } from "@/components/examples/chat-input-styled-
 import { ChatInputToolsExample } from "@/components/examples/chat-input-tools-example"
 import { ChatNavbarExample } from "@/components/examples/chat-navbar-example"
 import { PromptSuggestionsExample } from "@/components/examples/prompt-suggestions-example"
+import { ResizableExample } from "@/components/examples/resizable-example"
 
 export const chatDocs = {
   chat: {
@@ -550,6 +551,324 @@ export function Header({ title }: { title: string }) {
   right={<ThemeToggle floating={false} />}
 />`,
         },
+      },
+    ],
+  },
+
+  resizable: {
+    title: "Resizable",
+    description:
+      "Panels split by a draggable divider — the shadcn/ui resizable, on react-resizable-panels. Pairs with File Preview: the conversation and the file panel share one group, so the reader picks the split.",
+    registry: "resizable",
+    preview: {
+      name: "resizable-example",
+      node: <ResizableExample />,
+      align: "stretch",
+    },
+    usage: `"use client"
+
+import { FilePreview } from "@/components/ui/file-preview"
+import { MessageList } from "@/components/ui/message-list"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
+
+export function Workspace({ messages, file, onClose }: WorkspaceProps) {
+  // The remembered width rides in on defaultSize; see "Remember the split".
+  const [previewSize, setPreviewSize] = useState(35)
+
+  return (
+    <ResizablePanelGroup
+      id="workspace"
+      orientation="horizontal"
+      onLayoutChanged={(layout) => save(layout.preview)}
+      className="min-w-0 flex-1"
+    >
+      <ResizablePanel id="chat" defaultSize={\`\${100 - previewSize}%\`} minSize="40%">
+        <MessageList messages={messages} />
+      </ResizablePanel>
+      {file ? (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel
+            id="preview"
+            defaultSize={\`\${previewSize}%\`}
+            minSize="20%"
+            maxSize="60%"
+          >
+            <FilePreview file={file} onClose={onClose} className="border-l" />
+          </ResizablePanel>
+        </>
+      ) : null}
+    </ResizablePanelGroup>
+  )
+}`,
+    props: [
+      {
+        caption: "ResizablePanelGroup",
+        rows: [
+          {
+            name: "orientation",
+            type: '"horizontal" | "vertical"',
+            default: '"horizontal"',
+            description: (
+              <>
+                Resize direction. Vertical groups stack — the class list flips
+                them with <DocsCode>aria-[orientation=vertical]:flex-col</DocsCode>
+                .
+              </>
+            ),
+          },
+          {
+            name: "id",
+            type: "string | number",
+            description:
+              "Identifies the group; required if you persist its layout. Falls back to useId.",
+          },
+          {
+            name: "defaultLayout",
+            type: "Layout",
+            description: (
+              <>
+                Starting split, as a map of panel id to percentage — adopted
+                only when it names exactly the panels the group mounted with.
+                Feed it from <DocsCode>useDefaultLayout</DocsCode> to restore a
+                saved one.
+              </>
+            ),
+          },
+          {
+            name: "onLayoutChanged",
+            type: "(layout, meta) => void",
+            description:
+              "Fires once the drag ends — where you save the layout. onLayoutChange fires on every pointer move instead.",
+          },
+          {
+            name: "className",
+            type: "string",
+            description: (
+              <>
+                Merged last onto the group, which is{" "}
+                <DocsCode>flex h-full w-full</DocsCode> by default.
+              </>
+            ),
+          },
+          {
+            name: "...props",
+            type: "GroupProps",
+            description: (
+              <>
+                Everything <DocsCode>react-resizable-panels</DocsCode> takes —{" "}
+                <DocsCode>disabled</DocsCode>, <DocsCode>groupRef</DocsCode>,{" "}
+                <DocsCode>resizeTargetMinimumSize</DocsCode>.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "ResizablePanel",
+        rows: [
+          {
+            name: "id",
+            type: "string | number",
+            description:
+              "Identifies the pane inside the group — this is what makes a conditionally mounted panel keep its size, and what a saved layout is keyed by.",
+          },
+          {
+            name: "defaultSize",
+            type: "number | string",
+            description:
+              'Bare numbers are pixels; strings are percentages ("35" and "35%" are both 35% of the group). Other CSS units work too — "20rem", "40vh".',
+          },
+          {
+            name: "minSize / maxSize",
+            type: "number | string",
+            description: "Resize bounds, in the same units as defaultSize.",
+          },
+          {
+            name: "collapsible / collapsedSize",
+            type: "boolean / number | string",
+            description:
+              "Snap the pane shut once it is dragged under minSize, down to collapsedSize (0 by default).",
+          },
+          {
+            name: "className",
+            type: "string",
+            description: (
+              <>
+                Lands on the pane&apos;s inner content wrapper — the outer
+                element belongs to the layout engine. Style the pane itself
+                through <DocsCode>[data-slot=resizable-panel]</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "...props",
+            type: "PanelProps",
+            description: (
+              <>
+                <DocsCode>onResize</DocsCode>, <DocsCode>panelRef</DocsCode>{" "}
+                (collapse / expand / resize imperatively), and the rest.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "ResizableHandle",
+        rows: [
+          {
+            name: "withHandle",
+            type: "boolean",
+            description:
+              "Renders the centred grip, so the divider reads as draggable. Rotated automatically in a vertical group.",
+          },
+          {
+            name: "disabled",
+            type: "boolean",
+            description: "Freezes this divider; the panels can still be resized by others.",
+          },
+          {
+            name: "className",
+            type: "string",
+            description:
+              "Merged last. The divider is a 1px border-coloured line with a wider invisible hit area.",
+          },
+          {
+            name: "...props",
+            type: "SeparatorProps",
+            description: (
+              <>
+                Everything the primitive separator takes, minus{" "}
+                <DocsCode>role</DocsCode> and <DocsCode>tabIndex</DocsCode>,
+                which it owns.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      {
+        slot: "resizable-panel-group",
+        description: (
+          <>
+            The group. Carries <DocsCode>aria-orientation</DocsCode>.
+          </>
+        ),
+      },
+      {
+        slot: "resizable-panel",
+        description: (
+          <>
+            One pane — the outer, sized element (its own{" "}
+            <DocsCode>id</DocsCode>, plus <DocsCode>data-panel</DocsCode>).
+          </>
+        ),
+      },
+      {
+        slot: "resizable-handle",
+        description: (
+          <>
+            The divider. <DocsCode>data-separator</DocsCode> tracks its state —{" "}
+            <DocsCode>inactive</DocsCode>, <DocsCode>hover</DocsCode>,{" "}
+            <DocsCode>focus</DocsCode>, <DocsCode>active</DocsCode>,{" "}
+            <DocsCode>disabled</DocsCode>.
+          </>
+        ),
+      },
+      {
+        slot: "resizable-grip",
+        description: (
+          <>
+            The grip rendered by <DocsCode>withHandle</DocsCode>.
+          </>
+        ),
+      },
+    ],
+    customization: [
+      {
+        title: "Remember the split",
+        description: (
+          <>
+            <DocsCode>onLayoutChanged</DocsCode> fires once a drag ends, with
+            the layout as a map of panel id to percentage — save the number you
+            care about and feed it back through{" "}
+            <DocsCode>defaultSize</DocsCode>. Do it this way whenever a panel is
+            conditionally mounted: a group adopts{" "}
+            <DocsCode>defaultLayout</DocsCode> only for the panels it mounted
+            with, so a layout naming a panel that is not on screen yet is
+            ignored. For a group whose panels are always there,{" "}
+            <DocsCode>useDefaultLayout</DocsCode> (from{" "}
+            <DocsCode>react-resizable-panels</DocsCode>) does the whole
+            round-trip for you.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `// Read after mount: localStorage does not exist while the page prerenders.
+const [previewSize, setPreviewSize] = useState(35)
+useEffect(() => {
+  const saved = Number(localStorage.getItem("workspace:preview-size"))
+  if (saved >= 20 && saved <= 60) queueMicrotask(() => setPreviewSize(saved))
+}, [])
+
+<ResizablePanelGroup
+  id="workspace"
+  onLayoutChanged={(layout) => {
+    if (layout.preview != null) {
+      localStorage.setItem("workspace:preview-size", String(layout.preview))
+    }
+  }}
+>`,
+        },
+      },
+      {
+        title: "Restyle the divider",
+        description: (
+          <>
+            The state lives on <DocsCode>data-separator</DocsCode>, so a wider,
+            louder handle is a class list away.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<ResizableHandle
+  withHandle
+  className="w-0.5 data-[separator=hover]:bg-primary data-[separator=active]:bg-primary
+             [&_[data-slot=resizable-grip]]:h-6"
+/>`,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Desktop only, by design",
+        description: (
+          <>
+            A drag handle is a pointer affordance, so the demo mounts the group
+            on <DocsCode>md</DocsCode> and up and keeps the phone layout an
+            overlay panel with a scrim. Mount the second{" "}
+            <DocsCode>ResizablePanel</DocsCode> and its handle only while the
+            panel is open — the panel <DocsCode>id</DocsCode> is what brings its
+            previous width back when it reopens in the same session.
+          </>
+        ),
+      },
+      {
+        title: "Keyboard",
+        description: (
+          <>
+            The divider is in the tab order and reports itself as a{" "}
+            <DocsCode>separator</DocsCode> with live{" "}
+            <DocsCode>aria-valuenow</DocsCode>. Arrow keys move it, Home and End
+            jump to the bounds, Enter toggles a collapsible panel, and
+            double-click restores the default sizes.
+          </>
+        ),
       },
     ],
   },

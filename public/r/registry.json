@@ -79,6 +79,19 @@
       ]
     },
     {
+      "name": "resizable",
+      "type": "registry:ui",
+      "title": "Resizable",
+      "description": "Panels split by a draggable, keyboard-resizable divider — pairs with the file preview panel.",
+      "dependencies": ["react-resizable-panels", "lucide-react"],
+      "files": [
+        {
+          "path": "components/ui/resizable.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "chat-input",
       "type": "registry:ui",
       "title": "Chat Input",

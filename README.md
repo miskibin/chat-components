@@ -140,6 +140,7 @@ npx shadcn@latest add miskibin/chat-components/sidebar-item
 npx shadcn@latest add miskibin/chat-components/sidebar-dnd
 npx shadcn@latest add miskibin/chat-components/sidebar-drop-zones
 npx shadcn@latest add miskibin/chat-components/chat-navbar
+npx shadcn@latest add miskibin/chat-components/resizable
 npx shadcn@latest add miskibin/chat-components/theme-toggle
 npx shadcn@latest add miskibin/chat-components/use-click-outside
 ```
@@ -168,6 +169,7 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **sidebar-dnd** | Drag-and-drop context: declarative zones + drag-to-reorder events | [sidebar-dnd](https://chat-input-azure.vercel.app/docs/components/sidebar-dnd) |
 | **sidebar-drop-zones** | Edge and inline drop-zone renderers with tone variants | [sidebar-drop-zones](https://chat-input-azure.vercel.app/docs/components/sidebar-drop-zones) |
 | **chat-navbar** | Thin top bar with title and left/right slots | [chat-navbar](https://chat-input-azure.vercel.app/docs/components/chat-navbar) |
+| **resizable** | Draggable, keyboard-resizable panel split — pairs with `file-preview` | [resizable](https://chat-input-azure.vercel.app/docs/components/resizable) |
 | **theme-toggle** | Light/dark chip — floating by default, inline via `floating={false}` | [theme-toggle](https://chat-input-azure.vercel.app/docs/components/theme-toggle) |
 | **use-click-outside** | Dismiss-on-outside-click hook for surfaces you build by hand | [use-click-outside](https://chat-input-azure.vercel.app/docs/components/use-click-outside) |
 

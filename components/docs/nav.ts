@@ -7,6 +7,7 @@ export const componentSlugs = [
   "chat-input",
   "prompt-suggestions",
   "chat-navbar",
+  "resizable",
   "message",
   "message-list",
   "message-parts",
@@ -60,6 +61,7 @@ export const docsNav: DocsNavSection[] = [
       component("chat-input", "Chat Input"),
       component("prompt-suggestions", "Prompt Suggestions"),
       component("chat-navbar", "Chat Navbar"),
+      component("resizable", "Resizable"),
     ],
   },
   {
