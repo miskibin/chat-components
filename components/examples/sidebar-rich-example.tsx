@@ -1,10 +1,11 @@
 "use client"
 
-import { GitBranch, MessagesSquare, Sparkles } from "lucide-react"
+import { MessagesSquare } from "lucide-react"
 import { useState } from "react"
 
 import {
   ChatSidebarItemList,
+  SidebarItemBadge,
   SidebarItemStatusDot,
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
@@ -15,10 +16,7 @@ const THREADS: ChatSidebarItemData[] = [
     title: "Release checklist for the registry",
     pinned: true,
     subtitle: (
-      <>
-        <Sparkles className="mr-1 inline size-3 align-[-2px]" />
-        Claude Opus 4.6
-      </>
+      <SidebarItemBadge folder="~/code/chat-components" branch="main" />
     ),
     meta: "2h ago",
   },
@@ -27,10 +25,10 @@ const THREADS: ChatSidebarItemData[] = [
     title: "Streaming markdown bugs",
     status: "streaming",
     subtitle: (
-      <>
-        <GitBranch className="mr-1 inline size-3 align-[-2px]" />
-        branched from &ldquo;Parser rewrite&rdquo;
-      </>
+      <SidebarItemBadge
+        folder="~/code/agent-ui"
+        branch="fix/streaming-flicker"
+      />
     ),
     meta: (
       <>
@@ -42,17 +40,22 @@ const THREADS: ChatSidebarItemData[] = [
   {
     id: "tokens",
     title: "Tailwind v4 token audit",
-    subtitle: "Haiku 4.5 · 3 files attached",
+    subtitle: <SidebarItemBadge folder="~/code/agent-ui/packages/theme" />,
     meta: "yesterday",
   },
-  { id: "scratch", title: "Scratch thread" },
+  {
+    id: "scratch",
+    title: "Scratch thread",
+    subtitle: "Haiku 4.5 · 3 files attached",
+  },
   { id: "indexing", title: "Indexing the docs site" },
 ]
 
 /**
- * Two-line thread rows: `subtitle` adds the muted second line, `meta` sits at
- * the end of the title line. `renderContent` takes a row over completely —
- * return `undefined` to keep the default body, as the other rows do here.
+ * Two-line thread rows: `subtitle` adds the muted second line — here
+ * `SidebarItemBadge`, the folder + branch pair a coding agent needs — and
+ * `meta` sits at the end of the title line. `renderContent` takes a row over
+ * completely; return `undefined` to keep the default body, as the others do.
  */
 export function SidebarRichExample() {
   const [items, setItems] = useState(THREADS)

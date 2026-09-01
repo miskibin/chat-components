@@ -416,6 +416,19 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             description: "Leading status dot on unpinned rows.",
           },
           {
+            name: "renameRequest",
+            type: "{ id: string; token: number }",
+            description: (
+              <>
+                Opens one row&apos;s inline rename input from outside the
+                sidebar. Bump <DocsCode>token</DocsCode> (0 is idle) to request
+                it — for a command palette&apos;s &ldquo;Rename current
+                chat&rdquo; or a keyboard shortcut. The row itself owns the
+                editing state, so nothing else has to.
+              </>
+            ),
+          },
+          {
             name: "emptyState",
             type: "React.ReactNode",
             description: "Rendered instead of the rows when items is empty.",
@@ -474,8 +487,14 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
           {
             name: "subtitle",
             type: "React.ReactNode",
-            description:
-              "Second line under the title — model name, branch, snippet. Muted, ~11px, truncating; its presence is what makes the row two lines.",
+            description: (
+              <>
+                Second line under the title — model name, snippet, or a{" "}
+                <DocsCode>SidebarItemBadge</DocsCode> folder + branch pair.
+                Muted, ~11px, truncating; its presence is what makes the row two
+                lines.
+              </>
+            ),
           },
           {
             name: "meta",
@@ -506,7 +525,7 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
         rows: [
           {
             name: "ChatSidebarItem",
-            type: "{ item, active?, draggable?, sortable?, showDivider?, showStatusDot?, renderContent?, menuActions?, on… }",
+            type: "{ item, active?, draggable?, sortable?, showDivider?, showStatusDot?, renameToken?, renderContent?, menuActions?, on… }",
             description:
               "The single row, for lists you assemble yourself. The list component is the usual entry point.",
           },
@@ -526,6 +545,21 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             type: "{ status?, className? }",
             description:
               "The dot on its own, for legends or custom leading nodes.",
+          },
+          {
+            name: "SidebarItemBadge",
+            type: "{ folder?, branch?, fullPath?, className? }",
+            description: (
+              <>
+                Muted 11px folder + branch line for the{" "}
+                <DocsCode>subtitle</DocsCode> slot — a Folder glyph with the
+                path&apos;s last segment (<DocsCode>fullPath</DocsCode> keeps
+                all of it) and a GitBranch glyph with the branch, both
+                truncating. Purely presentational: it reads nothing and derives
+                nothing, so pass what your app already knows and omit the half
+                you do not have.
+              </>
+            ),
           },
           {
             name: "SidebarItemMenuAction",
@@ -566,6 +600,16 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
       {
         slot: "sidebar-item-meta",
         description: "The trailing node on the title line.",
+      },
+      {
+        slot: "sidebar-item-badge",
+        description: (
+          <>
+            The folder + branch line, with{" "}
+            <DocsCode>sidebar-item-badge-folder</DocsCode> and{" "}
+            <DocsCode>sidebar-item-badge-branch</DocsCode> inside it.
+          </>
+        ),
       },
       {
         slot: "sidebar-item-status",
@@ -639,11 +683,36 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
         },
       },
       {
+        title: "Folder and branch on a row",
+        description: (
+          <>
+            A coding agent&apos;s sessions are usually identified by where they
+            run, so <DocsCode>SidebarItemBadge</DocsCode> ships that line:
+            folder, branch, 11px, muted, truncating. Drop it into{" "}
+            <DocsCode>subtitle</DocsCode> — it holds no git logic, so it works
+            the same against a real repository or a remembered string.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `import { SidebarItemBadge } from "@/components/ui/chat-sidebar"
+
+const items = sessions.map((session) => ({
+  id: session.id,
+  title: session.title,
+  subtitle: (
+    <SidebarItemBadge folder={session.cwd} branch={session.branch} />
+  ),
+  meta: relativeTime(session.updatedAt),
+}))`,
+        },
+      },
+      {
         title: "Rich rows",
         description: (
           <>
-            <DocsCode>subtitle</DocsCode> adds a muted second line — a model
-            name, a branch, the last message — and the row grows to the roomier
+            <DocsCode>subtitle</DocsCode> adds a muted second line — a folder
+            and branch, a model name, the last message — and the row grows to the roomier
             two-line padding on its own; <DocsCode>meta</DocsCode> pins a
             timestamp or a message count to the end of the title line and never
             shrinks, so the title truncates around it. Rows without a subtitle

@@ -6,6 +6,7 @@ import * as React from "react"
 import {
   MessageArtifact,
   MessageCode,
+  MessageProcess,
   MessageReasoning,
   MessageToolCall,
   MessageToolCalls,
@@ -13,10 +14,13 @@ import {
   type MessageCodeBlockData,
   type MessageToolCallData,
 } from "@/components/ui/message-parts"
-import type { AskQuestionResult } from "@/components/ui/ask-question"
+import {
+  isOpenAskTool,
+  isPendingAskTool,
+  type AskQuestionResult,
+} from "@/components/ui/ask-question"
 import {
   ChangeSummary,
-  WorkedFor,
   fileChangesFromTools,
   type ChangeSummaryFile,
 } from "@/components/ui/change-summary"
@@ -65,7 +69,10 @@ export type MessageProps = {
   isAnimating?: boolean
   /** Called when an Ask Question tool on this turn is submitted or skipped. */
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
-  /** Elapsed seconds — shown as “Worked for 12s” after the turn settles. */
+  /**
+   * Elapsed seconds — labels the “Worked for 12s” row the thinking and tool
+   * parts collapse into once the turn settles.
+   */
   workedFor?: number
   /** Explicit file-change card. When omitted, Edit / Write tools are summarised. */
   changes?: ChangeSummaryFile[]
@@ -167,6 +174,47 @@ export const Message = React.memo(function Message({
     [parts]
   )
 
+  /**
+   * Everything up to and including the last thinking / tool part is the
+   * turn's process; whatever trails it is the answer. One scan, so a turn
+   * that streams a hundred parts still costs one pass per render.
+   */
+  const processEnd = React.useMemo(
+    () =>
+      parts?.findLastIndex(
+        (part) => part.type === "tool" || part.type === "thinking"
+      ) ?? -1,
+    [parts]
+  )
+
+  const hasProcess = React.useMemo(() => {
+    if (!parts) return tools.length > 0
+    return parts
+      .slice(0, processEnd + 1)
+      .some(
+        (part) =>
+          part.type === "tool" || (part.type === "thinking" && !!part.text)
+      )
+  }, [parts, processEnd, tools])
+
+  /**
+   * An ask nobody has answered yet must stay reachable, so the group is held
+   * open — collapsing the turn would hide the form the user is meant to fill.
+   */
+  const hasOpenAsk = React.useMemo(() => {
+    const list =
+      parts
+        ?.filter(
+          (part): part is Extract<MessagePart, { type: "tool" }> =>
+            part.type === "tool"
+        )
+        .map((part) => part.tool) ?? tools
+    return list.some(
+      (tool) =>
+        isPendingAskTool(tool) || (!!onAskAnswer && isOpenAskTool(tool))
+    )
+  }, [onAskAnswer, parts, tools])
+
   const derivedChanges = React.useMemo(() => {
     if (changes) return changes
     // Only rendered once the turn settles, so parsing every streamed diff on
@@ -191,7 +239,7 @@ export const Message = React.memo(function Message({
           data-editing="true"
           className={cn("mb-4 flex w-full justify-end", className)}
         >
-          <div className="w-full max-w-[85%] rounded-2xl border bg-muted px-3.5 py-2.5 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:max-w-[70%] sm:px-4">
+          <div className="w-full max-w-[85%] rounded-xl border bg-muted px-3.5 py-2.5 transition-colors focus-within:border-ring sm:max-w-[70%] sm:px-4">
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
@@ -265,7 +313,7 @@ export const Message = React.memo(function Message({
         <div
           data-slot="message-content"
           className={cn(
-            "max-w-[85%] min-w-0 rounded-2xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
+            "max-w-[85%] min-w-0 rounded-xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
             contentClassName
           )}
         >
@@ -285,6 +333,83 @@ export const Message = React.memo(function Message({
     )
   }
 
+  const legacyReasoning =
+    reasoning && !parts?.some((part) => part.type === "thinking") ? (
+      <MessageReasoning
+        key="reasoning"
+        defaultOpen={reasoningDefaultOpen}
+        duration={reasoningDuration}
+        streaming={isAnimating}
+      >
+        {reasoning}
+      </MessageReasoning>
+    ) : null
+
+  const partNodes = parts?.map((part, index) => {
+    if (part.type === "tool") {
+      // onAskAnswer is forwarded as-is: MessageToolCall reports its
+      // own id, so a stable handler keeps every row memoized.
+      return (
+        <MessageToolCall
+          key={part.id}
+          tool={part.tool}
+          onAskAnswer={onAskAnswer}
+        />
+      )
+    }
+    if (part.type === "thinking") {
+      if (!part.text) return null
+      const isLatestThinking = index === lastThinkingIndex
+      return (
+        <MessageReasoning
+          key={part.id}
+          defaultOpen={reasoningDefaultOpen}
+          streaming={isAnimating && isLatestThinking}
+        >
+          {part.text}
+        </MessageReasoning>
+      )
+    }
+    return part.text ? (
+      <MessageMarkdown
+        key={part.id}
+        isAnimating={isAnimating}
+        patternHandlers={patternHandlers}
+      >
+        {part.text}
+      </MessageMarkdown>
+    ) : null
+  })
+
+  /* Same shape either way: the process above, the answer below. The legacy
+     `tools` array is one stack, already expanded — the group around it is
+     the collapse. */
+  const process = partNodes
+    ? partNodes.slice(0, processEnd + 1)
+    : tools.length > 0
+      ? [
+          <MessageToolCalls
+            key="tools"
+            tools={tools}
+            defaultOpen
+            onAskAnswer={onAskAnswer}
+          />,
+        ]
+      : []
+  const answer = partNodes
+    ? partNodes.slice(processEnd + 1)
+    : displayContent
+      ? [
+          <MessageMarkdown
+            key="content"
+            isAnimating={isAnimating}
+            patternHandlers={patternHandlers}
+          >
+            {displayContent}
+          </MessageMarkdown>,
+        ]
+      : []
+
   return (
     <div
       data-slot="message"
@@ -298,67 +423,16 @@ export const Message = React.memo(function Message({
           contentClassName
         )}
       >
-        {reasoning && !parts?.some((part) => part.type === "thinking") ? (
-          <MessageReasoning
-            defaultOpen={reasoningDefaultOpen}
-            duration={reasoningDuration}
-            streaming={isAnimating}
+        {hasProcess || legacyReasoning ? (
+          <MessageProcess
+            streaming={isAnimating || hasOpenAsk}
+            seconds={workedFor}
           >
-            {reasoning}
-          </MessageReasoning>
+            {legacyReasoning}
+            {process}
+          </MessageProcess>
         ) : null}
-
-        {parts && parts.length > 0 ? (
-          parts.map((part, index) => {
-            if (part.type === "tool") {
-              // onAskAnswer is forwarded as-is: MessageToolCall reports its
-              // own id, so a stable handler keeps every row memoized.
-              return (
-                <MessageToolCall
-                  key={part.id}
-                  tool={part.tool}
-                  onAskAnswer={onAskAnswer}
-                />
-              )
-            }
-            if (part.type === "thinking") {
-              if (!part.text) return null
-              const isLatestThinking = index === lastThinkingIndex
-              return (
-                <MessageReasoning
-                  key={part.id}
-                  defaultOpen={reasoningDefaultOpen}
-                  streaming={isAnimating && isLatestThinking}
-                >
-                  {part.text}
-                </MessageReasoning>
-              )
-            }
-            return part.text ? (
-              <MessageMarkdown
-                key={part.id}
-                isAnimating={isAnimating}
-                patternHandlers={patternHandlers}
-              >
-                {part.text}
-              </MessageMarkdown>
-            ) : null
-          })
-        ) : (
-          <>
-            {tools.length > 0 ? (
-              <MessageToolCalls tools={tools} onAskAnswer={onAskAnswer} />
-            ) : null}
-            {displayContent ? (
-              <MessageMarkdown
-                isAnimating={isAnimating}
-                patternHandlers={patternHandlers}
-              >
-                {displayContent}
-              </MessageMarkdown>
-            ) : null}
-          </>
-        )}
+        {answer}
 
         {codeBlocks.map((block, i) => (
           <MessageCode key={`${block.language ?? "code"}-${i}`} block={block} />
@@ -368,18 +442,12 @@ export const Message = React.memo(function Message({
           <MessageArtifact key={artifact.id} artifact={artifact} />
         ))}
 
-        {!isAnimating && (workedFor != null || derivedChanges.length > 0) ? (
+        {!isAnimating && derivedChanges.length > 0 ? (
           <div
             data-slot="message-turn-summary"
             className="mt-3 flex flex-col items-start gap-2.5"
           >
-            {workedFor != null ? <WorkedFor seconds={workedFor} /> : null}
-            {derivedChanges.length > 0 ? (
-              <ChangeSummary
-                files={derivedChanges}
-                onAction={onReviewChanges}
-              />
-            ) : null}
+            <ChangeSummary files={derivedChanges} onAction={onReviewChanges} />
           </div>
         ) : null}
 
@@ -429,6 +497,7 @@ export { ChangeSummary, WorkedFor } from "@/components/ui/change-summary"
 export {
   MessageArtifact,
   MessageCode,
+  MessageProcess,
   MessageReasoning,
   MessageToolCall,
   MessageToolCalls,

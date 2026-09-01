@@ -345,12 +345,14 @@ export {
   ChatSidebarItem,
   ChatSidebarItemGhost,
   ChatSidebarItemList,
+  SidebarItemBadge,
   SidebarItemStatusDot,
 } from "@/components/ui/sidebar-item"
 export type {
   ChatSidebarItemData,
   ChatSidebarItemListProps,
   ChatSidebarItemProps,
+  SidebarItemBadgeProps,
   SidebarItemMenuAction,
   SidebarItemRenderContent,
   SidebarItemRenderContext,

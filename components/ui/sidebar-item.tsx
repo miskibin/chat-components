@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Pencil, Pin, PinOff, Trash2 } from "lucide-react"
+import { Folder, GitBranch, Pencil, Pin, PinOff, Trash2 } from "lucide-react"
 import {
   memo,
   useCallback,
@@ -21,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type CSSProperties,
   type ReactNode,
 } from "react"
@@ -132,6 +133,80 @@ function resolveStatus(
 }
 
 /* -------------------------------------------------------------------------------------------------
+ * Folder / branch badge
+ * -----------------------------------------------------------------------------------------------*/
+
+export type SidebarItemBadgeProps = Omit<ComponentProps<"span">, "children"> & {
+  /** Working folder. Only its last segment shows, unless `fullPath`. */
+  folder?: string
+  /** Branch name, rendered as given. */
+  branch?: string
+  /** Show the whole folder path instead of its last segment. */
+  fullPath?: boolean
+}
+
+function lastSegment(path: string) {
+  const trimmed = path.replace(/[\\/]+$/, "")
+  return trimmed.split(/[\\/]/).pop() || trimmed
+}
+
+/**
+ * Where a session lives, in one muted line: folder, then branch. Purely
+ * presentational — it reads no repository and derives no state, so pass
+ * whatever your app already knows and drop the prop you do not have.
+ *
+ * Made for the `subtitle` slot of a row, but it stands alone anywhere.
+ */
+export function SidebarItemBadge({
+  folder,
+  branch,
+  fullPath = false,
+  className,
+  ...props
+}: SidebarItemBadgeProps) {
+  if (!folder && !branch) return null
+
+  return (
+    <span
+      data-slot="sidebar-item-badge"
+      className={cn(
+        "flex min-w-0 items-center gap-1.5 text-[11px] leading-4 font-normal text-muted-foreground",
+        className
+      )}
+      {...props}
+    >
+      {folder ? (
+        <span
+          data-slot="sidebar-item-badge-folder"
+          title={folder}
+          className="inline-flex min-w-0 items-center gap-1"
+        >
+          <Folder aria-hidden className="size-3 shrink-0 opacity-70" />
+          <span className="truncate">
+            {fullPath ? folder : lastSegment(folder)}
+          </span>
+        </span>
+      ) : null}
+      {folder && branch ? (
+        <span aria-hidden className="shrink-0 opacity-40">
+          ·
+        </span>
+      ) : null}
+      {branch ? (
+        <span
+          data-slot="sidebar-item-badge-branch"
+          title={branch}
+          className="inline-flex min-w-0 items-center gap-1"
+        >
+          <GitBranch aria-hidden className="size-3 shrink-0 opacity-70" />
+          <span className="truncate">{branch}</span>
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+/* -------------------------------------------------------------------------------------------------
  * Default row body — shared by the row and the drag ghost
  * -----------------------------------------------------------------------------------------------*/
 
@@ -230,6 +305,12 @@ export type ChatSidebarItemProps = {
    */
   renderContent?: SidebarItemRenderContent
   className?: string
+  /**
+   * Opens the inline rename input from the outside. Bump the number (0 = idle)
+   * to request it — for a command palette's "Rename current chat", a keyboard
+   * shortcut, or any affordance that lives outside the row.
+   */
+  renameToken?: number
   onSelect?: () => void
   onRename?: (title: string) => void
   onTogglePin?: () => void
@@ -503,9 +584,22 @@ function SortableSidebarItem(props: FlavourProps) {
 export const ChatSidebarItem = memo(function ChatSidebarItem({
   draggable = false,
   sortable = false,
+  renameToken = 0,
   ...props
 }: ChatSidebarItemProps) {
   const [editing, setEditing] = useState(false)
+  const seenToken = useRef(renameToken)
+
+  useEffect(() => {
+    if (!renameToken || renameToken === seenToken.current) {
+      seenToken.current = renameToken
+      return
+    }
+    seenToken.current = renameToken
+    // Deferred so the effect body itself stays setState-free.
+    queueMicrotask(() => setEditing(true))
+  }, [renameToken])
+
   const shared = { ...props, editing, onEditingChange: setEditing }
 
   if (!draggable && !sortable) return <StaticSidebarItem {...shared} />
@@ -535,6 +629,7 @@ type ListRowProps = {
   sortable: boolean
   showDivider: boolean
   showStatusDot: boolean
+  renameToken: number
   itemClassName?: string
   renderContent?: SidebarItemRenderContent
   onSelect?: (id: string) => void
@@ -553,6 +648,7 @@ const SidebarListRow = memo(function SidebarListRow({
   sortable,
   showDivider,
   showStatusDot,
+  renameToken,
   itemClassName,
   renderContent,
   onSelect,
@@ -587,6 +683,7 @@ const SidebarListRow = memo(function SidebarListRow({
       sortable={sortable}
       showDivider={showDivider}
       showStatusDot={showStatusDot}
+      renameToken={renameToken}
       renderContent={renderContent}
       className={itemClassName}
       menuActions={menuActions}
@@ -613,6 +710,11 @@ export type ChatSidebarItemListProps = {
   showStatusDot?: boolean
   /** Draw a separator between the pinned group and the rest. */
   groupPinned?: boolean
+  /**
+   * Opens the inline rename input for one row from the outside — bump `token`
+   * (a command palette action, a keyboard shortcut) to request it.
+   */
+  renameRequest?: { id: string; token: number }
   className?: string
   itemClassName?: string
   emptyState?: ReactNode
@@ -637,6 +739,7 @@ export function ChatSidebarItemList({
   sortable = false,
   showStatusDot = true,
   groupPinned = true,
+  renameRequest,
   className,
   itemClassName,
   emptyState,
@@ -668,6 +771,7 @@ export function ChatSidebarItemList({
       draggable={draggable || sortable}
       sortable={sortable}
       showStatusDot={showStatusDot}
+      renameToken={renameRequest?.id === item.id ? renameRequest.token : 0}
       itemClassName={itemClassName}
       renderContent={renderContent ? stableRenderContent : undefined}
       showDivider={
