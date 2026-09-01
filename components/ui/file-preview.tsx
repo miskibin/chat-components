@@ -1,8 +1,9 @@
 "use client"
 
-import { FileText, X } from "lucide-react"
+import { X } from "lucide-react"
 import * as React from "react"
 
+import { FileIcon } from "@/components/ui/file-icon"
 import {
   CodeLine,
   DiffStats,
@@ -414,7 +415,7 @@ export function FilePreview({
           classNames?.header
         )}
       >
-        <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        <FileIcon path={deferredFile.path} size={14} />
         <span
           data-slot="file-preview-path"
           title={deferredFile.path}

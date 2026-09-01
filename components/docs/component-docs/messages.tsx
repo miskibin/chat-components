@@ -3,6 +3,7 @@ import { DocsCode } from "@/components/docs/typography"
 import { AskQuestionExample } from "@/components/examples/ask-question-example"
 import { AskQuestionToolExample } from "@/components/examples/ask-question-tool-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
+import { FileIconExample } from "@/components/examples/file-icon-example"
 import { FilePreviewExample } from "@/components/examples/file-preview-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { MessageExample } from "@/components/examples/message-example"
@@ -180,6 +181,18 @@ export function Turn() {
             type: "(file: ChangeSummaryFile) => void",
             description:
               "Makes each row of the turn's change-summary card clickable.",
+          },
+          {
+            name: "onFileReferenceClick",
+            type: "(path: string) => void",
+            description: (
+              <>
+                Makes the file references inside the answer&apos;s markdown
+                clickable — every <DocsCode>MessageMarkdown</DocsCode> in the
+                turn gets it. The path arrives without its{" "}
+                <DocsCode>:line</DocsCode> suffix.
+              </>
+            ),
           },
           {
             name: "isAnimating",
@@ -371,6 +384,16 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
               "Fired when a row of a turn's change-summary card is clicked.",
           },
           {
+            name: "onFileReferenceClick",
+            type: "(messageId: string, path: string) => void",
+            description: (
+              <>
+                Fired when a file chip inside an answer&apos;s markdown is
+                clicked — see <DocsCode>MessageMarkdown</DocsCode>.
+              </>
+            ),
+          },
+          {
             name: "renderActions",
             type: "(message: ChatMessageData) => React.ReactNode",
             description:
@@ -434,7 +457,8 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             Rows are memoized and the event callbacks you pass —{" "}
             <DocsCode>onEditMessage</DocsCode>,{" "}
             <DocsCode>onAskAnswer</DocsCode>, <DocsCode>onOpenFile</DocsCode>,{" "}
-            <DocsCode>onChangeFileClick</DocsCode> and{" "}
+            <DocsCode>onChangeFileClick</DocsCode>,{" "}
+            <DocsCode>onFileReferenceClick</DocsCode> and{" "}
             <DocsCode>onReviewChanges</DocsCode> — are held at one identity
             internally, so a parent that re-renders on each streamed token only
             reaches the row whose message object actually changed. Keep the
@@ -505,7 +529,12 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
     description:
       "The atoms an assistant turn is made of — reasoning, tool calls, ask questions, highlighted code, and artifact cards. Use them directly when you build your own turn layout.",
     registry: "message-parts",
-    registryDependencies: ["collapsible", "message-markdown", "ask-question"],
+    registryDependencies: [
+      "collapsible",
+      "message-markdown",
+      "ask-question",
+      "file-icon",
+    ],
     preview: { name: "message-parts-example", node: <MessagePartsExample /> },
     usage: `import {
   MessageArtifact,
@@ -679,6 +708,16 @@ export function Answer() {
             The headline button of one row. With{" "}
             <DocsCode>onOpenFile</DocsCode> it opens the file instead of the
             body and carries <DocsCode>data-action=&quot;open-file&quot;</DocsCode>.
+          </>
+        ),
+      },
+      {
+        slot: "file-icon",
+        description: (
+          <>
+            The <DocsCode>FileIcon</DocsCode> in front of a headline that names
+            a file. Rows whose detail is a command or a search pattern have
+            none.
           </>
         ),
       },
@@ -1114,6 +1153,7 @@ export function Clarify() {
     description:
       "Streamdown renderer tuned for streaming answers: GFM, Shiki code, Mermaid diagrams, and KaTeX math, with incomplete markdown parsed safely.",
     registry: "message-markdown",
+    registryDependencies: ["file-icon"],
     preview: {
       name: "message-markdown-example",
       node: <MessageMarkdownExample />,
@@ -1148,6 +1188,18 @@ export function Answer({ text }: { text: string }) {
               "Inline replacements applied to paragraph and list-item text.",
           },
           {
+            name: "onFileClick",
+            type: "(path: string) => void",
+            description: (
+              <>
+                Makes every detected file chip a button. The path arrives with
+                any <DocsCode>:line:col</DocsCode> suffix stripped. Keep the
+                handler stable — it is read through context so the inline
+                renderer stays memoized while text streams.
+              </>
+            ),
+          },
+          {
             name: "className",
             type: "string",
             description: "Merged onto the Streamdown root.",
@@ -1157,8 +1209,51 @@ export function Answer({ text }: { text: string }) {
     ],
     dataSlots: [
       { slot: "message-markdown", description: "Wrapper around Streamdown." },
+      {
+        slot: "message-file-ref",
+        description: (
+          <>
+            A file chip found in inline code — a{" "}
+            <DocsCode>&lt;button&gt;</DocsCode> with{" "}
+            <DocsCode>data-interactive</DocsCode> when{" "}
+            <DocsCode>onFileClick</DocsCode> is set, otherwise a{" "}
+            <DocsCode>&lt;span&gt;</DocsCode>. Both carry{" "}
+            <DocsCode>data-path</DocsCode>.
+          </>
+        ),
+      },
     ],
     customization: [
+      {
+        title: "File references become chips",
+        description: (
+          <>
+            Inline code that reads as a file path renders as a chip with its{" "}
+            <DocsCode>FileIcon</DocsCode> — <DocsCode>`lib/store.ts`</DocsCode>,{" "}
+            <DocsCode>`app/page.tsx:42`</DocsCode>,{" "}
+            <DocsCode>`package.json`</DocsCode>,{" "}
+            <DocsCode>`Dockerfile`</DocsCode>. Detection is deliberately
+            conservative: a recognized extension or a well-known extension-less
+            filename qualifies on its own, a slashed string needs three
+            segments (so <DocsCode>`and/or`</DocsCode> stays code), and URLs,
+            anything with whitespace, and library names like{" "}
+            <DocsCode>`Next.js`</DocsCode> never match. Fenced blocks, mermaid
+            and math are untouched — Streamdown routes them to their own
+            renderers. Everything else renders as ordinary inline code.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<MessageMarkdown onFileClick={(path) => setPreviewFile({ path })}>
+  {"Renamed \`lib/store/reducer.ts\`; the call site is \`app/page.tsx:120\`."}
+</MessageMarkdown>
+
+// Restyle them from the outside:
+<MessageMarkdown className="[&_[data-slot=message-file-ref]]:border-primary/40">
+  {text}
+</MessageMarkdown>`,
+        },
+      },
       {
         title: "Mermaid and math",
         description: (
@@ -1222,7 +1317,7 @@ $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
     description:
       "The card Cursor shows after a coding turn: file count, a Review action, a few rows with +/- stats, and “Show N more”. Pair it with WorkedFor for the elapsed-time badge.",
     registry: "change-summary",
-    registryDependencies: ["collapsible"],
+    registryDependencies: ["collapsible", "file-icon"],
     preview: {
       name: "change-summary-example",
       node: <ChangeSummaryExample />,
@@ -1346,7 +1441,11 @@ export function AfterTurn() {
       },
       {
         slot: "change-summary-file-icon",
-        description: "The per-kind glyph on a row.",
+        description: (
+          <>
+            The row&apos;s <DocsCode>FileIcon</DocsCode>, picked from the path.
+          </>
+        ),
       },
       { slot: "change-summary-stats", description: "The +/- counts on a row." },
       { slot: "change-summary-more", description: "Show N more / Show less." },
@@ -1375,18 +1474,22 @@ export function AfterTurn() {
         title: "Colour the file kinds",
         description: (
           <>
-            Rows ship on theme tokens so the card survives a re-themed
-            light/dark pair — the kind reads from the icon. Each row still
-            tags itself with <DocsCode>data-kind</DocsCode>, so opt into colour
-            from the outside when you want it.
+            Text and chrome ship on theme tokens so the card survives a
+            re-themed light/dark pair; the glyph is a{" "}
+            <DocsCode>FileIcon</DocsCode>, whose brand colours are fixed on
+            purpose. Each row still tags itself with{" "}
+            <DocsCode>data-kind</DocsCode> — <DocsCode>code</DocsCode>,{" "}
+            <DocsCode>style</DocsCode>, <DocsCode>data</DocsCode>,{" "}
+            <DocsCode>text</DocsCode> — so opt into colour from the outside
+            when you want it.
           </>
         ),
         code: {
           lang: "tsx",
           code: `<ChangeSummary
   files={files}
-  className="[&_[data-kind=code]_svg]:text-primary
-             [&_[data-kind=style]_svg]:text-muted-foreground/70"
+  className="[&_[data-kind=code]]:text-primary
+             [&_[data-kind=style]]:text-muted-foreground/70"
 />`,
         },
       },
@@ -1411,7 +1514,7 @@ export function AfterTurn() {
     description:
       "The right-hand panel Cursor opens when you click an edited file: the agent's diff, or the whole file with the edited lines marked and scrolled into view.",
     registry: "file-preview",
-    registryDependencies: ["message-parts"],
+    registryDependencies: ["message-parts", "file-icon"],
     preview: {
       name: "file-preview-example",
       node: <FilePreviewExample />,
@@ -1587,7 +1690,14 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
           </>
         ),
       },
-      { slot: "file-preview-header", description: "Path, stats, toggle, close." },
+      {
+        slot: "file-preview-header",
+        description: (
+          <>
+            <DocsCode>FileIcon</DocsCode>, path, stats, toggle, close.
+          </>
+        ),
+      },
       { slot: "file-preview-path", description: "Directory + basename." },
       { slot: "file-preview-stats", description: "The +/- counts." },
       { slot: "file-preview-view-toggle", description: "File / Diff switch." },
@@ -1691,6 +1801,177 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
             intact.
           </>
         ),
+      },
+    ],
+  },
+
+  "file-icon": {
+    title: "File Icon",
+    description:
+      "Material Icon Theme file glyphs, inlined as SVG: a curated subset resolved by filename, then by extension, with a generic document fallback.",
+    registry: "file-icon",
+    preview: {
+      name: "file-icon-example",
+      node: <FileIconExample />,
+      align: "stretch",
+    },
+    usage: `import { FileIcon } from "@/components/ui/file-icon"
+
+export function FileRow({ path }: { path: string }) {
+  return (
+    <span className="flex items-center gap-2 font-mono text-[12px]">
+      <FileIcon path={path} size={14} />
+      {path}
+    </span>
+  )
+}`,
+    props: [
+      {
+        caption: "FileIcon",
+        rows: [
+          {
+            name: "path",
+            type: "string",
+            required: true,
+            description:
+              "Full path or bare filename. Only the basename is inspected.",
+          },
+          {
+            name: "size",
+            type: "number",
+            default: "16",
+            description: "Rendered width and height, in px.",
+          },
+          {
+            name: "className",
+            type: "string",
+            description: (
+              <>
+                Merged last, after the built-in <DocsCode>shrink-0</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "…props",
+            type: "SVGProps<SVGSVGElement>",
+            description: (
+              <>
+                Spread onto the <DocsCode>&lt;svg&gt;</DocsCode>, after{" "}
+                <DocsCode>data-slot</DocsCode> — so a host can stamp its own
+                slot name or an <DocsCode>aria-label</DocsCode>.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "Helpers",
+        rows: [
+          {
+            name: "fileIconId",
+            type: "(path: string) => FileIconId",
+            description: (
+              <>
+                The icon id a path resolves to — exact filename (
+                <DocsCode>package.json</DocsCode>,{" "}
+                <DocsCode>Dockerfile</DocsCode>), then filename pattern (
+                <DocsCode>.env.local</DocsCode>), then extension, then{" "}
+                <DocsCode>&quot;document&quot;</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "ICONS",
+            type: "Record<FileIconId, FC<IconProps>>",
+            description:
+              "Every icon, keyed by id — render one directly when you already know the type.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      {
+        slot: "file-icon",
+        description: (
+          <>
+            The <DocsCode>&lt;svg&gt;</DocsCode> itself. It is{" "}
+            <DocsCode>aria-hidden</DocsCode>: the file name beside it is the
+            accessible label.
+          </>
+        ),
+      },
+    ],
+    customization: [
+      {
+        title: "Add an icon",
+        description: (
+          <>
+            The set is curated, not exhaustive — registry components are copied
+            into your app, so growing it is a local edit: drop the SVG path data
+            into <DocsCode>ICONS</DocsCode>, then point a filename or extension
+            at the new id. Anything unmapped falls back to the document glyph.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `const kotlin = makeIcon("0 0 24 24", [["#c087f7", "M3 3h18L3 21z"]])
+
+const ICONS = { ...  , kotlin }
+
+const EXTENSION_MAP: Record<string, FileIconId> = {
+  ...  ,
+  kt: "kotlin",
+  kts: "kotlin",
+}`,
+        },
+      },
+      {
+        title: "Where it shows up already",
+        description: (
+          <>
+            <DocsCode>MessageToolCall</DocsCode> puts one in front of an
+            Edit / Write / Read file name, <DocsCode>ChangeSummary</DocsCode>{" "}
+            uses it for every row, <DocsCode>FilePreview</DocsCode> heads the
+            panel with it, and <DocsCode>MessageMarkdown</DocsCode> puts it
+            inside the file chips it detects in inline code. Install any of
+            those and this comes with them.
+          </>
+        ),
+      },
+    ],
+    notes: [
+      {
+        title: "Colours are deliberate",
+        description: (
+          <>
+            The brand colours are baked into the path data rather than taken
+            from theme tokens: they identify the technology, not the host UI,
+            so an icon reads the same in light and dark. Size with{" "}
+            <DocsCode>size</DocsCode>; leave the fills alone.
+          </>
+        ),
+      },
+      {
+        title: "Licensing",
+        description: (
+          <>
+            The SVG path data is copied from{" "}
+            <a
+              href="https://github.com/PKief/vscode-material-icon-theme"
+              target="_blank"
+              rel="noreferrer"
+            >
+              PKief/vscode-material-icon-theme
+            </a>
+            , MIT licensed (© Material Extensions). The attribution lives in the
+            file header — keep it there when you copy the component.
+          </>
+        ),
+      },
+      {
+        title: "No runtime cost",
+        description:
+          "Icons are inline SVG in one module: no icon font, no sprite sheet, no network request, and no dependency beyond React and cn().",
       },
     ],
   },

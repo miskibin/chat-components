@@ -31,6 +31,7 @@ import {
   parseAskQuestionResult,
   type AskQuestionResult,
 } from "@/components/ui/ask-question"
+import { FileIcon } from "@/components/ui/file-icon"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
 
@@ -1046,6 +1047,14 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     />
   ) : null
 
+  /**
+   * The file-type glyph only belongs next to a detail that *is* the file name —
+   * a Grep row whose detail is the pattern, or a Shell row, keeps its plain
+   * headline.
+   */
+  const iconPath =
+    path && headline.detail === fileName(path) ? path : undefined
+
   const headlineContent = (
     <>
       {running ? (
@@ -1054,6 +1063,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
         <TriangleAlert className="size-3 text-destructive" />
       ) : null}
       <span className="shrink-0">{headline.label}</span>
+      {iconPath ? <FileIcon path={iconPath} size={14} /> : null}
       {headline.detail ? (
         <span
           className={cn(

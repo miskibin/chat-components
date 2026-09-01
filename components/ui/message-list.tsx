@@ -55,6 +55,8 @@ export type MessageListProps = React.ComponentProps<"div"> & {
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   /** Clicking a row of a turn's change-summary card. */
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
+  /** Clicking a file reference inside an answer's markdown. */
+  onFileReferenceClick?: (messageId: string, path: string) => void
   renderActions?: (message: ChatMessageData) => React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -164,6 +166,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
+  onFileReferenceClick,
 }: {
   message: ChatMessageData
   isStreaming: boolean
@@ -178,6 +181,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onReviewChanges?: (messageId: string) => void
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
+  onFileReferenceClick?: (messageId: string, path: string) => void
 }) {
   const isUser = message.sender === "user"
 
@@ -201,6 +205,10 @@ const MessageListRow = React.memo(function MessageListRow({
   const handleChangeFileClick = React.useCallback(
     (file: ChangeSummaryFile) => onChangeFileClick?.(message.id, file),
     [message.id, onChangeFileClick]
+  )
+  const handleFileReferenceClick = React.useCallback(
+    (path: string) => onFileReferenceClick?.(message.id, path),
+    [message.id, onFileReferenceClick]
   )
 
   return (
@@ -226,6 +234,9 @@ const MessageListRow = React.memo(function MessageListRow({
       onReviewChanges={onReviewChanges ? handleReviewChanges : undefined}
       onOpenFile={onOpenFile ? handleOpenFile : undefined}
       onChangeFileClick={onChangeFileClick ? handleChangeFileClick : undefined}
+      onFileReferenceClick={
+        onFileReferenceClick ? handleFileReferenceClick : undefined
+      }
     />
   )
 })
@@ -240,6 +251,7 @@ export function MessageList({
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
+  onFileReferenceClick,
   renderActions,
   emptyState,
   className,
@@ -255,6 +267,7 @@ export function MessageList({
   const stableReviewChanges = useStableCallback(onReviewChanges)
   const stableOpenFile = useStableCallback(onOpenFile)
   const stableChangeFileClick = useStableCallback(onChangeFileClick)
+  const stableFileReferenceClick = useStableCallback(onFileReferenceClick)
 
   return (
     <div
@@ -307,6 +320,9 @@ export function MessageList({
                     onOpenFile={onOpenFile ? stableOpenFile : undefined}
                     onChangeFileClick={
                       onChangeFileClick ? stableChangeFileClick : undefined
+                    }
+                    onFileReferenceClick={
+                      onFileReferenceClick ? stableFileReferenceClick : undefined
                     }
                   />
                   {waiting ? (

@@ -77,6 +77,12 @@ export type MessageProps = {
   onOpenFile?: (tool: MessageToolCallData) => void
   /** Makes each row of the change-summary card clickable. */
   onChangeFileClick?: (file: ChangeSummaryFile) => void
+  /**
+   * Makes the file references inside the answer's markdown clickable — the
+   * path arrives without its `:line` suffix. Keep it stable: an unstable
+   * handler re-renders every markdown block on every streamed token.
+   */
+  onFileReferenceClick?: (path: string) => void
 }
 
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
@@ -131,6 +137,7 @@ export const Message = React.memo(function Message({
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
+  onFileReferenceClick,
 }: MessageProps) {
   const [isEditing, setIsEditing] = React.useState(false)
   const [editedContent, setEditedContent] = React.useState(content)
@@ -349,6 +356,7 @@ export const Message = React.memo(function Message({
                 key={part.id}
                 isAnimating={isAnimating}
                 patternHandlers={patternHandlers}
+                onFileClick={onFileReferenceClick}
               >
                 {part.text}
               </MessageMarkdown>
@@ -367,6 +375,7 @@ export const Message = React.memo(function Message({
               <MessageMarkdown
                 isAnimating={isAnimating}
                 patternHandlers={patternHandlers}
+                onFileClick={onFileReferenceClick}
               >
                 {displayContent}
               </MessageMarkdown>

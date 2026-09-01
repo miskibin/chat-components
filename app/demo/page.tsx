@@ -642,11 +642,11 @@ export default function ChatExample() {
   }
 
   /**
-   * A change-summary row names a path, not a tool — so reach back into the
-   * turn for the last tool that touched it, and fall back to a path-only
-   * panel when the transcript no longer carries the body.
+   * A change row or an inline file reference names a path, not a tool — so
+   * reach back into the turn for the last tool that touched it. Null when the
+   * transcript no longer carries a body for that file.
    */
-  const openChangeFile = (messageId: string, change: ChangeSummaryFile) => {
+  const previewFromTurn = (messageId: string, path: string) => {
     const message = messages.find((item) => item.id === messageId)
     const tools = message?.tools?.length
       ? message.tools
@@ -654,15 +654,29 @@ export default function ChatExample() {
     let match: FilePreviewFile | null = null
     for (const tool of tools) {
       const file = filePreviewFromTool(tool)
-      if (file?.path === change.path) match = file
+      if (file?.path === path) match = file
     }
+    return match
+  }
+
+  const openChangeFile = (messageId: string, change: ChangeSummaryFile) => {
     setPreviewFile(
-      match ?? {
+      previewFromTurn(messageId, change.path) ?? {
         path: change.path,
         added: change.additions,
         removed: change.deletions,
       }
     )
+  }
+
+  /**
+   * A `path.ts` chip in the answer's own text. The badge hands over the path
+   * with its `:line` suffix already dropped; stripped again here because a
+   * host, not the component, decides what a location means.
+   */
+  const openReferencedFile = (messageId: string, reference: string) => {
+    const path = reference.replace(/:\d+(?::\d+)?$/, "")
+    setPreviewFile(previewFromTurn(messageId, path) ?? { path })
   }
 
   const handleAskAnswer = (
@@ -897,6 +911,7 @@ export default function ChatExample() {
               onAskAnswer={handleAskAnswer}
               onOpenFile={openToolFile}
               onChangeFileClick={openChangeFile}
+              onFileReferenceClick={openReferencedFile}
               onReviewChanges={(messageId) => {
                 const message = messages.find((item) => item.id === messageId)
                 const tools = message?.tools?.length

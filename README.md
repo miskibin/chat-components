@@ -130,6 +130,7 @@ npx shadcn@latest add miskibin/chat-components/message-list
 npx shadcn@latest add miskibin/chat-components/message-parts
 npx shadcn@latest add miskibin/chat-components/ask-question
 npx shadcn@latest add miskibin/chat-components/file-preview
+npx shadcn@latest add miskibin/chat-components/file-icon
 npx shadcn@latest add miskibin/chat-components/message-markdown
 npx shadcn@latest add miskibin/chat-components/generation-status
 npx shadcn@latest add miskibin/chat-components/model-picker
@@ -156,6 +157,7 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **message-parts** | `MessageReasoning`, `MessageToolCall(s)`, `MessageCode`, `MessageArtifact`; Ask Question tools render `AskQuestion` | [message-parts](https://chat-input-azure.vercel.app/docs/components/message-parts) |
 | **ask-question** | Cursor-style questionnaire: radios, checkboxes, Other…, Skip / Continue | [ask-question](https://chat-input-azure.vercel.app/docs/components/ask-question) |
 | **file-preview** | Side panel for an edited file: unified diff, or the whole file with the edited lines marked | [file-preview](https://chat-input-azure.vercel.app/docs/components/file-preview) |
+| **file-icon** | Material Icon Theme file glyphs as inline SVG, picked by filename then extension | [file-icon](https://chat-input-azure.vercel.app/docs/components/file-icon) |
 | **message-markdown** | Streamdown renderer (GFM, Shiki code, Mermaid, KaTeX) + styles | [message-markdown](https://chat-input-azure.vercel.app/docs/components/message-markdown) |
 | **message-list** | Scroll container with smart auto-scroll | [message-list](https://chat-input-azure.vercel.app/docs/components/message-list) |
 | **generation-status** | Braille spinner | [generation-status](https://chat-input-azure.vercel.app/docs/components/generation-status) |

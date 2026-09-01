@@ -1,6 +1,6 @@
 "use client"
 
-import { FileCode, FileJson, FileText, Hash, MoreHorizontal } from "lucide-react"
+import { MoreHorizontal } from "lucide-react"
 import * as React from "react"
 
 import {
@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { FileIcon } from "@/components/ui/file-icon"
 import { cn } from "@/lib/utils"
 
 export type ChangeSummaryFile = {
@@ -50,17 +51,14 @@ function fileName(path: string) {
 }
 
 /**
- * File kind reads from the icon, not from colour — the palette stays on the
- * theme tokens so the card survives a re-themed light/dark pair.
+ * Coarse kind, exposed as `data-kind` so a host can style rows by family. The
+ * glyph itself comes from `FileIcon`, which knows the file type in far more
+ * detail than these four buckets do.
  */
-function fileGlyph(path: string) {
+function fileKind(path: string) {
   const ext = fileName(path).split(".").pop()?.toLowerCase()
-  if (ext === "css" || ext === "scss" || ext === "less") {
-    return { kind: "style", Icon: Hash }
-  }
-  if (ext === "json" || ext === "jsonc") {
-    return { kind: "data", Icon: FileJson }
-  }
+  if (ext === "css" || ext === "scss" || ext === "less") return "style"
+  if (ext === "json" || ext === "jsonc") return "data"
   if (
     ext === "ts" ||
     ext === "tsx" ||
@@ -69,9 +67,9 @@ function fileGlyph(path: string) {
     ext === "mts" ||
     ext === "cts"
   ) {
-    return { kind: "code", Icon: FileCode }
+    return "code"
   }
-  return { kind: "text", Icon: FileText }
+  return "text"
 }
 
 /** +/- is the one raw-palette exception: no theme token means "grew". */
@@ -107,14 +105,14 @@ function FileRow({
   file: ChangeSummaryFile
   onSelect?: (file: ChangeSummaryFile) => void
 }) {
-  const { kind, Icon } = fileGlyph(file.path)
+  const kind = fileKind(file.path)
   const select = React.useCallback(() => onSelect?.(file), [file, onSelect])
   const content = (
     <>
-      <Icon
-        aria-hidden
+      <FileIcon
         data-slot="change-summary-file-icon"
-        className="size-3.5 shrink-0 text-muted-foreground"
+        path={file.path}
+        size={14}
       />
       <span
         className="min-w-0 flex-1 truncate text-left text-foreground"
