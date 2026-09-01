@@ -123,7 +123,7 @@
       "name": "message-markdown",
       "type": "registry:ui",
       "title": "Message Markdown",
-      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, and KaTeX.",
+      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, KaTeX, and inline data: images.",
       "dependencies": [
         "streamdown",
         "@streamdown/code",
