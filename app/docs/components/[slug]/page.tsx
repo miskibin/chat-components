@@ -17,6 +17,7 @@ import {
 import { DocsPageHeader } from "@/components/docs/page-header"
 import { PropsTable } from "@/components/docs/props-table"
 import {
+  DocsCallout,
   DocsCode,
   DocsH2,
   DocsH3,
@@ -48,7 +49,7 @@ export async function generateMetadata({
   return { title: doc.title, description: doc.description }
 }
 
-/** One customization or note block: prose, then a live example or a snippet. */
+/** One example: prose, then a live demo or a snippet. */
 async function DocBlock({ section }: { section: DocSection }) {
   return (
     <div className="flex flex-col gap-3">
@@ -58,6 +59,7 @@ async function DocBlock({ section }: { section: DocSection }) {
         <ComponentPreview
           name={section.example.name}
           align={section.example.align}
+          compact
         >
           {section.example.node}
         </ComponentPreview>
@@ -130,6 +132,26 @@ export default async function ComponentDocPage({
         <CodeBlock code={doc.usage} lang={doc.usageLang ?? "tsx"} />
       </section>
 
+      {doc.examples?.length ? (
+        <section className="flex flex-col gap-8">
+          <DocsH2>Examples</DocsH2>
+          {doc.examples.map((section) => (
+            <DocBlock key={section.title} section={section} />
+          ))}
+        </section>
+      ) : null}
+
+      {doc.notes?.length ? (
+        <section className="flex flex-col gap-3">
+          <DocsH2>Notes</DocsH2>
+          {doc.notes.map((note) => (
+            <DocsCallout key={note.title} title={note.title}>
+              {note.description}
+            </DocsCallout>
+          ))}
+        </section>
+      ) : null}
+
       <section className="flex flex-col gap-6">
         <DocsH2>API reference</DocsH2>
         {doc.props.map((group) => (
@@ -144,42 +166,22 @@ export default async function ComponentDocPage({
           <div className="flex flex-col gap-3">
             <DocsH3>Data slots</DocsH3>
             <DocsP>
-              Every element below is addressable from a parent, so you can
-              restyle internals without forking the component.
+              Every part below is addressable from a parent, so you can restyle
+              internals without forking the component.
             </DocsP>
-            <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[max-content_minmax(0,1fr)]">
-              {doc.dataSlots.map((entry) => (
-                <Fragment key={entry.slot}>
-                  <dt className="pt-0.5">
-                    <DocsCode>{entry.slot}</DocsCode>
-                  </dt>
-                  <dd className="text-sm leading-relaxed text-muted-foreground max-sm:mb-2">
-                    {entry.description}
-                  </dd>
-                </Fragment>
+            <div className="flex flex-wrap gap-1.5">
+              {doc.dataSlots.map((slot) => (
+                <code
+                  key={slot}
+                  className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[12.5px] text-muted-foreground"
+                >
+                  {slot}
+                </code>
               ))}
-            </dl>
+            </div>
           </div>
         ) : null}
       </section>
-
-      {doc.customization?.length ? (
-        <section className="flex flex-col gap-8">
-          <DocsH2>Customization</DocsH2>
-          {doc.customization.map((section) => (
-            <DocBlock key={section.title} section={section} />
-          ))}
-        </section>
-      ) : null}
-
-      {doc.notes?.length ? (
-        <section className="flex flex-col gap-8">
-          <DocsH2>Notes</DocsH2>
-          {doc.notes.map((section) => (
-            <DocBlock key={section.title} section={section} />
-          ))}
-        </section>
-      ) : null}
 
       <DocsPager className="border-t pt-8" />
     </article>
