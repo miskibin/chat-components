@@ -416,6 +416,19 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             description: "Leading status dot on unpinned rows.",
           },
           {
+            name: "renameRequest",
+            type: "{ id: string; token: number }",
+            description: (
+              <>
+                Opens one row&apos;s inline rename input from outside the
+                sidebar. Bump <DocsCode>token</DocsCode> (0 is idle) to request
+                it — for a command palette&apos;s &ldquo;Rename current
+                chat&rdquo; or a keyboard shortcut. The row itself owns the
+                editing state, so nothing else has to.
+              </>
+            ),
+          },
+          {
             name: "emptyState",
             type: "React.ReactNode",
             description: "Rendered instead of the rows when items is empty.",
@@ -512,7 +525,7 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
         rows: [
           {
             name: "ChatSidebarItem",
-            type: "{ item, active?, draggable?, sortable?, showDivider?, showStatusDot?, renderContent?, menuActions?, on… }",
+            type: "{ item, active?, draggable?, sortable?, showDivider?, showStatusDot?, renameToken?, renderContent?, menuActions?, on… }",
             description:
               "The single row, for lists you assemble yourself. The list component is the usual entry point.",
           },
