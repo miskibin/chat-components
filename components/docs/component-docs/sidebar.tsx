@@ -7,6 +7,7 @@ import { SidebarItemStatusExample } from "@/components/examples/sidebar-item-sta
 import { SidebarMobileExample } from "@/components/examples/sidebar-mobile-example"
 import { SidebarReorderExample } from "@/components/examples/sidebar-reorder-example"
 import { SidebarRichExample } from "@/components/examples/sidebar-rich-example"
+import { SidebarSelectionExample } from "@/components/examples/sidebar-selection-example"
 import { SidebarStyledExample } from "@/components/examples/sidebar-styled-example"
 import { SidebarZonesExample } from "@/components/examples/sidebar-zones-example"
 
@@ -307,7 +308,7 @@ export function Nav() {
   "sidebar-item": {
     title: "Sidebar Item",
     description:
-      "The session row and its list: one line or two, rename in place, pin, delete, status dots, a context menu, drag-to-reorder, and a full render escape hatch.",
+      "The session row and its list: one line or two, rename in place, pin, delete, Shift-click range select with bulk pin/delete, status dots, a context menu, drag-to-reorder, and a full render escape hatch.",
     registry: "sidebar-item",
     registryDependencies: ["context-menu", "sidebar-dnd"],
     preview: { name: "sidebar-item-example", node: <SidebarItemExample /> },
@@ -412,23 +413,44 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
           {
             name: "onSelect",
             type: "(id: string) => void",
-            description: "Row click.",
+            description:
+              "Plain click opens the row. Shift-click and Ctrl/Cmd-click change the selection instead.",
           },
           {
             name: "onRename",
             type: "(id: string, title: string) => void",
             description:
-              "Enables double-click and context-menu renaming. Fires only on a real change.",
+              "Enables double-click and context-menu renaming. Fires only on a real change. Hidden while several rows are selected.",
           },
           {
             name: "onTogglePin",
             type: "(id: string, pinned: boolean) => void",
-            description: "Enables the pin entry in the context menu.",
+            description:
+              "Enables pin in the context menu and on the selection bar.",
+          },
+          {
+            name: "onTogglePinMany",
+            type: "(ids: string[], pinned: boolean) => void",
+            description:
+              "Fired instead of looping onTogglePin when two or more rows are pinned or unpinned together.",
           },
           {
             name: "onDelete",
             type: "(id: string) => void",
-            description: "Enables the destructive delete entry.",
+            description:
+              "Enables delete in the context menu and on the selection bar.",
+          },
+          {
+            name: "onDeleteMany",
+            type: "(ids: string[]) => void",
+            description:
+              "Fired instead of looping onDelete when two or more rows are deleted at once.",
+          },
+          {
+            name: "onSelectedIdsChange",
+            type: "(ids: string[]) => void",
+            description:
+              "Reports the current range/toggle selection. The list owns the selection; this is only a notification.",
           },
           {
             name: "getMenuActions",
@@ -437,7 +459,7 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
           },
           {
             name: "renderContent",
-            type: "(item, ctx: { active, pinned }) => React.ReactNode",
+            type: "(item, ctx: { active, pinned, selected }) => React.ReactNode",
             description: (
               <>
                 Replaces the body of every row — the shell, drag listeners,
@@ -501,7 +523,7 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
         rows: [
           {
             name: "ChatSidebarItem",
-            type: "{ item, active?, draggable?, sortable?, showDivider?, showStatusDot?, renameToken?, renderContent?, menuActions?, on… }",
+            type: "{ item, active?, selected?, bulk?, draggable?, sortable?, showDivider?, showStatusDot?, renameToken?, renderContent?, menuActions?, on… }",
             description:
               "The single row, for lists you assemble yourself. The list component is the usual entry point.",
           },
@@ -538,6 +560,12 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             ),
           },
           {
+            name: "nextSidebarSelection",
+            type: "(args) => { selectedIds, anchorId }",
+            description:
+              "Pure helper the list uses for click / Shift / Ctrl/Cmd. Exported so a custom list can reuse the same range-select rules.",
+          },
+          {
             name: "SidebarItemMenuAction",
             type: "{ id, label, icon?, onSelect, destructive?, separatorBefore? }",
             description: "Shape of a custom context-menu entry.",
@@ -549,7 +577,9 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
               <>
                 Type of <DocsCode>renderContent</DocsCode>;{" "}
                 <DocsCode>SidebarItemRenderContext</DocsCode> is{" "}
-                <DocsCode>{"{ active: boolean; pinned: boolean }"}</DocsCode>.
+                <DocsCode>
+                  {"{ active: boolean; pinned: boolean; selected: boolean }"}
+                </DocsCode>.
               </>
             ),
           },
@@ -565,8 +595,27 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
       "sidebar-item-badge",
       "sidebar-item-status",
       "sidebar-item-list",
+      "sidebar-item-selection",
     ],
     examples: [
+      {
+        title: "Shift-click to select a range",
+        description: (
+          <>
+            The list owns a second selection, independent of{" "}
+            <DocsCode>activeId</DocsCode>: click opens a chat,{" "}
+            <DocsCode>Shift</DocsCode>-click selects the range from the last
+            click, and <DocsCode>Ctrl</DocsCode>/<DocsCode>⌘</DocsCode>-click
+            toggles one row. Two or more selected rows raise a sticky bar
+            (Pin, Delete, clear) and the context menu switches to bulk labels.
+            Escape clears; Delete/Backspace deletes the set.
+          </>
+        ),
+        example: {
+          name: "sidebar-selection-example",
+          node: <SidebarSelectionExample />,
+        },
+      },
       {
         title: "Extra context-menu entries",
         description: (

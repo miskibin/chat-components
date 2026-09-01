@@ -444,16 +444,19 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         title: "Streaming cost",
         description: (
           <>
-            Rows are memoized and the event callbacks you pass —{" "}
+            Whole turn items are memoized — message content, generation state,
+            and caller-provided actions — and the callbacks you pass —{" "}
             <DocsCode>onEditMessage</DocsCode> and{" "}
             <DocsCode>onAskAnswer</DocsCode> — are held at one identity
             internally, so a parent that re-renders on each streamed token only
-            reaches the row whose message object actually changed. Keep the
+            reaches the row whose message object actually changed. Distant
+            rows also use <DocsCode>content-visibility</DocsCode>, so the browser
+            can skip their layout and paint work. Keep the
             message objects themselves stable (patch the streaming turn, map the
             rest through) and the list stays flat as it grows.{" "}
-            <DocsCode>renderActions</DocsCode> is a render prop, not a callback:
-            it runs on every render with your current closure, outside the
-            memoized row, so the buttons it returns never go stale.
+            <DocsCode>renderActions</DocsCode> is stabilized internally too, so
+            settled actions do not get recreated for every streamed token and
+            still call the caller&apos;s latest closure.
           </>
         ),
       },
@@ -473,10 +476,10 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         title: "Per-message actions",
         description: (
           <>
-            <DocsCode>renderActions</DocsCode> is a render prop, not a callback:
-            it runs outside the memoized row, with your current closure, and is
-            skipped while a turn is still streaming — so buttons only appear
-            once the answer settles, and never go stale.
+            <DocsCode>renderActions</DocsCode> is held at one identity inside
+            the memoized turn item and skipped while a turn is still streaming,
+            so settled buttons are not rebuilt by later tokens and never call a
+            stale closure.
           </>
         ),
         example: {

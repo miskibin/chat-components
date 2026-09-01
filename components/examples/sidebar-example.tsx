@@ -268,6 +268,11 @@ export function SidebarExample() {
           <li>Drag to the top edge to pin, to the bottom edge to delete.</li>
           <li>Drag across sections to pin or unpin at a chosen position.</li>
           <li>Right-click a row to rename, pin, or delete it.</li>
+          <li>
+            Shift-click a range, or Ctrl/⌘-click to toggle. Pin or delete from
+            the bar — or from the context menu, which becomes &ldquo;Delete N
+            chats&rdquo;.
+          </li>
           <li>The dashed &ldquo;Archive&rdquo; strip is a custom inline zone.</li>
         </ul>
       </div>

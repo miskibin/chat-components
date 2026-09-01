@@ -12,7 +12,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Folder, GitBranch, Pencil, Pin, PinOff, Trash2 } from "lucide-react"
+import { Folder, GitBranch, Pencil, Pin, PinOff, Trash2, X } from "lucide-react"
 import {
   memo,
   useCallback,
@@ -23,6 +23,8 @@ import {
   useState,
   type ComponentProps,
   type CSSProperties,
+  type MouseEvent,
+  type PointerEvent,
   type ReactNode,
 } from "react"
 
@@ -78,6 +80,47 @@ export type ChatSidebarItemData = {
 export type SidebarItemRenderContext = {
   active: boolean
   pinned: boolean
+  selected: boolean
+}
+
+/**
+ * Computes the next selected-id set for a click. Plain click replaces the
+ * selection; Shift extends from the anchor; Ctrl/Cmd toggles one id.
+ */
+export function nextSidebarSelection({
+  ids,
+  selectedIds,
+  anchorId,
+  clickedId,
+  shiftKey,
+  toggleKey,
+}: {
+  ids: readonly string[]
+  selectedIds: readonly string[]
+  anchorId: string | null
+  clickedId: string
+  shiftKey: boolean
+  toggleKey: boolean
+}): { selectedIds: string[]; anchorId: string } {
+  if (shiftKey && anchorId) {
+    const from = ids.indexOf(anchorId)
+    const to = ids.indexOf(clickedId)
+    if (from !== -1 && to !== -1) {
+      const start = Math.min(from, to)
+      const end = Math.max(from, to)
+      return { selectedIds: ids.slice(start, end + 1), anchorId }
+    }
+  }
+  if (toggleKey) {
+    const has = selectedIds.includes(clickedId)
+    return {
+      selectedIds: has
+        ? selectedIds.filter((id) => id !== clickedId)
+        : [...selectedIds, clickedId],
+      anchorId: clickedId,
+    }
+  }
+  return { selectedIds: [clickedId], anchorId: clickedId }
 }
 
 /**
@@ -289,9 +332,21 @@ type SidebarItemDragBinding = {
   enabled?: boolean
 }
 
+export type SidebarItemBulkSelection = {
+  count: number
+  allPinned: boolean
+}
+
 export type ChatSidebarItemProps = {
   item: ChatSidebarItemData
   active?: boolean
+  /** Range-selected (Shift/Ctrl-click). Independent of `active`. */
+  selected?: boolean
+  /**
+   * When this row is part of a multi-selection, the context menu pin/delete
+   * entries apply to every selected row and rename is hidden.
+   */
+  bulk?: SidebarItemBulkSelection
   /** Enable pointer/keyboard dragging (needs a `ChatSidebarDnd` ancestor). */
   draggable?: boolean
   /** Enable drag-to-reorder (needs a `ChatSidebarItemList sortable` ancestor). */
@@ -311,7 +366,7 @@ export type ChatSidebarItemProps = {
    * shortcut, or any affordance that lives outside the row.
    */
   renameToken?: number
-  onSelect?: () => void
+  onSelect?: (event: MouseEvent<HTMLButtonElement>) => void
   onRename?: (title: string) => void
   onTogglePin?: () => void
   onDelete?: () => void
@@ -324,9 +379,23 @@ type SidebarItemRowProps = Omit<ChatSidebarItemProps, "draggable" | "sortable"> 
   drag?: SidebarItemDragBinding
 }
 
+function isModifierClick(event: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) {
+  return event.shiftKey || event.metaKey || event.ctrlKey
+}
+
+/** Cmd on Apple, Ctrl on other platforms. Ctrl+click on Mac is a context menu. */
+function isToggleClick(event: { metaKey: boolean; ctrlKey: boolean }) {
+  if (event.metaKey) return true
+  if (!event.ctrlKey) return false
+  if (typeof navigator === "undefined") return true
+  return !/Mac|iPhone|iPad|iPod/.test(navigator.platform)
+}
+
 function SidebarItemRow({
   item,
   active = false,
+  selected = false,
+  bulk,
   showDivider = false,
   showStatusDot = true,
   renderContent,
@@ -343,6 +412,7 @@ function SidebarItemRow({
   const [draft, setDraft] = useState(item.title)
   const inputRef = useRef<HTMLInputElement>(null)
   const pinned = !!item.pinned
+  const multi = (bulk?.count ?? 0) > 1
 
   useEffect(() => {
     if (!editing) return
@@ -366,14 +436,25 @@ function SidebarItemRow({
     setDraft(item.title)
   }, [item.title, onEditingChange])
 
-  const custom = renderContent?.(item, { active, pinned })
+  const custom = renderContent?.(item, { active, pinned, selected })
   const multiline = custom === undefined && isMultiline(item)
+
+  const onPointerDown = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      // Modifier clicks are for range/toggle select — do not start a drag.
+      if (isModifierClick(event)) return
+      const handler = drag?.listeners?.onPointerDown
+      if (typeof handler === "function") handler(event)
+    },
+    [drag?.listeners]
+  )
 
   const shell = (
     <div
       ref={drag?.setNodeRef}
       data-slot="sidebar-item"
       data-active={active}
+      data-selected={selected}
       data-pinned={pinned}
       data-dragging={drag?.dragging ? true : undefined}
       style={drag?.style}
@@ -408,18 +489,21 @@ function SidebarItemRow({
           ref={drag?.setActivatorNodeRef}
           data-slot="sidebar-item-button"
           data-active={active}
+          data-selected={selected}
           title={item.title || "Untitled"}
           onClick={onSelect}
-          onDoubleClick={onRename ? startEdit : undefined}
+          onDoubleClick={onRename && !multi ? startEdit : undefined}
           {...(drag?.attributes ?? {})}
           {...(drag?.listeners ?? {})}
+          onPointerDown={onPointerDown}
           className={cn(
-            "flex w-full gap-2 rounded-md px-2 text-left text-[13px] leading-5",
+            "flex w-full select-none gap-2 rounded-md px-2 text-left text-[13px] leading-5",
             multiline ? "items-start py-2" : "items-center py-1.5",
             "text-sidebar-foreground outline-none transition-colors touch-manipulation",
             "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
             "data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground",
+            "data-[selected=true]:bg-sidebar-accent data-[selected=true]:text-sidebar-accent-foreground",
             drag?.enabled && "cursor-grab active:cursor-grabbing"
           )}
         >
@@ -440,8 +524,9 @@ function SidebarItemRow({
 
   const actions = useItemMenuActions({
     pinned,
-    menuActions,
-    onRename: onRename ? startEdit : undefined,
+    bulk,
+    menuActions: multi ? undefined : menuActions,
+    onRename: onRename && !multi ? startEdit : undefined,
     onTogglePin,
     onDelete,
   })
@@ -451,7 +536,7 @@ function SidebarItemRow({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{shell}</ContextMenuTrigger>
-      <ContextMenuContent className="w-40">
+      <ContextMenuContent className="min-w-40">
         {actions.map((action) => (
           <div key={action.id}>
             {action.separatorBefore ? <ContextMenuSeparator /> : null}
@@ -471,18 +556,22 @@ function SidebarItemRow({
 
 function useItemMenuActions({
   pinned,
+  bulk,
   menuActions,
   onRename,
   onTogglePin,
   onDelete,
 }: {
   pinned: boolean
+  bulk?: SidebarItemBulkSelection
   menuActions?: SidebarItemMenuAction[]
   onRename?: () => void
   onTogglePin?: () => void
   onDelete?: () => void
 }) {
   return useMemo(() => {
+    const count = bulk?.count ?? 0
+    const multi = count > 1
     const builtIn: SidebarItemMenuAction[] = []
     if (onRename) {
       builtIn.push({
@@ -493,10 +582,17 @@ function useItemMenuActions({
       })
     }
     if (onTogglePin) {
+      const unpin = multi ? !!bulk?.allPinned : pinned
       builtIn.push({
         id: "pin",
-        label: pinned ? "Unpin" : "Pin",
-        icon: pinned ? (
+        label: multi
+          ? unpin
+            ? `Unpin ${count} chats`
+            : `Pin ${count} chats`
+          : pinned
+            ? "Unpin"
+            : "Pin",
+        icon: unpin ? (
           <PinOff className="size-3.5" />
         ) : (
           <Pin className="size-3.5" />
@@ -507,7 +603,7 @@ function useItemMenuActions({
     if (onDelete) {
       builtIn.push({
         id: "delete",
-        label: "Delete",
+        label: multi ? `Delete ${count} chats` : "Delete",
         icon: <Trash2 className="size-3.5" />,
         onSelect: onDelete,
         destructive: true,
@@ -515,7 +611,7 @@ function useItemMenuActions({
       })
     }
     return [...(menuActions ?? []), ...builtIn]
-  }, [menuActions, onDelete, onRename, onTogglePin, pinned])
+  }, [bulk, menuActions, onDelete, onRename, onTogglePin, pinned])
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -625,6 +721,8 @@ function useStableCallback<A extends unknown[], R>(
 type ListRowProps = {
   item: ChatSidebarItemData
   active: boolean
+  selected: boolean
+  bulk?: SidebarItemBulkSelection
   draggable: boolean
   sortable: boolean
   showDivider: boolean
@@ -632,10 +730,12 @@ type ListRowProps = {
   renameToken: number
   itemClassName?: string
   renderContent?: SidebarItemRenderContent
-  onSelect?: (id: string) => void
+  onSelect?: (id: string, event: MouseEvent<HTMLButtonElement>) => void
   onRename?: (id: string, title: string) => void
   onTogglePin?: (id: string, pinned: boolean) => void
   onDelete?: (id: string) => void
+  onTogglePinSelected?: () => void
+  onDeleteSelected?: () => void
   getMenuActions?: (
     item: ChatSidebarItemData
   ) => SidebarItemMenuAction[] | undefined
@@ -644,6 +744,8 @@ type ListRowProps = {
 const SidebarListRow = memo(function SidebarListRow({
   item,
   active,
+  selected,
+  bulk,
   draggable,
   sortable,
   showDivider,
@@ -655,12 +757,18 @@ const SidebarListRow = memo(function SidebarListRow({
   onRename,
   onTogglePin,
   onDelete,
+  onTogglePinSelected,
+  onDeleteSelected,
   getMenuActions,
 }: ListRowProps) {
   const id = item.id
   const pinned = !!item.pinned
+  const multi = selected && (bulk?.count ?? 0) > 1
 
-  const handleSelect = useCallback(() => onSelect?.(id), [onSelect, id])
+  const handleSelect = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => onSelect?.(id, event),
+    [onSelect, id]
+  )
   const handleRename = useCallback(
     (title: string) => onRename?.(id, title),
     [onRename, id]
@@ -671,29 +779,43 @@ const SidebarListRow = memo(function SidebarListRow({
   )
   const handleDelete = useCallback(() => onDelete?.(id), [onDelete, id])
   const menuActions = useMemo(
-    () => getMenuActions?.(item),
-    [getMenuActions, item]
+    () => (multi ? undefined : getMenuActions?.(item)),
+    [getMenuActions, item, multi]
   )
 
   return (
     <ChatSidebarItem
       item={item}
       active={active}
+      selected={selected}
+      bulk={multi ? bulk : undefined}
       draggable={draggable}
       sortable={sortable}
       showDivider={showDivider}
       showStatusDot={showStatusDot}
-      renameToken={renameToken}
+      renameToken={renameRequestToken(renameToken, multi)}
       renderContent={renderContent}
       className={itemClassName}
       menuActions={menuActions}
       onSelect={onSelect ? handleSelect : undefined}
-      onRename={onRename ? handleRename : undefined}
-      onTogglePin={onTogglePin ? handleTogglePin : undefined}
-      onDelete={onDelete ? handleDelete : undefined}
+      onRename={onRename && !multi ? handleRename : undefined}
+      onTogglePin={
+        onTogglePin
+          ? multi
+            ? onTogglePinSelected
+            : handleTogglePin
+          : undefined
+      }
+      onDelete={
+        onDelete ? (multi ? onDeleteSelected : handleDelete) : undefined
+      }
     />
   )
 })
+
+function renameRequestToken(token: number, multi: boolean) {
+  return multi ? 0 : token
+}
 
 export type ChatSidebarItemListProps = {
   items: ChatSidebarItemData[]
@@ -728,7 +850,92 @@ export type ChatSidebarItemListProps = {
   onRename?: (id: string, title: string) => void
   onTogglePin?: (id: string, pinned: boolean) => void
   onDelete?: (id: string) => void
+  /**
+   * Fired instead of looping `onDelete` when two or more rows are deleted at
+   * once (the selection bar, Delete/Backspace, or the bulk context-menu entry).
+   */
+  onDeleteMany?: (ids: string[]) => void
+  /**
+   * Fired instead of looping `onTogglePin` when two or more rows are pinned or
+   * unpinned together.
+   */
+  onTogglePinMany?: (ids: string[], pinned: boolean) => void
+  /** Reports the current range/toggle selection. Not needed for the built-in bar. */
+  onSelectedIdsChange?: (ids: string[]) => void
   getMenuActions?: (item: ChatSidebarItemData) => SidebarItemMenuAction[]
+}
+
+function SidebarSelectionBar({
+  count,
+  allPinned,
+  onPin,
+  onDelete,
+  onClear,
+}: {
+  count: number
+  allPinned: boolean
+  onPin?: () => void
+  onDelete?: () => void
+  onClear: () => void
+}) {
+  return (
+    <div
+      data-slot="sidebar-item-selection"
+      className={cn(
+        "sticky bottom-0 z-10 mt-1 flex items-center gap-1 rounded-md border border-sidebar-border",
+        "bg-sidebar/95 px-2 py-1 text-[12px] text-sidebar-foreground backdrop-blur-sm"
+      )}
+    >
+      <span
+        aria-live="polite"
+        className="min-w-0 flex-1 truncate tabular-nums text-muted-foreground"
+      >
+        {count} selected
+      </span>
+      {onPin ? (
+        <button
+          type="button"
+          data-slot="sidebar-item-selection-action"
+          onClick={onPin}
+          className={cn(
+            "rounded-md px-1.5 py-0.5 text-[11px] font-medium outline-none transition-colors",
+            "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60"
+          )}
+        >
+          {allPinned ? "Unpin" : "Pin"}
+        </button>
+      ) : null}
+      {onDelete ? (
+        <button
+          type="button"
+          data-slot="sidebar-item-selection-action"
+          onClick={onDelete}
+          className={cn(
+            "rounded-md px-1.5 py-0.5 text-[11px] font-medium text-destructive outline-none transition-colors",
+            "hover:bg-destructive/10",
+            "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60"
+          )}
+        >
+          Delete
+        </button>
+      ) : null}
+      <button
+        type="button"
+        data-slot="sidebar-item-selection-clear"
+        aria-label="Clear selection"
+        onClick={onClear}
+        className={cn(
+          "inline-flex size-6 shrink-0 items-center justify-center rounded-md",
+          "text-muted-foreground outline-none transition-colors",
+          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60"
+        )}
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  )
 }
 
 export function ChatSidebarItemList({
@@ -748,6 +955,9 @@ export function ChatSidebarItemList({
   onRename,
   onTogglePin,
   onDelete,
+  onDeleteMany,
+  onTogglePinMany,
+  onSelectedIdsChange,
   getMenuActions,
 }: ChatSidebarItemListProps) {
   const generatedId = useId()
@@ -756,18 +966,145 @@ export function ChatSidebarItemList({
 
   useSidebarDndList(resolvedListId, ids)
 
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const selectedIdsRef = useRef(selectedIds)
+  const idsRef = useRef(ids)
+  const itemsRef = useRef(items)
+  const anchorIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds
+  }, [selectedIds])
+  useEffect(() => {
+    idsRef.current = ids
+  }, [ids])
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
+
   const stableSelect = useStableCallback(onSelect)
   const stableRename = useStableCallback(onRename)
   const stableTogglePin = useStableCallback(onTogglePin)
   const stableDelete = useStableCallback(onDelete)
+  const stableDeleteMany = useStableCallback(onDeleteMany)
+  const stableTogglePinMany = useStableCallback(onTogglePinMany)
+  const stableSelectionChange = useStableCallback(onSelectedIdsChange)
   const stableMenuActions = useStableCallback(getMenuActions)
   const stableRenderContent = useStableCallback(renderContent)
+
+  const applySelection = useCallback(
+    (next: string[], nextAnchor?: string | null) => {
+      selectedIdsRef.current = next
+      if (nextAnchor !== undefined) anchorIdRef.current = nextAnchor
+      setSelectedIds(next)
+      stableSelectionChange(next)
+    },
+    [stableSelectionChange]
+  )
+
+  const handleItemClick = useCallback(
+    (id: string, event: MouseEvent<HTMLButtonElement>) => {
+      const toggleKey = isToggleClick(event)
+      const next = nextSidebarSelection({
+        ids: idsRef.current,
+        selectedIds: selectedIdsRef.current,
+        anchorId: anchorIdRef.current,
+        clickedId: id,
+        shiftKey: event.shiftKey,
+        toggleKey,
+      })
+      applySelection(next.selectedIds, next.anchorId)
+      if (!event.shiftKey && !toggleKey) stableSelect(id)
+    },
+    [applySelection, stableSelect]
+  )
+
+  const clearSelection = useCallback(() => {
+    applySelection([], anchorIdRef.current)
+  }, [applySelection])
+
+  const hasDelete = !!onDelete
+  const hasDeleteMany = !!onDeleteMany
+  const hasPin = !!onTogglePin
+  const hasPinMany = !!onTogglePinMany
+
+  const deleteOne = useCallback(
+    (id: string) => {
+      if (hasDelete) stableDelete(id)
+      else stableDeleteMany([id])
+    },
+    [hasDelete, stableDelete, stableDeleteMany]
+  )
+
+  const deleteSelected = useCallback(() => {
+    const idSet = new Set(idsRef.current)
+    const toDelete = selectedIdsRef.current.filter((id) => idSet.has(id))
+    applySelection([], anchorIdRef.current)
+    if (toDelete.length === 0) return
+    if (toDelete.length > 1 && hasDeleteMany) {
+      stableDeleteMany(toDelete)
+      return
+    }
+    for (const id of toDelete) deleteOne(id)
+  }, [applySelection, deleteOne, hasDeleteMany, stableDeleteMany])
+
+  const togglePinSelected = useCallback(() => {
+    const selected = new Set(selectedIdsRef.current)
+    const chosen = itemsRef.current.filter((item) => selected.has(item.id))
+    if (chosen.length === 0) return
+    const nextPinned = !chosen.every((item) => item.pinned)
+    const idsToToggle = chosen
+      .filter((item) => !!item.pinned !== nextPinned)
+      .map((item) => item.id)
+    if (idsToToggle.length === 0) return
+    if (idsToToggle.length > 1 && hasPinMany) {
+      stableTogglePinMany(idsToToggle, nextPinned)
+      return
+    }
+    for (const id of idsToToggle) stableTogglePin(id, nextPinned)
+  }, [hasPinMany, stableTogglePin, stableTogglePinMany])
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const visibleSelected = useMemo(
+    () => items.filter((item) => selectedSet.has(item.id)),
+    [items, selectedSet]
+  )
+  const selectedCount = visibleSelected.length
+  const allPinned =
+    selectedCount > 0 && visibleSelected.every((item) => item.pinned)
+  const bulk = useMemo<SidebarItemBulkSelection | undefined>(
+    () =>
+      selectedCount > 1 ? { count: selectedCount, allPinned } : undefined,
+    [allPinned, selectedCount]
+  )
+  const showBar = selectedCount > 1
+
+  useEffect(() => {
+    if (!showBar) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        applySelection([], anchorIdRef.current)
+        return
+      }
+      if (event.key !== "Delete" && event.key !== "Backspace") return
+      if (!hasDelete && !hasDeleteMany) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest("input, textarea, [contenteditable=true]")) return
+      event.preventDefault()
+      deleteSelected()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [applySelection, deleteSelected, hasDelete, hasDeleteMany, showBar])
 
   const rows = items.map((item, index) => (
     <SidebarListRow
       key={item.id}
       item={item}
       active={item.id === activeId}
+      selected={selectedSet.has(item.id)}
+      bulk={selectedSet.has(item.id) ? bulk : undefined}
       draggable={draggable || sortable}
       sortable={sortable}
       showStatusDot={showStatusDot}
@@ -777,10 +1114,12 @@ export function ChatSidebarItemList({
       showDivider={
         groupPinned && index > 0 && !!items[index - 1].pinned && !item.pinned
       }
-      onSelect={onSelect ? stableSelect : undefined}
+      onSelect={handleItemClick}
       onRename={onRename ? stableRename : undefined}
-      onTogglePin={onTogglePin ? stableTogglePin : undefined}
-      onDelete={onDelete ? stableDelete : undefined}
+      onTogglePin={hasPin || hasPinMany ? stableTogglePin : undefined}
+      onDelete={hasDelete || hasDeleteMany ? deleteOne : undefined}
+      onTogglePinSelected={hasPin || hasPinMany ? togglePinSelected : undefined}
+      onDeleteSelected={hasDelete || hasDeleteMany ? deleteSelected : undefined}
       getMenuActions={getMenuActions ? stableMenuActions : undefined}
     />
   ))
@@ -789,6 +1128,7 @@ export function ChatSidebarItemList({
     <div
       data-slot="sidebar-item-list"
       data-list-id={resolvedListId}
+      data-selection-count={selectedCount || undefined}
       className={cn("flex flex-col gap-px", className)}
     >
       {items.length === 0 ? (
@@ -800,6 +1140,15 @@ export function ChatSidebarItemList({
       ) : (
         rows
       )}
+      {showBar ? (
+        <SidebarSelectionBar
+          count={selectedCount}
+          allPinned={allPinned}
+          onPin={hasPin || hasPinMany ? togglePinSelected : undefined}
+          onDelete={hasDelete || hasDeleteMany ? deleteSelected : undefined}
+          onClear={clearSelection}
+        />
+      ) : null}
     </div>
   )
 }
@@ -821,7 +1170,7 @@ export function ChatSidebarItemGhost({
   className?: string
 }) {
   const pinned = !!item.pinned
-  const custom = renderContent?.(item, { active: !!active, pinned })
+  const custom = renderContent?.(item, { active: !!active, pinned, selected: false })
   const multiline = custom === undefined && isMultiline(item)
 
   return (

@@ -6,7 +6,7 @@
   "files": [
     {
       "path": "hooks/use-click-outside.ts",
-      "content": "import { useEffect, type RefObject } from \"react\"\n\nexport function useClickOutside<T extends HTMLElement>(\n  ref: RefObject<T | null>,\n  handler: () => void,\n  enabled: boolean = true\n): void {\n  useEffect(() => {\n    if (!enabled) return\n    function onMouseDown(e: MouseEvent) {\n      if (ref.current && !ref.current.contains(e.target as Node)) handler()\n    }\n    document.addEventListener(\"mousedown\", onMouseDown)\n    return () => document.removeEventListener(\"mousedown\", onMouseDown)\n  }, [ref, handler, enabled])\n}\n",
+      "content": "import { useEffect, type RefObject } from \"react\"\r\n\r\nexport function useClickOutside<T extends HTMLElement>(\r\n  ref: RefObject<T | null>,\r\n  handler: () => void,\r\n  enabled: boolean = true\r\n): void {\r\n  useEffect(() => {\r\n    if (!enabled) return\r\n    function onMouseDown(e: MouseEvent) {\r\n      if (ref.current && !ref.current.contains(e.target as Node)) handler()\r\n    }\r\n    document.addEventListener(\"mousedown\", onMouseDown)\r\n    return () => document.removeEventListener(\"mousedown\", onMouseDown)\r\n  }, [ref, handler, enabled])\r\n}\r\n",
       "type": "registry:hook"
     }
   ],

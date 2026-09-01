@@ -23,6 +23,10 @@ import {
 
 const BOTTOM_SCROLL_THRESHOLD_PX = 48
 const EMPTY_PATTERNS: PatternHandler[] = []
+const OFFSCREEN_ITEM_STYLE: React.CSSProperties = {
+  contentVisibility: "auto",
+  containIntrinsicSize: "auto 160px",
+}
 
 export type ChatMessageData = {
   id: string
@@ -212,6 +216,68 @@ const MessageListRow = React.memo(function MessageListRow({
   )
 })
 
+/**
+ * Owns the whole turn, including caller-provided actions. Keeping that work
+ * inside the memo boundary matters on long transcripts: a streamed token only
+ * rebuilds the live turn instead of recreating actions under every settled row.
+ */
+const MessageListItem = React.memo(function MessageListItem({
+  message,
+  isStreaming,
+  openAsk,
+  waiting,
+  generationStage,
+  generationLabel,
+  patternHandlers,
+  onEditMessage,
+  onAskAnswer,
+  renderActions,
+}: {
+  message: ChatMessageData
+  isStreaming: boolean
+  openAsk: boolean
+  waiting: boolean
+  generationStage: GenerationStage
+  generationLabel?: string
+  patternHandlers: PatternHandler[]
+  onEditMessage?: (id: string, content: string) => void
+  onAskAnswer?: (
+    messageId: string,
+    toolId: string,
+    result: AskQuestionResult
+  ) => void
+  renderActions?: (message: ChatMessageData) => React.ReactNode
+}) {
+  return (
+    <div
+      data-slot="message-list-item"
+      // Find-in-page and accessibility retain the DOM, while the browser can
+      // skip layout and paint work for distant transcript rows.
+      style={OFFSCREEN_ITEM_STYLE}
+    >
+      <MessageListRow
+        message={message}
+        isStreaming={isStreaming}
+        openAsk={openAsk}
+        patternHandlers={patternHandlers}
+        onEditMessage={onEditMessage}
+        onAskAnswer={onAskAnswer}
+      />
+      {waiting ? (
+        <div className="mb-4">
+          <GenerationStatus
+            active
+            stage={generationStage}
+            label={generationLabel}
+          />
+        </div>
+      ) : isStreaming || openAsk ? null : (
+        renderActions?.(message)
+      )}
+    </div>
+  )
+})
+
 export function MessageList({
   messages,
   isGenerating = false,
@@ -232,6 +298,7 @@ export function MessageList({
 
   const stableEdit = useStableCallback(onEditMessage)
   const stableAskAnswer = useStableCallback(onAskAnswer)
+  const stableRenderActions = useStableCallback(renderActions)
 
   return (
     <div
@@ -270,27 +337,19 @@ export function MessageList({
                 !message.parts?.length
 
               return (
-                <div key={message.id} data-slot="message-list-item">
-                  <MessageListRow
-                    message={message}
-                    isStreaming={isStreaming}
-                    openAsk={openAsk}
-                    patternHandlers={patternHandlers}
-                    onEditMessage={onEditMessage ? stableEdit : undefined}
-                    onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
-                  />
-                  {waiting ? (
-                    <div className="mb-4">
-                      <GenerationStatus
-                        active
-                        stage={generationStage}
-                        label={generationLabel}
-                      />
-                    </div>
-                  ) : isStreaming || openAsk ? null : (
-                    renderActions?.(message)
-                  )}
-                </div>
+                <MessageListItem
+                  key={message.id}
+                  message={message}
+                  isStreaming={isStreaming}
+                  openAsk={openAsk}
+                  waiting={waiting}
+                  generationStage={generationStage}
+                  generationLabel={generationLabel}
+                  patternHandlers={patternHandlers}
+                  onEditMessage={onEditMessage ? stableEdit : undefined}
+                  onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
+                  renderActions={renderActions ? stableRenderActions : undefined}
+                />
               )
             })}
         {children}

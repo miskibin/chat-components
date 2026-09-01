@@ -1,6 +1,7 @@
 import "server-only"
 
 import { spawn, type ChildProcess } from "child_process"
+import { createHash, type Hash } from "crypto"
 import { createInterface } from "readline"
 
 import { resolveAgentCommand } from "@/lib/agent-runtime"
@@ -34,6 +35,7 @@ type CliEvent = {
 }
 
 const MAX_FIELD = 50_000
+const STDERR_TAIL_MAX = 64 * 1024
 
 export async function* runCursorAgent(
   options: AgentRunOptions
@@ -75,9 +77,9 @@ export async function* runCursorAgent(
     stdio: ["ignore", "pipe", "pipe"],
   })
 
-  const stderrChunks: string[] = []
+  let stderrTail = ""
   child.stderr?.on("data", (chunk: Buffer | string) => {
-    stderrChunks.push(String(chunk))
+    stderrTail = (stderrTail + String(chunk)).slice(-STDERR_TAIL_MAX)
   })
 
   const onAbort = () => killAgent(child)
@@ -96,7 +98,8 @@ export async function* runCursorAgent(
     let gotResult = false
     // Everything that has already gone out, so a closing full-text message
     // repeating the whole turn is dropped instead of printed twice.
-    let emitted = ""
+    const emittedHash = createHash("sha256")
+    let emittedLength = 0
 
     for await (const line of rl) {
       if (options.signal?.aborted) break
@@ -125,9 +128,10 @@ export async function* runCursorAgent(
         if (typeof event.timestamp_ms === "number" && !event.model_call_id) {
           sawStreamingDelta = true
         }
-        if (text && !repeatsWholeTurn(emitted, text)) {
+        if (text && !repeatsWholeTurn(emittedHash, emittedLength, text)) {
           gotText = true
-          emitted += text
+          emittedHash.update(text)
+          emittedLength += text.length
           yield { type: "text", text }
         }
         continue
@@ -150,7 +154,8 @@ export async function* runCursorAgent(
           typeof event.result === "string" &&
           event.result
         ) {
-          emitted += event.result
+          emittedHash.update(event.result)
+          emittedLength += event.result.length
           yield { type: "text", text: event.result }
         }
         yield {
@@ -175,7 +180,7 @@ export async function* runCursorAgent(
 
     if (exitCode !== 0 && !gotResult) {
       const err =
-        cleanStderr(stderrChunks.join("")) ||
+        cleanStderr(stderrTail) ||
         `agent exited with code ${exitCode}`
       yield { type: "error", message: err.slice(0, MAX_FIELD) }
     }
@@ -242,8 +247,10 @@ export async function listCursorModels(): Promise<
  * The test is whole-turn equality, never a suffix match — a delta that merely
  * ends the emitted text (a lone `"\n"`, a closing `")"`) is real output.
  */
-function repeatsWholeTurn(emitted: string, text: string) {
-  return emitted.length > 0 && text === emitted
+function repeatsWholeTurn(hash: Hash, length: number, text: string) {
+  if (length === 0 || text.length !== length) return false
+  const candidate = createHash("sha256").update(text).digest("hex")
+  return candidate === hash.copy().digest("hex")
 }
 
 function assistantText(event: CliEvent, sawStreamingDelta: boolean): string {

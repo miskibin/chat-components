@@ -1,21 +1,162 @@
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
+import { FolderPickerEmptyExample } from "@/components/examples/folder-picker-empty-example"
+import { FolderPickerExample } from "@/components/examples/folder-picker-example"
 import { ModePickerExample } from "@/components/examples/mode-picker-example"
 import { ModePickerStyledExample } from "@/components/examples/mode-picker-styled-example"
 import { ModelPickerDisabledExample } from "@/components/examples/model-picker-disabled-example"
 import { ModelPickerEffortsExample } from "@/components/examples/model-picker-efforts-example"
 import { ModelPickerExample } from "@/components/examples/model-picker-example"
+import { ModelPickerSearchExample } from "@/components/examples/model-picker-search-example"
 import { ModelPickerStyledExample } from "@/components/examples/model-picker-styled-example"
 import { ThemeToggleExample } from "@/components/examples/theme-toggle-example"
 import { ThemeToggleStyledExample } from "@/components/examples/theme-toggle-styled-example"
 
 export const controlDocs = {
+  "folder-picker": {
+    title: "Folder Picker",
+    description:
+      "Searchable recent-folder menu with an app-provided action for opening the operating system's native folder chooser.",
+    registry: "folder-picker",
+    registryDependencies: ["popover", "command"],
+    preview: { name: "folder-picker-example", node: <FolderPickerExample /> },
+    usage: `"use client"
+
+import { useState } from "react"
+import { FolderPicker } from "@/components/ui/folder-picker"
+
+const RECENTS = ["D:\\\\agent-ui", "D:\\\\chat-components"]
+
+export function Picker() {
+  const [folder, setFolder] = useState(RECENTS[0])
+
+  return (
+    <FolderPicker
+      value={folder}
+      recents={RECENTS}
+      onChange={setFolder}
+      onOpenFolder={() => openNativeFolderDialog()}
+    />
+  )
+}`,
+    props: [
+      {
+        caption: "FolderPicker",
+        rows: [
+          {
+            name: "recents",
+            type: "string[]",
+            required: true,
+            description:
+              "Absolute paths in most-recently-used order. These are the only folders shown in the default list.",
+          },
+          {
+            name: "value",
+            type: "string",
+            description: "The selected absolute path.",
+          },
+          {
+            name: "onChange",
+            type: "(path: string) => void",
+            description: "Fired when a recent folder is selected; the menu closes.",
+          },
+          {
+            name: "onOpenFolder",
+            type: "() => void | Promise<void>",
+            description:
+              "Connect this to the host's native folder dialog. The action is disabled when omitted.",
+          },
+          {
+            name: "onOpenChange",
+            type: "(open: boolean) => void",
+            description:
+              "Notifies the host when the menu opens or closes, useful for refreshing the MRU list.",
+          },
+          {
+            name: "detail",
+            type: "ReactNode",
+            description:
+              "Quiet trigger suffix for related context such as a Git branch.",
+          },
+          {
+            name: "variant",
+            type: '"chip" | "inline"',
+            default: '"chip"',
+            description:
+              "The inline variant adds a subtle border for a standalone composer control.",
+          },
+          {
+            name: "side",
+            type: '"top" | "bottom"',
+            default: '"bottom"',
+            description: "Which way the recent-folder menu opens.",
+          },
+          {
+            name: "classNames",
+            type: "FolderPickerClassNames",
+            description:
+              "Per-part overrides for the content, search, list, group, item, path, and action.",
+          },
+          {
+            name: "disabled",
+            type: "boolean",
+            default: "false",
+            description: "Disables the trigger.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "folder-picker-trigger",
+      "folder-picker-label",
+      "folder-picker-detail",
+      "folder-picker-content",
+      "folder-picker-search",
+      "folder-picker-list",
+      "folder-picker-group",
+      "folder-picker-item",
+      "folder-picker-path",
+      "folder-picker-check",
+      "folder-picker-action",
+    ],
+    examples: [
+      {
+        title: "Start with no history",
+        description: (
+          <>
+            An empty <DocsCode>recents</DocsCode> array leaves one clear way
+            forward: the native <em>Open Folder</em> action. Once the host
+            remembers that selection, pass the updated list back on the next
+            open.
+          </>
+        ),
+        example: {
+          name: "folder-picker-empty-example",
+          node: <FolderPickerEmptyExample />,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Native dialog stays app-owned",
+        description: (
+          <>
+            Browser code cannot recover an absolute local path. Desktop hosts
+            should connect <DocsCode>onOpenFolder</DocsCode> to Tauri, Electron,
+            or another native bridge and update <DocsCode>value</DocsCode> after
+            the user chooses a directory.
+          </>
+        ),
+      },
+    ],
+  },
+
   "model-picker": {
     title: "Model Picker",
     description:
-      "Searchable model selector on Popover + cmdk, with badges, descriptions, disabled options that explain themselves, and an optional reasoning-effort row.",
+      "Compact model switcher on the shadcn dropdown menu: one row per thing that can change, each showing its current value, with the choices in a submenu.",
     registry: "model-picker",
-    registryDependencies: ["popover", "command"],
+    registryDependencies: ["dropdown-menu", "command"],
     preview: { name: "model-picker-example", node: <ModelPickerExample /> },
     usage: `"use client"
 
@@ -56,10 +197,11 @@ export function Picker() {
             required: true,
             description: (
               <>
-                The list contents. cmdk filters them on{" "}
-                <DocsCode>name</DocsCode>, with <DocsCode>badge</DocsCode>,{" "}
-                <DocsCode>description</DocsCode>, and <DocsCode>meta</DocsCode>{" "}
-                as keywords. An empty array disables the trigger.
+                The list contents. An empty array disables the trigger. Past{" "}
+                <DocsCode>searchThreshold</DocsCode> the list grows a search
+                field that matches <DocsCode>name</DocsCode>,{" "}
+                <DocsCode>badge</DocsCode>, <DocsCode>description</DocsCode> and{" "}
+                <DocsCode>meta</DocsCode>.
               </>
             ),
           },
@@ -78,7 +220,7 @@ export function Picker() {
             name: "onChange",
             type: "(id: string) => void",
             description:
-              "Fired on pick, then the popover closes. Disabled options never fire it.",
+              "Fired on pick, then the menu closes. Disabled options never fire it.",
           },
           {
             name: "efforts",
@@ -86,8 +228,8 @@ export function Picker() {
             default: "false",
             description: (
               <>
-                Reasoning-effort options under a divider.{" "}
-                <DocsCode>false</DocsCode> hides the section; pass{" "}
+                Reasoning-effort options. <DocsCode>false</DocsCode> drops the
+                row entirely and the menu becomes the model list itself; pass{" "}
                 <DocsCode>DEFAULT_MODEL_EFFORTS</DocsCode> or your own list to
                 show it.
               </>
@@ -107,15 +249,25 @@ export function Picker() {
           {
             name: "onEffortChange",
             type: "(id: string) => void",
-            description:
-              "Fired on effort pick. The popover stays open so both choices happen in one visit.",
+            description: "Fired on effort pick, then the menu closes.",
           },
           {
             name: "side",
             type: '"top" | "bottom"',
             default: '"top"',
             description:
-              "Which way the popover opens. Composers open top, navbars open bottom.",
+              "Which way the menu opens. Composers open top, navbars open bottom. Submenus pick their own side.",
+          },
+          {
+            name: "searchThreshold",
+            type: "number",
+            default: "8",
+            description: (
+              <>
+                Model counts above this get a search field; at or below it, a
+                plain list the menu&rsquo;s own typeahead can walk.
+              </>
+            ),
           },
           {
             name: "placeholder",
@@ -138,14 +290,14 @@ export function Picker() {
           {
             name: "label",
             type: "string",
-            default: '"Models"',
-            description: "Heading above the option list.",
+            default: '"Model"',
+            description: "Label on the row that opens the model submenu.",
           },
           {
             name: "effortLabel",
             type: "string",
-            default: '"Reasoning effort"',
-            description: "Heading above the effort row.",
+            default: '"Effort"',
+            description: "Label on the row that opens the effort submenu.",
           },
           {
             name: "disabled",
@@ -173,13 +325,12 @@ export function Picker() {
             type: "string",
             required: true,
             description:
-              "Shown on the chip and as the trigger suffix, e.g. “· High”.",
+              "Shown in the row, in the submenu, and as the trigger suffix.",
           },
           {
             name: "description",
             type: "string",
-            description:
-              "Tooltip on the chip, and the line under the row while it is active.",
+            description: "Tooltip on the submenu row.",
           },
         ],
       },
@@ -196,17 +347,18 @@ export function Picker() {
           {
             name: "badge",
             type: "string",
-            description: "Short uppercase tag — the provider, usually.",
+            description: "Short tag after the name — the provider, usually.",
           },
           {
             name: "description",
             type: "string",
-            description: "One line under the name.",
+            description: "Row tooltip, and a search keyword.",
           },
           {
             name: "meta",
             type: "string",
-            description: "Appended to the description after a separator.",
+            description:
+              "Trailing detail on the row, e.g. a size or a context length.",
           },
           {
             name: "disabled",
@@ -216,34 +368,55 @@ export function Picker() {
           {
             name: "disabledReason",
             type: "string",
-            description: "Why it is unavailable, rendered under the row.",
+            description: "Why it is unavailable, joined into the row tooltip.",
           },
         ],
       },
     ],
     dataSlots: [
       "model-picker-trigger",
+      "model-picker-trigger-effort",
       "model-picker-content",
-      "model-picker-search",
+      "model-picker-section",
+      "model-picker-section-value",
       "model-picker-list",
+      "model-picker-search",
       "model-picker-item",
       "model-picker-badge",
+      "model-picker-meta",
       "model-picker-effort",
       "model-picker-effort-item",
     ],
     examples: [
       {
-        title: "Explain unavailable models",
+        title: "Just the models",
         description: (
           <>
-            Keeping a model listed with a <DocsCode>disabledReason</DocsCode>{" "}
-            answers &ldquo;where did it go?&rdquo; before it gets asked — and it
-            still turns up in search, it just cannot be picked.
+            Without <DocsCode>efforts</DocsCode> there is only one thing to
+            change, so the menu is the model list — no row to hover through
+            first. Disabled options stay listed and carry their{" "}
+            <DocsCode>disabledReason</DocsCode> as the row tooltip, which
+            answers &ldquo;where did it go?&rdquo; before it gets asked.
           </>
         ),
         example: {
           name: "model-picker-disabled-example",
           node: <ModelPickerDisabledExample />,
+        },
+      },
+      {
+        title: "Long lists get a search field",
+        description: (
+          <>
+            Under <DocsCode>searchThreshold</DocsCode> models the submenu is
+            plain rows and the menu&rsquo;s typeahead is enough. Over it, cmdk
+            takes the list over — it owns focus and the arrow keys, so typing
+            filters instead of jumping.
+          </>
+        ),
+        example: {
+          name: "model-picker-search-example",
+          node: <ModelPickerSearchExample />,
         },
       },
       {
@@ -253,9 +426,8 @@ export function Picker() {
             <DocsCode>efforts</DocsCode> is plain data, so the scale is yours —
             two steps or six, whatever your backend accepts. Ship{" "}
             <DocsCode>DEFAULT_MODEL_EFFORTS</DocsCode> for the usual
-            low/medium/high/xhigh ladder, or write your own. The row sits
-            outside the filtered list, so typing in the search box never hides
-            it, and picking an effort keeps the popover open.
+            low/medium/high/xhigh ladder, or write your own;{" "}
+            <DocsCode>effortLabel</DocsCode> renames the row.
           </>
         ),
         example: {
@@ -267,10 +439,10 @@ export function Picker() {
         title: "Restyle the trigger",
         description: (
           <>
-            The trigger is a plain button:{" "}
-            <DocsCode>className</DocsCode> merges last, and{" "}
-            <DocsCode>data-state=&quot;open&quot;</DocsCode> covers the open
-            state. Everything in the popover is reachable through its own slot.
+            The trigger is a plain button: <DocsCode>className</DocsCode> merges
+            last, and <DocsCode>data-state=&quot;open&quot;</DocsCode> covers
+            the open state. The effort suffix has its own slot, so it can be
+            dimmed, recoloured, or hidden without touching the name.
           </>
         ),
         example: {
@@ -287,17 +459,19 @@ export function Picker() {
             Drop it into the <DocsCode>tools</DocsCode> slot of{" "}
             <DocsCode>ChatInput</DocsCode> with{" "}
             <DocsCode>side=&quot;top&quot;</DocsCode>; the trigger already
-            matches the toolbar height.
+            matches the toolbar height, and carries no icon of its own so it
+            sits flush next to the other tool buttons.
           </>
         ),
       },
       {
-        title: "Picking, and picking again",
+        title: "One row per decision",
         description: (
           <>
-            Choosing a model closes the popover; choosing an effort does not, so
-            a model plus its effort is one visit. The search box takes focus on
-            open, and clears every time.
+            Every row states its current value next to its label, so the whole
+            configuration reads at a glance without opening anything. Picking
+            from a submenu — model or effort — closes the menu; nothing is a
+            two-step commit.
           </>
         ),
       },

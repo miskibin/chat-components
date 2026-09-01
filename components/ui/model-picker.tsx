@@ -1,21 +1,24 @@
 "use client"
 
-import { Check, ChevronDown, Cpu } from "lucide-react"
+import { Check, ChevronDown } from "lucide-react"
 import * as React from "react"
 
 import {
   Command,
   CommandEmpty,
-  CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
 export type ModelOption = {
@@ -51,7 +54,7 @@ export type ModelPickerProps = {
   value?: string
   defaultValue?: string
   onChange?: (id: string) => void
-  /** Reasoning-effort options. `false` (the default) hides the section. */
+  /** Reasoning-effort options. `false` (the default) hides the row. */
   efforts?: ModelEffortOption[] | false
   effort?: string
   defaultEffort?: string
@@ -60,10 +63,14 @@ export type ModelPickerProps = {
   searchPlaceholder?: string
   emptyMessage?: string
   disabled?: boolean
-  /** Which way the popover opens. Composers open "top", navbars open "bottom". */
+  /** Which way the menu opens. Composers open "top", navbars open "bottom". */
   side?: "top" | "bottom"
+  /** Row label for the model submenu. */
   label?: string
+  /** Row label for the effort submenu. */
   effortLabel?: string
+  /** Model counts above this get a search field; at or below it, a plain list. */
+  searchThreshold?: number
   className?: string
 }
 
@@ -81,15 +88,15 @@ export function ModelPicker({
   emptyMessage = "No models found.",
   disabled = false,
   side = "top",
-  label = "Models",
-  effortLabel = "Reasoning effort",
+  label = "Model",
+  effortLabel = "Effort",
+  searchThreshold = 8,
   className,
 }: ModelPickerProps) {
   const effortOptions = efforts === false ? null : efforts
+  const hasEfforts = Boolean(effortOptions && effortOptions.length > 0)
 
   const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const [highlighted, setHighlighted] = React.useState("")
 
   const [internalModel, setInternalModel] = React.useState(
     defaultValue ?? options[0]?.id ?? ""
@@ -119,24 +126,25 @@ export function ModelPicker({
     (option: ModelEffortOption) => {
       setInternalEffort(option.id)
       onEffortChange?.(option.id)
+      setOpen(false)
     },
     [onEffortChange]
   )
 
-  const handleOpenChange = React.useCallback(
-    (next: boolean) => {
-      setOpen(next)
-      if (next) {
-        setSearch("")
-        setHighlighted(current?.name ?? "")
-      }
-    },
-    [current?.name]
+  const modelList = (
+    <ModelList
+      options={options}
+      selectedId={selectedId}
+      onPick={pickModel}
+      searchable={options.length > searchThreshold}
+      searchPlaceholder={searchPlaceholder}
+      emptyMessage={emptyMessage}
+    />
   )
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
         <button
           type="button"
           data-slot="model-picker-trigger"
@@ -147,141 +155,248 @@ export function ModelPicker({
             className
           )}
         >
-          <Cpu className="size-3.5" />
           <span className="truncate">{current?.name ?? placeholder}</span>
-          {current?.badge ? <ModelBadge>{current.badge}</ModelBadge> : null}
           {currentEffort ? (
-            <span className="shrink-0 text-muted-foreground">
-              · {currentEffort.label}
+            <span
+              data-slot="model-picker-trigger-effort"
+              className="shrink-0 opacity-60"
+            >
+              {currentEffort.label}
             </span>
           ) : null}
           <ChevronDown className="size-3 opacity-60 transition-transform duration-150 group-data-[state=open]:rotate-180" />
         </button>
-      </PopoverTrigger>
-      <PopoverContent
-        data-slot="model-picker-content"
-        side={side}
-        align="start"
-        sideOffset={8}
-        collisionPadding={12}
-        className="w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden p-0"
-      >
-        <Command
-          loop
-          value={highlighted}
-          onValueChange={setHighlighted}
-          className="bg-transparent"
+      </DropdownMenuTrigger>
+
+      {/* One row per thing that can change. Without efforts there is only one
+          thing, so the list stands in for the menu instead of hiding behind it. */}
+      {hasEfforts ? (
+        <DropdownMenuContent
+          data-slot="model-picker-content"
+          side={side}
+          align="start"
+          sideOffset={8}
+          collisionPadding={12}
+          className="w-[min(15rem,calc(100vw-1.5rem))]"
         >
-          <CommandInput
-            data-slot="model-picker-search"
-            autoFocus
-            value={search}
-            onValueChange={setSearch}
-            placeholder={searchPlaceholder}
-            className="text-[13px]"
-          />
-          <CommandList
-            data-slot="model-picker-list"
-            className="max-h-[min(18rem,50vh)]"
-          >
-            <CommandEmpty className="py-6 text-center text-[12px] text-muted-foreground">
-              {emptyMessage}
-            </CommandEmpty>
-            <CommandGroup heading={label}>
-              {options.map((model) => (
-                <CommandItem
-                  key={model.id}
-                  data-slot="model-picker-item"
-                  value={model.name}
-                  keywords={[model.badge, model.description, model.meta].filter(
-                    (k): k is string => Boolean(k)
-                  )}
-                  disabled={model.disabled}
-                  onSelect={() => pickModel(model)}
-                  className="items-start gap-2.5 py-2"
+          <DropdownMenuSub>
+            <SectionTrigger label={label} value={current?.name ?? placeholder} />
+            <DropdownMenuSubContent
+              data-slot="model-picker-list"
+              collisionPadding={12}
+              className="w-[min(17rem,calc(100vw-1.5rem))] p-0"
+            >
+              {modelList}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+
+          <DropdownMenuSub>
+            <SectionTrigger
+              label={effortLabel}
+              value={currentEffort?.label ?? "—"}
+            />
+            <DropdownMenuSubContent
+              data-slot="model-picker-effort"
+              collisionPadding={12}
+              className="w-[min(13rem,calc(100vw-1.5rem))]"
+            >
+              {effortOptions?.map((option) => (
+                <DropdownMenuItem
+                  key={option.id}
+                  data-slot="model-picker-effort-item"
+                  role="menuitemradio"
+                  aria-checked={option.id === selectedEffortId}
+                  title={option.description}
+                  onSelect={() => pickEffort(option)}
+                  className="gap-2 py-1.5 text-[13px]"
                 >
-                  <span className="mt-px grid size-6 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground">
-                    <Cpu className="size-3" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-[13px] text-foreground">
-                        {model.name}
-                      </span>
-                      {model.badge ? <ModelBadge>{model.badge}</ModelBadge> : null}
-                    </span>
-                    {model.description || model.meta ? (
-                      <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                        {[model.description, model.meta]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    ) : null}
-                    {model.disabledReason ? (
-                      <span className="mt-1 block text-[11px] text-muted-foreground">
-                        {model.disabledReason}
-                      </span>
-                    ) : null}
-                  </span>
-                  {model.id === selectedId && !model.disabled ? (
-                    <Check className="mt-1 size-3.5 shrink-0 !text-primary" />
+                  <span className="flex-1 truncate">{option.label}</span>
+                  {option.id === selectedEffortId ? (
+                    <Check className="size-3.5 shrink-0" />
                   ) : null}
-                </CommandItem>
+                </DropdownMenuItem>
               ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-        {effortOptions && effortOptions.length > 0 ? (
-          <div
-            data-slot="model-picker-effort"
-            role="group"
-            aria-label={effortLabel}
-            className="border-t p-1.5"
-          >
-            <span className="block px-1 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              {effortLabel}
-            </span>
-            <div className="flex flex-wrap items-center gap-1">
-              {effortOptions.map((option) => {
-                const active = option.id === selectedEffortId
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    data-slot="model-picker-effort-item"
-                    data-state={active ? "on" : "off"}
-                    aria-pressed={active}
-                    title={option.description}
-                    onClick={() => pickEffort(option)}
-                    className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=on]:bg-muted data-[state=on]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0"
-                  >
-                    {active ? (
-                      <Check className="size-3 !text-primary" />
-                    ) : null}
-                    {option.label}
-                  </button>
-                )
-              })}
-            </div>
-            {currentEffort?.description ? (
-              <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
-                {currentEffort.description}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </PopoverContent>
-    </Popover>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      ) : (
+        <DropdownMenuContent
+          data-slot="model-picker-content"
+          side={side}
+          align="start"
+          sideOffset={8}
+          collisionPadding={12}
+          className="w-[min(17rem,calc(100vw-1.5rem))] p-0"
+        >
+          <div data-slot="model-picker-list">{modelList}</div>
+        </DropdownMenuContent>
+      )}
+    </DropdownMenu>
   )
 }
 
-function ModelBadge({ children }: { children: React.ReactNode }) {
+/** `Label ………… value ›` — the one row shape the menu is built from. */
+function SectionTrigger({ label, value }: { label: string; value: string }) {
   return (
-    <span
-      data-slot="model-picker-badge"
-      className="shrink-0 rounded-sm bg-primary/10 px-1 py-px text-[9.5px] font-semibold tracking-wide text-primary uppercase"
+    <DropdownMenuSubTrigger
+      data-slot="model-picker-section"
+      className="gap-4 py-1.5 text-[13px]"
     >
-      {children}
-    </span>
+      <span className="flex min-w-0 flex-1 items-center justify-between gap-4">
+        <span className="shrink-0">{label}</span>
+        <span
+          data-slot="model-picker-section-value"
+          className="truncate text-[12px] text-muted-foreground"
+        >
+          {value}
+        </span>
+      </span>
+    </DropdownMenuSubTrigger>
+  )
+}
+
+type ModelListProps = {
+  options: ModelOption[]
+  selectedId: string
+  onPick: (option: ModelOption) => void
+  searchable: boolean
+  searchPlaceholder: string
+  emptyMessage: string
+}
+
+/**
+ * Short lists are plain menu items — Radix's own typeahead is enough. Long ones
+ * (a local runtime's whole model directory, say) get cmdk, which owns focus and
+ * arrow keys inside the submenu so the menu's typeahead never sees the keys.
+ */
+function ModelList({
+  options,
+  selectedId,
+  onPick,
+  searchable,
+  searchPlaceholder,
+  emptyMessage,
+}: ModelListProps) {
+  const [search, setSearch] = React.useState("")
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    if (!searchable) return
+    // The menu focuses itself on open; take it back on the next frame.
+    const frame = requestAnimationFrame(() => inputRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [searchable])
+
+  if (!searchable) {
+    return (
+      <div className="p-1">
+        {options.map((model) => (
+          <DropdownMenuItem
+            key={model.id}
+            data-slot="model-picker-item"
+            role="menuitemradio"
+            aria-checked={model.id === selectedId}
+            disabled={model.disabled}
+            title={
+              [model.description, model.disabledReason]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
+            onSelect={() => onPick(model)}
+            className="gap-2 py-1.5 text-[13px]"
+          >
+            <ModelRow model={model} selected={model.id === selectedId} />
+          </DropdownMenuItem>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <Command
+      loop
+      shouldFilter={false}
+      className="bg-transparent"
+      // cmdk drives the list; the menu's typeahead must not also see the keys.
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") event.stopPropagation()
+      }}
+    >
+      <CommandInput
+        ref={inputRef}
+        data-slot="model-picker-search"
+        value={search}
+        onValueChange={setSearch}
+        placeholder={searchPlaceholder}
+        className="text-[13px]"
+      />
+      <CommandList className="max-h-[min(18rem,50vh)] p-1">
+        <CommandEmpty className="py-6 text-center text-[12px] text-muted-foreground">
+          {emptyMessage}
+        </CommandEmpty>
+        {options.filter(matches(search)).map((model) => (
+          <CommandItem
+            key={model.id}
+            data-slot="model-picker-item"
+            value={model.id}
+            disabled={model.disabled}
+            title={
+              [model.description, model.disabledReason]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
+            onSelect={() => onPick(model)}
+            className="gap-2 py-1.5 text-[13px]"
+          >
+            <ModelRow model={model} selected={model.id === selectedId} />
+          </CommandItem>
+        ))}
+      </CommandList>
+    </Command>
+  )
+}
+
+/** Substring match over everything the row can show, not just the name. */
+function matches(search: string) {
+  const needle = search.trim().toLowerCase()
+  if (!needle) return () => true
+  return (model: ModelOption) =>
+    [model.name, model.badge, model.description, model.meta]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(needle)
+}
+
+function ModelRow({
+  model,
+  selected,
+}: {
+  model: ModelOption
+  selected: boolean
+}) {
+  return (
+    <>
+      <span className="min-w-0 flex-1 truncate">{model.name}</span>
+      {model.badge ? (
+        <span
+          data-slot="model-picker-badge"
+          className="shrink-0 text-[11px] text-muted-foreground"
+        >
+          {model.badge}
+        </span>
+      ) : null}
+      {model.meta ? (
+        <span
+          data-slot="model-picker-meta"
+          className="shrink-0 text-[11px] text-muted-foreground tabular-nums"
+        >
+          {model.meta}
+        </span>
+      ) : null}
+      {selected && !model.disabled ? (
+        <Check className="size-3.5 shrink-0" />
+      ) : null}
+    </>
   )
 }

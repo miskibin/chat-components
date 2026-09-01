@@ -14,6 +14,7 @@ export const componentSlugs = [
   "message-markdown",
   "change-summary",
   "generation-status",
+  "folder-picker",
   "model-picker",
   "mode-picker",
   "theme-toggle",
@@ -75,6 +76,7 @@ export const docsNav: DocsNavSection[] = [
   {
     title: "Controls",
     items: [
+      component("folder-picker", "Folder Picker"),
       component("model-picker", "Model Picker"),
       component("mode-picker", "Mode Picker"),
       component("theme-toggle", "Theme Toggle"),
