@@ -5,8 +5,8 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 export type ContextMeterProps = Omit<
-  React.ComponentProps<"span">,
-  "children"
+  React.ComponentProps<"button">,
+  "children" | "type"
 > & {
   /** Tokens the next request would carry. */
   used: number
@@ -20,6 +20,11 @@ export type ContextMeterProps = Omit<
   showFrom?: number
   /** Hides the percentage, leaving the ring alone. */
   hideValue?: boolean
+  /**
+   * Renders a button instead of a span, so the meter can open a popover with
+   * the numbers behind it. The host owns whatever that popover says.
+   */
+  interactive?: boolean
   /** Replaces the hover title. Return "" to drop it. */
   label?: (used: number, total: number) => string
   /** Ring diameter in px. */
@@ -45,6 +50,17 @@ export function formatTokens(tokens: number): string {
 }
 
 /**
+ * A whole percent is too coarse at the bottom of a large window: three turns
+ * into a 128k context every one of them reads "1%", and a gauge that never
+ * moves looks broken rather than empty. Below a tenth of the window the tenths
+ * digit is what shows the thing is alive.
+ */
+export function formatContextPercent(fraction: number): string {
+  const percent = fraction * 100
+  return percent < 10 ? percent.toFixed(1) : `${Math.round(percent)}`
+}
+
+/**
  * How much of a model's context window the next request would take.
  *
  * The ring is the whole component: no timers, no layout of its own beyond the
@@ -63,6 +79,7 @@ export function ContextMeter({
   dangerAt = 0.9,
   showFrom = 0.05,
   hideValue = false,
+  interactive = false,
   label,
   size = 14,
   className,
@@ -77,7 +94,7 @@ export function ContextMeter({
   // The arc saturates; the number does not. A window blown past by half is
   // worth seeing as 150%, and a ring cannot show that.
   const arc = Math.min(1, fraction)
-  const percent = Math.round(fraction * 100)
+  const percent = formatContextPercent(fraction)
   const tone =
     fraction >= dangerAt
       ? "text-destructive"
@@ -88,22 +105,8 @@ export function ContextMeter({
     ? label(spent, total)
     : `${formatTokens(spent)} / ${formatTokens(total)} context used`
 
-  return (
-    <span
-      data-slot="context-meter"
-      role="meter"
-      aria-valuenow={percent}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label={title || "Context used"}
-      title={title || undefined}
-      className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 text-[12px] tabular-nums select-none",
-        tone,
-        className
-      )}
-      {...props}
-    >
+  const content = (
+    <>
       <svg
         data-slot="context-meter-ring"
         aria-hidden
@@ -136,6 +139,46 @@ export function ContextMeter({
       {hideValue ? null : (
         <span data-slot="context-meter-value">{percent}%</span>
       )}
+    </>
+  )
+
+  const shared = cn(
+    "inline-flex h-7 shrink-0 items-center gap-1.5 text-[12px] tabular-nums select-none",
+    tone,
+    className
+  )
+
+  if (interactive) {
+    return (
+      <button
+        data-slot="context-meter"
+        type="button"
+        aria-label={title || "Context used"}
+        title={title || undefined}
+        className={cn(
+          shared,
+          "rounded-md px-1 outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        )}
+        {...props}
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <span
+      data-slot="context-meter"
+      role="meter"
+      aria-valuenow={Number(percent)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={title || "Context used"}
+      title={title || undefined}
+      className={shared}
+      {...props}
+    >
+      {content}
     </span>
   )
 }

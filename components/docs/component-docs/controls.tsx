@@ -2,6 +2,7 @@ import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { FolderPickerEmptyExample } from "@/components/examples/folder-picker-empty-example"
 import { FolderPickerExample } from "@/components/examples/folder-picker-example"
+import { ContextMeterDetailsExample } from "@/components/examples/context-meter-details-example"
 import { ContextMeterExample } from "@/components/examples/context-meter-example"
 import { ContextMeterToolbarExample } from "@/components/examples/context-meter-toolbar-example"
 import { ModePickerExample } from "@/components/examples/mode-picker-example"
@@ -737,6 +738,20 @@ export function Meter({ used, total }: { used: number; total: number }) {
 }`,
     examples: [
       {
+        title: "Click for the numbers",
+        description: (
+          <>
+            <DocsCode>interactive</DocsCode> renders a button instead of a
+            span, so the meter works as a popover trigger and the host decides
+            what the breakdown says.
+          </>
+        ),
+        example: {
+          name: "context-meter-details-example",
+          node: <ContextMeterDetailsExample />,
+        },
+      },
+      {
         title: "In the composer",
         description: (
           <>
@@ -754,6 +769,18 @@ export function Meter({ used, total }: { used: number; total: number }) {
       },
     ],
     notes: [
+      {
+        title: "Tenths at the bottom of the window",
+        description: (
+          <>
+            Under a tenth of the window the value carries one decimal
+            (<DocsCode>1.5%</DocsCode>), and whole percents above it. Three
+            short turns into a 128k context all round to the same{" "}
+            <DocsCode>1%</DocsCode>, and a gauge that never moves reads as
+            broken rather than empty.
+          </>
+        ),
+      },
       {
         title: "Two numbers, both yours",
         description: (
@@ -802,6 +829,13 @@ export function Meter({ used, total }: { used: number; total: number }) {
             default: "0.05",
             description:
               "Below this fraction the meter renders nothing, so an untouched composer stays clean.",
+          },
+          {
+            name: "interactive",
+            type: "boolean",
+            default: "false",
+            description:
+              "Renders a button instead of a span, for use as a popover or dialog trigger.",
           },
           {
             name: "hideValue",
