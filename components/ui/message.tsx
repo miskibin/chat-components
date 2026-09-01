@@ -191,7 +191,7 @@ export const Message = React.memo(function Message({
           data-editing="true"
           className={cn("mb-4 flex w-full justify-end", className)}
         >
-          <div className="w-full max-w-[85%] rounded-2xl border bg-muted px-3.5 py-2.5 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:max-w-[70%] sm:px-4">
+          <div className="w-full max-w-[85%] rounded-xl border bg-muted px-3.5 py-2.5 transition-colors focus-within:border-ring sm:max-w-[70%] sm:px-4">
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
@@ -265,7 +265,7 @@ export const Message = React.memo(function Message({
         <div
           data-slot="message-content"
           className={cn(
-            "max-w-[85%] min-w-0 rounded-2xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
+            "max-w-[85%] min-w-0 rounded-xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
             contentClassName
           )}
         >

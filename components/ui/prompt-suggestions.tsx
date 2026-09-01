@@ -35,7 +35,9 @@ export function PromptSuggestions({
       data-slot="prompt-suggestions"
       role="list"
       aria-label="Suggested prompts"
-      className={cn("mx-auto w-full max-w-4xl px-4 pt-2 sm:px-8", className)}
+      /* Same measure and gutters as ChatInput, so the list lines up under the
+         composer without a per-call-site override. */
+      className={cn("mx-auto w-full max-w-3xl px-3 pt-2 sm:px-4", className)}
       {...props}
     >
       {items.map((item, index) => (

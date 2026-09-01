@@ -660,8 +660,8 @@ export default function ChatExample() {
       skills={DEMO_SKILLS}
       slashCommands={DEMO_COMMANDS}
       className={cn(
-        "transition-[max-width,padding] duration-300 ease-out",
-        isEmptyChat && "max-w-3xl pb-0 sm:pb-0"
+        "transition-[padding] duration-300 ease-out",
+        isEmptyChat && "pb-0 sm:pb-0"
       )}
       tools={
         <ModelPicker
@@ -924,7 +924,6 @@ export default function ChatExample() {
                 onSelect={(item) =>
                   handleSend({ text: item.label, files: [], skills: [] })
                 }
-                className="max-w-3xl px-3 pt-2 sm:px-4"
               />
             ) : null}
           </div>

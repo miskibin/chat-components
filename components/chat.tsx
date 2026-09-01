@@ -88,8 +88,8 @@ export function Chat({
       <div data-slot="chat-composer" className="w-full">
         <ChatInput
           className={cn(
-            "transition-[max-width,padding] duration-300 ease-out",
-            isEmpty && "max-w-3xl pb-0 sm:pb-0"
+            "transition-[padding] duration-300 ease-out",
+            isEmpty && "pb-0 sm:pb-0"
           )}
           isGenerating={isGenerating}
           onStop={stop}
@@ -99,7 +99,6 @@ export function Chat({
           <PromptSuggestions
             items={suggestions}
             onSelect={(item) => send(item.label)}
-            className="max-w-3xl px-3 pt-2 sm:px-4"
           />
         ) : null}
       </div>

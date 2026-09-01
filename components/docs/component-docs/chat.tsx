@@ -264,7 +264,13 @@ export function Composer() {
           {
             name: "className",
             type: "string",
-            description: "Merged last onto the outer wrapper.",
+            description: (
+              <>
+                Merged last onto the outer wrapper. It is capped at{" "}
+                <DocsCode>max-w-3xl</DocsCode> — the same measure as the message
+                column — so the composer and the conversation share one edge.
+              </>
+            ),
           },
         ],
       },
@@ -295,8 +301,10 @@ export function Composer() {
         slot: "chat-input-surface",
         description: (
           <>
-            The rounded, bordered composer card. Carries{" "}
-            <DocsCode>data-drag-over</DocsCode> while files hover it.
+            The bordered composer card —{" "}
+            <DocsCode>rounded-2xl</DocsCode>, a hairline border, and a{" "}
+            <DocsCode>border-ring</DocsCode> shift on focus instead of a ring.
+            Carries <DocsCode>data-drag-over</DocsCode> while files hover it.
           </>
         ),
       },
@@ -421,8 +429,9 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
             description: (
               <>
                 Merged last. The default is{" "}
-                <DocsCode>mx-auto w-full max-w-4xl</DocsCode> — override it to
-                match your composer width.
+                <DocsCode>mx-auto w-full max-w-3xl px-3 sm:px-4</DocsCode> — the
+                composer&apos;s own measure and gutters, so the rows line up
+                under it with no override.
               </>
             ),
           },
