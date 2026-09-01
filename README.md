@@ -156,7 +156,7 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **ask-question** | Cursor-style questionnaire: radios, checkboxes, Other…, Skip / Continue | [ask-question](https://chat-input-azure.vercel.app/docs/components/ask-question) |
 | **message-markdown** | Streamdown renderer (GFM, Shiki code, Mermaid, KaTeX) + styles | [message-markdown](https://chat-input-azure.vercel.app/docs/components/message-markdown) |
 | **message-list** | Scroll container with smart auto-scroll | [message-list](https://chat-input-azure.vercel.app/docs/components/message-list) |
-| **generation-status** | Braille spinner | [generation-status](https://chat-input-azure.vercel.app/docs/components/generation-status) |
+| **generation-status** | Pulsing-dot generation status | [generation-status](https://chat-input-azure.vercel.app/docs/components/generation-status) |
 | **model-picker** | Searchable model selector with badges, disabled reasons, and a reasoning-effort selector | [model-picker](https://chat-input-azure.vercel.app/docs/components/model-picker) |
 | **mode-picker** | Ask / Plan / Agent switch | [mode-picker](https://chat-input-azure.vercel.app/docs/components/mode-picker) |
 | **chat-sidebar** | Collapsible sidebar chrome (brand / nav / rail / sections / footer slots) and the single import surface for the family | [chat-sidebar](https://chat-input-azure.vercel.app/docs/components/chat-sidebar) |

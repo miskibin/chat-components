@@ -33,7 +33,7 @@
       "name": "generation-status",
       "type": "registry:ui",
       "title": "Generation Status",
-      "description": "Braille spinner for AI generation status.",
+      "description": "Quiet pulsing-dot status for a run that has not produced its first token yet, with an optional stage label.",
       "files": [
         {
           "path": "components/ui/generation-status.tsx",

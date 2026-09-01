@@ -338,13 +338,13 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             type: "boolean",
             default: "false",
             description:
-              "Marks the last assistant turn as streaming and shows the spinner while it is still empty.",
+              "Marks the last assistant turn as streaming and shows the generation status while it is still empty.",
           },
           {
             name: "generationStage",
             type: '"thinking" | "searching" | "responding" | "idle"',
             default: '"idle"',
-            description: "Label for that spinner.",
+            description: "Label for that status.",
           },
           {
             name: "onEditMessage",
@@ -1445,7 +1445,7 @@ export function AfterTurn() {
   "generation-status": {
     title: "Generation Status",
     description:
-      "Braille spinner with an optional label, for the gap between sending a message and the first token.",
+      "A single breathing dot with an optional label, for the gap between sending a message and the first token.",
     registry: "generation-status",
     preview: {
       name: "generation-status-example",
@@ -1465,7 +1465,7 @@ export function Pending({ busy }: { busy: boolean }) {
             type: "boolean",
             description: (
               <>
-                Shows the spinner. Prefer this over{" "}
+                Shows the indicator. Prefer this over{" "}
                 <DocsCode>stage</DocsCode>; when both are omitted nothing
                 renders.
               </>
@@ -1476,18 +1476,19 @@ export function Pending({ busy }: { busy: boolean }) {
             type: '"thinking" | "searching" | "responding" | "idle"',
             default: '"idle"',
             description:
-              "Legacy stage. Any non-idle stage shows the spinner and supplies a default label.",
+              "Legacy stage. Any non-idle stage shows the indicator and supplies a default label.",
           },
           {
             name: "label",
             type: "string",
-            description: "Overrides the stage label. Omit for a bare spinner.",
+            description: "Overrides the stage label. Omit for a bare dot.",
           },
           {
             name: "size",
             type: "number",
             default: "16",
-            description: "Spinner font size in pixels.",
+            description:
+              "Indicator box size in pixels; the dot fills half of it.",
           },
           {
             name: "className",
@@ -1512,7 +1513,14 @@ export function Pending({ busy }: { busy: boolean }) {
           </>
         ),
       },
-      { slot: "generation-status-spinner", description: "The braille glyph." },
+      {
+        slot: "generation-status-spinner",
+        description: "The dot's box — size it, recolor it, or replace the dot.",
+      },
+      {
+        slot: "generation-status-label",
+        description: "The stage label, when there is one.",
+      },
     ],
     customization: [
       {
@@ -1527,6 +1535,25 @@ export function Pending({ busy }: { busy: boolean }) {
 />`,
         },
       },
+      {
+        title: "Hold it still",
+        description: (
+          <>
+            The pulse is a CSS animation behind{" "}
+            <DocsCode>motion-safe</DocsCode>, so it is already off for readers
+            with reduced motion — no timer, no frame state, nothing to clean
+            up. Drop it for everyone by overriding the animation.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<GenerationStatus
+  active
+  label="Thinking"
+  className="[&_*]:animate-none"
+/>`,
+        },
+      },
     ],
     notes: [
       {
@@ -1535,8 +1562,8 @@ export function Pending({ busy }: { busy: boolean }) {
           <>
             <DocsCode>MessageList</DocsCode> renders this for you: while{" "}
             <DocsCode>isGenerating</DocsCode> is true and the last assistant
-            turn is still empty, the spinner sits where the answer will land.
-            You only mount it yourself in custom layouts.
+            turn is still empty, the dot sits where the answer will land. You
+            only mount it yourself in custom layouts.
           </>
         ),
       },
