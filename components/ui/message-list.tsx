@@ -13,6 +13,7 @@ import {
   isPendingAskTool,
   type ChangeSummaryFile,
   type MessageArtifactData,
+  type MessageAttachmentData,
   type MessageCodeBlockData,
   type MessagePart,
   type MessageToolCallData,
@@ -34,6 +35,7 @@ export type ChatMessageData = {
   parts?: MessagePart[]
   codeBlocks?: MessageCodeBlockData[]
   artifacts?: MessageArtifactData[]
+  attachments?: MessageAttachmentData[]
   workedFor?: number
   changes?: ChangeSummaryFile[]
 }
@@ -196,6 +198,7 @@ const MessageListRow = React.memo(function MessageListRow({
       parts={message.parts}
       codeBlocks={message.codeBlocks}
       artifacts={message.artifacts}
+      attachments={message.attachments}
       workedFor={message.workedFor}
       changes={message.changes}
       patternHandlers={patternHandlers}

@@ -16,6 +16,8 @@ export type ComponentPreviewProps = {
    */
   align?: "center" | "stretch"
   actions?: ReactNode
+  /** Shorter frame for the examples under a page's hero preview. */
+  compact?: boolean
   className?: string
 }
 
@@ -28,6 +30,7 @@ export async function ComponentPreview({
   children,
   align = "center",
   actions,
+  compact = false,
   className,
 }: ComponentPreviewProps) {
   const source = await readExampleSource(name)
@@ -42,7 +45,8 @@ export async function ComponentPreview({
           className={cn(
             "overflow-hidden rounded-lg border bg-background",
             align === "center" &&
-              "flex min-h-[320px] items-center justify-center p-6 sm:p-10"
+              "flex items-center justify-center p-6 sm:p-10",
+            align === "center" && (compact ? "min-h-[220px]" : "min-h-[320px]")
           )}
         >
           {children}
