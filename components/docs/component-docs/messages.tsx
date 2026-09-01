@@ -2,14 +2,27 @@ import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { AskQuestionExample } from "@/components/examples/ask-question-example"
 import { AskQuestionToolExample } from "@/components/examples/ask-question-tool-example"
+import { AskQuestionStyledExample } from "@/components/examples/ask-question-styled-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
+import { ChangeSummaryStyledExample } from "@/components/examples/change-summary-styled-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
+import { GenerationStatusStyledExample } from "@/components/examples/generation-status-styled-example"
+import { MessageActionsExample } from "@/components/examples/message-actions-example"
+import { MessageCitationsExample } from "@/components/examples/message-citations-example"
 import { MessageExample } from "@/components/examples/message-example"
+import { MessageListActionsExample } from "@/components/examples/message-list-actions-example"
+import { MessageListEmptyExample } from "@/components/examples/message-list-empty-example"
 import { MessageListExample } from "@/components/examples/message-list-example"
+import { MessageListStreamingExample } from "@/components/examples/message-list-streaming-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
+import { MessageMarkdownMermaidExample } from "@/components/examples/message-markdown-mermaid-example"
+import { MessageMarkdownStyledExample } from "@/components/examples/message-markdown-styled-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
 import { MessageProcessExample } from "@/components/examples/message-process-example"
+import { MessageSenderExample } from "@/components/examples/message-sender-example"
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
+import { MessageToolsCollapsedExample } from "@/components/examples/message-tools-collapsed-example"
+import { MessageToolsStatusExample } from "@/components/examples/message-tools-status-example"
 
 export const messageDocs = {
   message: {
@@ -172,11 +185,6 @@ export function Turn() {
               "True while this turn is still streaming; keeps incomplete markdown from flickering.",
           },
           {
-            name: "className",
-            type: "string",
-            description: "Merged onto the turn wrapper.",
-          },
-          {
             name: "contentClassName",
             type: "string",
             description:
@@ -186,32 +194,13 @@ export function Turn() {
       },
     ],
     dataSlots: [
-      {
-        slot: "message",
-        description: (
-          <>
-            Turn wrapper. Carries <DocsCode>data-sender</DocsCode> and, while
-            editing, <DocsCode>data-editing</DocsCode>.
-          </>
-        ),
-      },
-      { slot: "message-content", description: "Bubble or answer body." },
-      { slot: "message-actions", description: "Hover action row." },
-      {
-        slot: "message-process",
-        description: (
-          <>
-            The “Worked for 12s” group above the answer, stamped by{" "}
-            <DocsCode>MessageProcess</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "message-turn-summary",
-        description: "The file-change card under a settled turn.",
-      },
+      "message",
+      "message-content",
+      "message-actions",
+      "message-process",
+      "message-turn-summary",
     ],
-    customization: [
+    examples: [
       {
         title: "Recolor the bubble",
         description: (
@@ -228,17 +217,14 @@ export function Turn() {
         title: "Target one sender",
         description: (
           <>
-            Because the wrapper stamps <DocsCode>data-sender</DocsCode>, a
-            single class on the scroll container can restyle every user turn.
+            The wrapper stamps <DocsCode>data-sender</DocsCode>, so a single
+            selector on an ancestor restyles every user turn and leaves
+            assistant answers alone.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<MessageList
-  messages={messages}
-  className="[&_[data-slot=message][data-sender=user]_[data-slot=message-content]]:rounded-lg
-             [&_[data-slot=message][data-sender=user]_[data-slot=message-content]]:bg-primary/10"
-/>`,
+        example: {
+          name: "message-sender-example",
+          node: <MessageSenderExample />,
         },
       },
       {
@@ -246,23 +232,29 @@ export function Turn() {
         description: (
           <>
             <DocsCode>patternHandlers</DocsCode> run over paragraph and list
-            text before rendering. Use a global regex so scanning advances.
+            text after markdown parsing, so an agent can emit a plain token and
+            the UI decides what it becomes — a footnote, a link, a button that
+            opens the source. Use a global regex so scanning advances.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `const citations: PatternHandler[] = [
-  {
-    pattern: /\\[(\\d+)\\]/g,
-    render: (match) => (
-      <sup className="ml-0.5 rounded-sm bg-primary/10 px-1 text-primary">
-        {match[1]}
-      </sup>
-    ),
-  },
-]
-
-<Message sender="assistant" content={answer} patternHandlers={citations} />`,
+        example: {
+          name: "message-citations-example",
+          node: <MessageCitationsExample />,
+        },
+      },
+      {
+        title: "Add your own hover actions",
+        description: (
+          <>
+            <DocsCode>actionButtons</DocsCode> fill the row that fades in under
+            a turn on hover or focus — retry, feedback, share. Icons inherit the
+            built-in size and focus ring, so a custom action is
+            indistinguishable from the shipped ones.
+          </>
+        ),
+        example: {
+          name: "message-actions-example",
+          node: <MessageActionsExample />,
         },
       },
     ],
@@ -374,22 +366,6 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             default: "[]",
             description: "Forwarded to every message.",
           },
-          {
-            name: "className",
-            type: "string",
-            description:
-              "Merged onto the scroll container. The inner column is capped at max-w-3xl.",
-          },
-          {
-            name: "...props",
-            type: 'React.ComponentProps<"div">',
-            description: (
-              <>
-                Everything else lands on the scroller. Your{" "}
-                <DocsCode>onScroll</DocsCode> runs before the built-in handler.
-              </>
-            ),
-          },
         ],
       },
       {
@@ -410,8 +386,8 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
       },
     ],
     dataSlots: [
-      { slot: "message-list", description: "The scroll container." },
-      { slot: "message-list-item", description: "Wrapper around each turn." },
+      "message-list",
+      "message-list-item",
     ],
     notes: [
       {
@@ -442,44 +418,51 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         ),
       },
     ],
-    customization: [
+    examples: [
       {
         title: "Per-message actions",
         description: (
           <>
-            <DocsCode>renderActions</DocsCode> is skipped while a turn is still
-            streaming, so buttons only appear once the answer settles.
+            <DocsCode>renderActions</DocsCode> is a render prop, not a callback:
+            it runs outside the memoized row, with your current closure, and is
+            skipped while a turn is still streaming — so buttons only appear
+            once the answer settles, and never go stale.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<MessageList
-  messages={messages}
-  onEditMessage={editMessage}
-  renderActions={(message) =>
-    message.sender === "assistant" ? (
-      <div className="mb-6 flex gap-1">
-        <button onClick={() => copy(message.content)}>Copy</button>
-        <button onClick={() => retry(message.id)}>Retry</button>
-      </div>
-    ) : null
-  }
-/>`,
+        example: {
+          name: "message-list-actions-example",
+          node: <MessageListActionsExample />,
+        },
+      },
+      {
+        title: "Streaming a turn in",
+        description: (
+          <>
+            Pass <DocsCode>isGenerating</DocsCode> and grow the last
+            message&apos;s <DocsCode>content</DocsCode>. Until the first token
+            lands the list shows the generation dot where the answer will
+            appear, and it keeps itself pinned to the bottom unless the reader
+            scrolls away.
+          </>
+        ),
+        example: {
+          name: "message-list-streaming-example",
+          node: <MessageListStreamingExample />,
         },
       },
       {
         title: "Wider measure and an empty state",
-        code: {
-          lang: "tsx",
-          code: `<MessageList
-  className="px-8 [&>div]:max-w-4xl"
-  messages={messages}
-  emptyState={
-    <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-      Ask your first question.
-    </div>
-  }
-/>`,
+        description: (
+          <>
+            <DocsCode>emptyState</DocsCode> replaces the whole column while
+            there are no messages. The measure lives on the list&apos;s inner
+            wrapper, so <DocsCode>[&amp;&gt;div]</DocsCode> widens it past the
+            default <DocsCode>max-w-3xl</DocsCode>.
+          </>
+        ),
+        example: {
+          name: "message-list-empty-example",
+          node: <MessageListEmptyExample />,
         },
       },
     ],
@@ -557,7 +540,6 @@ export function Answer() {
             description:
               "Keep the stack expanded once the turn settles, instead of collapsing it.",
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
       {
@@ -587,7 +569,6 @@ export function Answer() {
             type: "number",
             description: 'Seconds — "Thought for N seconds".',
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
       {
@@ -652,7 +633,6 @@ export function Answer() {
               </>
             ),
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
       {
@@ -671,120 +651,37 @@ export function Answer() {
               </>
             ),
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
     ],
     dataSlots: [
-      {
-        slot: "message-process",
-        description: (
-          <>
-            The “Worked for 12s” group around a settled turn&apos;s thinking and
-            tool stack. Carries <DocsCode>data-state</DocsCode> —{" "}
-            <DocsCode>open</DocsCode> or <DocsCode>closed</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "message-process-trigger",
-        description:
-          "The labelled row. Absent while the turn is still streaming.",
-      },
-      {
-        slot: "message-process-content",
-        description: "The stack the group folds away.",
-      },
-      { slot: "message-reasoning", description: "Reasoning disclosure." },
-      {
-        slot: "message-reasoning-trigger",
-        description: '"Thought for N seconds" row.',
-      },
-      {
-        slot: "message-reasoning-content",
-        description: "The thought body.",
-      },
-      {
-        slot: "message-tool-call",
-        description: (
-          <>
-            One tool row. Carries <DocsCode>data-status</DocsCode> —{" "}
-            <DocsCode>pending</DocsCode>, <DocsCode>running</DocsCode>,{" "}
-            <DocsCode>done</DocsCode>, <DocsCode>error</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "message-tool-call-trigger",
-        description: "The headline button of one row.",
-      },
-      {
-        slot: "message-tool-call-body",
-        description: "Expanded body — diff, file, summary, or raw payload.",
-      },
-      { slot: "message-tool-calls", description: "The stack of rows." },
-      {
-        slot: "message-tool-calls-trigger",
-        description: '"Used N tools" summary row.',
-      },
-      { slot: "message-tool-list", description: "The rows inside the stack." },
-      {
-        slot: "message-tool-stats",
-        description: "The +/- counts on an Edit / Write headline.",
-      },
-      {
-        slot: "ask-question",
-        description:
-          "Questionnaire card rendered in place of an unanswered Ask Question tool row.",
-      },
-      {
-        slot: "message-tool-diff",
-        description:
-          "Unified diff body inside an Edit / Write / ApplyPatch row.",
-      },
-      {
-        slot: "message-tool-diff-line",
-        description: (
-          <>
-            One diff line, tagged <DocsCode>data-type</DocsCode> —{" "}
-            <DocsCode>add</DocsCode>, <DocsCode>remove</DocsCode>,{" "}
-            <DocsCode>context</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "message-tool-file",
-        description:
-          "Read-file body — line gutter and syntax highlight, same chrome as the diff.",
-      },
-      { slot: "message-tool-file-line", description: "One read-file line." },
-      {
-        slot: "message-tool-show-all",
-        description:
-          "Reveals the rest of a diff or file body past the 300-line preview cap.",
-      },
-      { slot: "message-code", description: "Code card." },
-      { slot: "message-code-header", description: "Language chip + copy row." },
-      {
-        slot: "message-code-copy",
-        description: (
-          <>
-            Copy button. Flips <DocsCode>data-state</DocsCode> to{" "}
-            <DocsCode>copied</DocsCode> for a moment.
-          </>
-        ),
-      },
-      { slot: "message-artifact", description: "Artifact card." },
-      {
-        slot: "message-artifact-trigger",
-        description: "Artifact header button.",
-      },
-      {
-        slot: "message-artifact-content",
-        description: "Inline artifact preview.",
-      },
+      "message-process",
+      "message-process-trigger",
+      "message-process-content",
+      "message-reasoning",
+      "message-reasoning-trigger",
+      "message-reasoning-content",
+      "message-tool-call",
+      "message-tool-call-trigger",
+      "message-tool-call-body",
+      "message-tool-calls",
+      "message-tool-calls-trigger",
+      "message-tool-list",
+      "message-tool-stats",
+      "ask-question",
+      "message-tool-diff",
+      "message-tool-diff-line",
+      "message-tool-file",
+      "message-tool-file-line",
+      "message-tool-show-all",
+      "message-code",
+      "message-code-header",
+      "message-code-copy",
+      "message-artifact",
+      "message-artifact-trigger",
+      "message-artifact-content",
     ],
-    customization: [
+    examples: [
       {
         title: "Collapse a finished turn",
         description: (
@@ -810,35 +707,29 @@ export function Answer() {
         title: "Style by tool status",
         description: (
           <>
-            Every row exposes its status as a data attribute, so error and
-            running states can be themed without touching the component.
+            Every row stamps <DocsCode>data-status</DocsCode>, so failures and
+            running states are themed from an ancestor without the component
+            knowing your palette.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<div
-  className="[&_[data-slot=message-tool-call][data-status=error]]:text-destructive
-             [&_[data-slot=message-tool-call][data-status=running]]:opacity-70"
->
-  <MessageToolCalls tools={tools} />
-</div>`,
+        example: {
+          name: "message-tools-status-example",
+          node: <MessageToolsStatusExample />,
         },
       },
       {
-        title: "Keep every row expanded",
+        title: "Collapse thresholds",
         description: (
           <>
-            Rows collapse by default and the stack folds at three. Both are
-            props.
+            A stack folds behind one summary line once it reaches{" "}
+            <DocsCode>collapseAt</DocsCode> rows (three by default), and{" "}
+            <DocsCode>defaultOpen</DocsCode> decides how it starts. Both stacks
+            below hold the same six calls.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<MessageToolCalls tools={tools} collapseAt={Infinity} defaultOpen />
-
-{tools.map((tool) => (
-  <MessageToolCall key={tool.id} tool={tool} defaultOpen />
-))}`,
+        example: {
+          name: "message-tools-collapsed-example",
+          node: <MessageToolsCollapsedExample />,
         },
       },
     ],
@@ -1000,7 +891,6 @@ export function Clarify() {
             default: '"Continue"',
             description: "Label on the primary action.",
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
       {
@@ -1025,71 +915,41 @@ export function Clarify() {
             default: "false",
             description: "Match the AskQuestion setting so labels resolve.",
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
     ],
     dataSlots: [
-      { slot: "ask-question", description: "The questionnaire card." },
-      { slot: "ask-question-trigger", description: "Collapsible header row." },
-      { slot: "ask-question-form", description: "The form body." },
-      { slot: "ask-question-item", description: "One question fieldset." },
-      { slot: "ask-question-prompt", description: "The question legend." },
-      {
-        slot: "ask-question-group",
-        description: (
-          <>
-            The <DocsCode>radiogroup</DocsCode> (or checkbox{" "}
-            <DocsCode>group</DocsCode>) wrapping one question&apos;s options.
-          </>
-        ),
-      },
-      {
-        slot: "ask-question-option",
-        description: (
-          <>
-            One option button. Carries <DocsCode>data-selected</DocsCode> and{" "}
-            <DocsCode>data-state</DocsCode> —{" "}
-            <DocsCode>checked</DocsCode>/<DocsCode>unchecked</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "ask-question-indicator",
-        description: "The radio dot or checkbox tick.",
-      },
-      { slot: "ask-question-other", description: "The Other… text field." },
-      { slot: "ask-question-actions", description: "The button row." },
-      { slot: "ask-question-skip", description: "Skip button." },
-      { slot: "ask-question-submit", description: "Continue button." },
-      {
-        slot: "ask-question-summary",
-        description: (
-          <>
-            Read-only recap after Skip or Continue.{" "}
-            <DocsCode>data-state</DocsCode> is{" "}
-            <DocsCode>answered</DocsCode> or <DocsCode>skipped</DocsCode>.
-          </>
-        ),
-      },
+      "ask-question",
+      "ask-question-trigger",
+      "ask-question-form",
+      "ask-question-item",
+      "ask-question-prompt",
+      "ask-question-group",
+      "ask-question-option",
+      "ask-question-indicator",
+      "ask-question-other",
+      "ask-question-actions",
+      "ask-question-skip",
+      "ask-question-submit",
+      "ask-question-summary",
     ],
-    customization: [
+    examples: [
       {
         title: "Restyle the selected option",
         description: (
           <>
-            Every option stamps its own state, so a wrapper can theme selection
-            without forking the component.
+            Selected options carry{" "}
+            <DocsCode>data-state=&quot;checked&quot;</DocsCode>, and the card,
+            the submit button, and every fieldset have their own slots — so the
+            questionnaire wears your accent without a fork.{" "}
+            <DocsCode>hideOther</DocsCode> drops the free-text field,{" "}
+            <DocsCode>skipLabel</DocsCode> and{" "}
+            <DocsCode>submitLabel</DocsCode> rename the buttons.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<div
-  className="[&_[data-slot=ask-question-option][data-selected=true]]:bg-primary/10
-             [&_[data-slot=ask-question-submit]]:rounded-full"
->
-  <AskQuestion questions={questions} onSubmit={save} />
-</div>`,
+        example: {
+          name: "ask-question-styled-example",
+          node: <AskQuestionStyledExample />,
         },
       },
       {
@@ -1194,18 +1054,13 @@ export function Answer({ text }: { text: string }) {
             description:
               "Inline replacements applied to paragraph and list-item text.",
           },
-          {
-            name: "className",
-            type: "string",
-            description: "Merged onto the Streamdown root.",
-          },
         ],
       },
     ],
     dataSlots: [
-      { slot: "message-markdown", description: "Wrapper around Streamdown." },
+      "message-markdown",
     ],
-    customization: [
+    examples: [
       {
         title: "Mermaid and math",
         description: (
@@ -1213,38 +1068,27 @@ export function Answer({ text }: { text: string }) {
             Both plugins are wired up already: fence a diagram as{" "}
             <DocsCode>mermaid</DocsCode> and write math with{" "}
             <DocsCode>$…$</DocsCode> or <DocsCode>$$…$$</DocsCode>. The Mermaid
-            theme follows the resolved next-themes value.
+            theme follows the resolved next-themes value, so a diagram flips
+            with the page.
           </>
         ),
-        code: {
-          lang: "md",
-          code: `\`\`\`mermaid
-flowchart LR
-  A[Prompt] --> B{Tool needed?}
-  B -- yes --> C[Run tool]
-  B -- no --> D[Answer]
-\`\`\`
-
-Inline $O(n \\log n)$ and a display block:
-
-$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
+        example: {
+          name: "message-markdown-mermaid-example",
+          node: <MessageMarkdownMermaidExample />,
         },
       },
       {
         title: "Restyle the prose",
         description: (
           <>
-            Output is scoped under the <DocsCode>lc-markdown</DocsCode> class
-            defined in <DocsCode>message-markdown.css</DocsCode>. Edit that file
-            for global changes, or pass{" "}
-            <DocsCode>className</DocsCode> for one-off overrides.
+            The wrapper carries <DocsCode>data-slot=&quot;message-markdown&quot;</DocsCode>{" "}
+            and everything inside it is ordinary HTML, so element selectors from
+            an ancestor retune the measure, the headings, and the quotes.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<MessageMarkdown className="[&_pre]:rounded-xl [&_table]:text-[13px]">
-  {text}
-</MessageMarkdown>`,
+        example: {
+          name: "message-markdown-styled-example",
+          node: <MessageMarkdownStyledExample />,
         },
       },
     ],
@@ -1332,7 +1176,6 @@ export function AfterTurn() {
             default: "4",
             description: "How many rows to show before “Show N more”.",
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
       {
@@ -1344,49 +1187,22 @@ export function AfterTurn() {
             required: true,
             description: "Elapsed time for the finished turn.",
           },
-          { name: "className", type: "string", description: "Merged last." },
         ],
       },
     ],
     dataSlots: [
-      {
-        slot: "change-summary",
-        description: (
-          <>
-            The card. <DocsCode>data-state</DocsCode> is{" "}
-            <DocsCode>collapsed</DocsCode> while rows are still hidden.
-          </>
-        ),
-      },
-      { slot: "change-summary-header", description: "Title + Review." },
-      {
-        slot: "change-summary-action",
-        description: "The Review button, or its plain-text stand-in.",
-      },
-      { slot: "change-summary-list", description: "Visible file rows." },
-      {
-        slot: "change-summary-rest",
-        description: "Rows revealed by “Show N more”.",
-      },
-      {
-        slot: "change-summary-file",
-        description: (
-          <>
-            One file row, tagged <DocsCode>data-kind</DocsCode> —{" "}
-            <DocsCode>code</DocsCode>, <DocsCode>style</DocsCode>,{" "}
-            <DocsCode>data</DocsCode>, <DocsCode>text</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "change-summary-file-icon",
-        description: "The per-kind glyph on a row.",
-      },
-      { slot: "change-summary-stats", description: "The +/- counts on a row." },
-      { slot: "change-summary-more", description: "Show N more / Show less." },
-      { slot: "worked-for", description: "The elapsed-time badge." },
+      "change-summary",
+      "change-summary-header",
+      "change-summary-action",
+      "change-summary-list",
+      "change-summary-rest",
+      "change-summary-file",
+      "change-summary-file-icon",
+      "change-summary-stats",
+      "change-summary-more",
+      "worked-for",
     ],
-    customization: [
+    examples: [
       {
         title: "Derive files from tools",
         description: (
@@ -1406,22 +1222,19 @@ export function AfterTurn() {
         },
       },
       {
-        title: "Colour the file kinds",
+        title: "Preview count and styling",
         description: (
           <>
-            Rows ship on theme tokens so the card survives a re-themed
-            light/dark pair — the kind reads from the icon. Each row still
-            tags itself with <DocsCode>data-kind</DocsCode>, so opt into colour
-            from the outside when you want it.
+            <DocsCode>previewCount</DocsCode> decides how many rows show before
+            the &ldquo;Show N more&rdquo; toggle, and{" "}
+            <DocsCode>onAction</DocsCode> turns the header label into a button.
+            Rows, stats, and the header each have a slot, so the card can go
+            monospace or take a tint without a fork.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<ChangeSummary
-  files={files}
-  className="[&_[data-kind=code]_svg]:text-primary
-             [&_[data-kind=style]_svg]:text-muted-foreground/70"
-/>`,
+        example: {
+          name: "change-summary-styled-example",
+          node: <ChangeSummaryStyledExample />,
         },
       },
     ],
@@ -1490,68 +1303,29 @@ export function Pending({ busy }: { busy: boolean }) {
             description:
               "Indicator box size in pixels; the dot fills half of it.",
           },
-          {
-            name: "className",
-            type: "string",
-            description: "Merged onto the inline wrapper.",
-          },
-          {
-            name: "...props",
-            type: 'React.ComponentProps<"span">',
-            description: "Everything else lands on the wrapper.",
-          },
         ],
       },
     ],
     dataSlots: [
-      {
-        slot: "generation-status",
-        description: (
-          <>
-            Wrapper. Carries <DocsCode>data-stage</DocsCode> and is announced
-            with <DocsCode>aria-live=&quot;polite&quot;</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "generation-status-spinner",
-        description: "The dot's box — size it, recolor it, or replace the dot.",
-      },
-      {
-        slot: "generation-status-label",
-        description: "The stage label, when there is one.",
-      },
+      "generation-status",
+      "generation-status-spinner",
+      "generation-status-label",
     ],
-    customization: [
+    examples: [
       {
-        title: "Recolor and resize",
-        code: {
-          lang: "tsx",
-          code: `<GenerationStatus
-  active
-  size={20}
-  label="Compiling registry"
-  className="text-primary [&_[data-slot=generation-status-spinner]]:text-primary"
-/>`,
-        },
-      },
-      {
-        title: "Hold it still",
+        title: "Recolor, resize, hold it still",
         description: (
           <>
-            The pulse is a CSS animation behind{" "}
-            <DocsCode>motion-safe</DocsCode>, so it is already off for readers
-            with reduced motion — no timer, no frame state, nothing to clean
-            up. Drop it for everyone by overriding the animation.
+            <DocsCode>size</DocsCode> scales the box and the dot together, and
+            the wrapper and the dot each carry a slot. The pulse is a CSS
+            animation behind <DocsCode>motion-safe</DocsCode>, so it is already
+            off for readers who asked for less motion — no timer, no frame
+            state; drop it for everyone by overriding the animation.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<GenerationStatus
-  active
-  label="Thinking"
-  className="[&_*]:animate-none"
-/>`,
+        example: {
+          name: "generation-status-styled-example",
+          node: <GenerationStatusStyledExample />,
         },
       },
     ],

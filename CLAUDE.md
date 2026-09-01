@@ -21,10 +21,13 @@ promise backward compatibility) but must be propagated to agent-ui in the same e
 A component change is not done until all of these are true:
 
 1. `components/ui/<component>.tsx` follows the idiom below.
-2. Its docs entry in `components/docs/component-docs/*` is accurate: props table, data-slots
-   list, usage snippet, customization note for anything new.
-3. Its example(s) in `components/examples/` compile and demonstrate the change when it's
-   user-visible.
+2. Its docs entry in `components/docs/component-docs/*` is accurate: usage snippet, an
+   `examples` block for anything user-visible, a props table that lists only props worth
+   documenting (no `...props` filler, no `className` row that just says "merged last"), and
+   the `dataSlots` name list.
+3. Its example(s) in `components/examples/` compile and demonstrate the change. Prefer a live
+   `example` over a `code` snippet — reach for `code` only when the change is a source edit or
+   an integration the docs site cannot run.
 4. `registry.json` is accurate (dependencies, registryDependencies, description) and
    `npm run registry:build` has regenerated `public/r/*.json`.
 5. `npm run lint`, `npm run typecheck`, `npm run build` pass.

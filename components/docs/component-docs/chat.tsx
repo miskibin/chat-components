@@ -5,8 +5,11 @@ import { ChatInputCustomButtonExample } from "@/components/examples/chat-input-c
 import { ChatInputExample } from "@/components/examples/chat-input-example"
 import { ChatInputStyledExample } from "@/components/examples/chat-input-styled-example"
 import { ChatInputToolsExample } from "@/components/examples/chat-input-tools-example"
+import { ChatInputGeneratingExample } from "@/components/examples/chat-input-generating-example"
 import { ChatNavbarExample } from "@/components/examples/chat-navbar-example"
+import { ChatNavbarStyledExample } from "@/components/examples/chat-navbar-styled-example"
 import { PromptSuggestionsExample } from "@/components/examples/prompt-suggestions-example"
+import { PromptSuggestionsStyledExample } from "@/components/examples/prompt-suggestions-styled-example"
 
 export const chatDocs = {
   chat: {
@@ -62,26 +65,15 @@ export default function Page() {
             description:
               "Merged last onto the flex column. The block fills its parent, so give that parent a height.",
           },
-          {
-            name: "...props",
-            type: 'React.ComponentProps<"div">',
-            description: "Everything else lands on the root element.",
-          },
         ],
       },
     ],
     dataSlots: [
-      { slot: "chat", description: "Root flex column." },
-      {
-        slot: "chat-greeting",
-        description: "Greeting wrapper — only mounted while the chat is empty.",
-      },
-      {
-        slot: "chat-composer",
-        description: "Wraps the composer and, when empty, the suggestion list.",
-      },
+      "chat",
+      "chat-greeting",
+      "chat-composer",
     ],
-    customization: [
+    examples: [
       {
         title: "Own the opening",
         description: (
@@ -296,30 +288,28 @@ export function Composer() {
       },
     ],
     dataSlots: [
-      { slot: "chat-input", description: "Outer wrapper that owns the width." },
+      "chat-input",
+      "chat-input-surface",
+      "chat-input-textarea",
+      "chat-input-toolbar",
+      "chat-input-chips",
+      "chat-input-slash-menu",
+    ],
+    examples: [
       {
-        slot: "chat-input-surface",
+        title: "Stop a streaming answer",
         description: (
           <>
-            The bordered composer card —{" "}
-            <DocsCode>rounded-2xl</DocsCode>, a hairline border, and a{" "}
-            <DocsCode>border-ring</DocsCode> shift on focus instead of a ring.
-            Carries <DocsCode>data-drag-over</DocsCode> while files hover it.
+            <DocsCode>isGenerating</DocsCode> swaps send for stop and locks the
+            textarea; <DocsCode>onStop</DocsCode> is where you abort the
+            request. Send something below, then hit stop.
           </>
         ),
+        example: {
+          name: "chat-input-generating-example",
+          node: <ChatInputGeneratingExample />,
+        },
       },
-      { slot: "chat-input-textarea", description: "The textarea itself." },
-      { slot: "chat-input-toolbar", description: "Attach + tools + send row." },
-      {
-        slot: "chat-input-chips",
-        description: "Attachment and skill chip strip.",
-      },
-      {
-        slot: "chat-input-slash-menu",
-        description: "Popover listing skills and commands.",
-      },
-    ],
-    customization: [
       {
         title: "Add pickers to the toolbar",
         description: (
@@ -435,38 +425,28 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
               </>
             ),
           },
-          {
-            name: "...props",
-            type: 'React.ComponentProps<"ul">',
-            description: "Everything else lands on the list element.",
-          },
         ],
       },
     ],
     dataSlots: [
-      { slot: "prompt-suggestions", description: "The list element." },
-      { slot: "prompt-suggestion", description: "Each row button." },
+      "prompt-suggestions",
+      "prompt-suggestion",
     ],
-    customization: [
+    examples: [
       {
-        title: "Icons and width",
+        title: "Icons, width, and chips",
         description: (
           <>
             <DocsCode>icon</DocsCode> takes any node; unsized icons are
             normalized to <DocsCode>size-4</DocsCode> and pick up the row hover
-            color. Match the composer by narrowing the list.
+            color. The list is a plain <DocsCode>ul</DocsCode>, so narrowing it
+            to the composer&apos;s measure — or turning the rows into a chip row
+            — is one <DocsCode>className</DocsCode>.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<PromptSuggestions
-  className="max-w-2xl px-0 sm:px-0"
-  items={[
-    { id: "explain", label: "Explain this repository", icon: <FileText /> },
-    { id: "bug", label: "Find the bug in my reducer", icon: <Bug /> },
-  ]}
-  onSelect={(item) => send(item.label)}
-/>`,
+        example: {
+          name: "prompt-suggestions-styled-example",
+          node: <PromptSuggestionsStyledExample />,
         },
       },
     ],
@@ -528,36 +508,28 @@ export function Header({ title }: { title: string }) {
               </>
             ),
           },
-          {
-            name: "...props",
-            type: 'React.ComponentProps<"header">',
-            description: "Everything else lands on the header element.",
-          },
         ],
       },
     ],
     dataSlots: [
-      { slot: "chat-navbar", description: "The header element." },
-      { slot: "chat-navbar-left", description: "Left group, including title." },
-      { slot: "chat-navbar-title", description: "Title, when it is a string." },
-      { slot: "chat-navbar-right", description: "Right action group." },
+      "chat-navbar",
+      "chat-navbar-left",
+      "chat-navbar-title",
+      "chat-navbar-right",
     ],
-    customization: [
+    examples: [
       {
-        title: "Taller, transparent bar",
+        title: "Taller, quieter, or compact",
         description: (
           <>
             Layout classes merge last, so height, background, and border are all
-            replaceable from the call site.
+            replaceable from the call site — and the title has its own slot when
+            you need a different type scale.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<ChatNavbar
-  className="h-14 border-b-0 bg-transparent px-6 [&_[data-slot=chat-navbar-title]]:text-[15px]"
-  title="Streaming markdown bugs"
-  right={<ThemeToggle floating={false} />}
-/>`,
+        example: {
+          name: "chat-navbar-styled-example",
+          node: <ChatNavbarStyledExample />,
         },
       },
     ],

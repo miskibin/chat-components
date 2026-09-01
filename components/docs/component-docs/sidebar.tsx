@@ -2,9 +2,12 @@ import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { SidebarExample } from "@/components/examples/sidebar-example"
 import { SidebarItemExample } from "@/components/examples/sidebar-item-example"
+import { SidebarItemMenuExample } from "@/components/examples/sidebar-item-menu-example"
+import { SidebarItemStatusExample } from "@/components/examples/sidebar-item-status-example"
 import { SidebarMobileExample } from "@/components/examples/sidebar-mobile-example"
 import { SidebarReorderExample } from "@/components/examples/sidebar-reorder-example"
 import { SidebarRichExample } from "@/components/examples/sidebar-rich-example"
+import { SidebarStyledExample } from "@/components/examples/sidebar-styled-example"
 import { SidebarZonesExample } from "@/components/examples/sidebar-zones-example"
 
 export const sidebarDocs = {
@@ -144,11 +147,6 @@ export function Nav() {
             default: '"Open sidebar"',
             description: "Accessible label for the rail button.",
           },
-          {
-            name: "className",
-            type: "string",
-            description: "Merged onto the root element.",
-          },
         ],
       },
       {
@@ -205,30 +203,16 @@ export function Nav() {
       },
     ],
     dataSlots: [
-      {
-        slot: "chat-sidebar",
-        description: (
-          <>
-            Root. Carries <DocsCode>data-collapsed</DocsCode>.
-          </>
-        ),
-      },
-      { slot: "chat-sidebar-rail", description: "Collapsed icon rail." },
-      { slot: "chat-sidebar-panel", description: "Expanded panel." },
-      { slot: "chat-sidebar-header", description: "Brand row." },
-      { slot: "chat-sidebar-nav", description: "Sticky nav rows." },
-      { slot: "chat-sidebar-content", description: "Scrollable body." },
-      { slot: "chat-sidebar-footer", description: "Footer region." },
-      {
-        slot: "sidebar-section",
-        description: (
-          <>
-            Collapsible section. Carries <DocsCode>data-state</DocsCode>.
-          </>
-        ),
-      },
+      "chat-sidebar",
+      "chat-sidebar-rail",
+      "chat-sidebar-panel",
+      "chat-sidebar-header",
+      "chat-sidebar-nav",
+      "chat-sidebar-content",
+      "chat-sidebar-footer",
+      "sidebar-section",
     ],
-    customization: [
+    examples: [
       {
         title: "One import surface",
         description: (
@@ -272,25 +256,17 @@ export function Nav() {
         description: (
           <>
             Widths are numbers because the root animates{" "}
-            <DocsCode>width</DocsCode> between them.{" "}
-            <DocsCode>classNames</DocsCode> reaches each region without
-            selectors.
+            <DocsCode>width</DocsCode> between them, so the collapsed rail and
+            the expanded panel are both yours to size.{" "}
+            <DocsCode>classNames</DocsCode> reaches each region — rail, panel,
+            header, nav, content, footer — without a single descendant selector.
+            Collapse it below to see both widths.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<ChatSidebar
-  collapsed={collapsed}
-  onCollapsedChange={setCollapsed}
-  widthExpanded={320}
-  widthCollapsed={52}
-  className="border-r-0 bg-background"
-  classNames={{
-    header: "border-b-0 pt-4",
-    content: "px-3",
-    footer: "bg-muted/40",
-  }}
-/>`,
+        example: {
+          name: "sidebar-styled-example",
+          node: <SidebarStyledExample />,
+          align: "stretch" as const,
         },
       },
       {
@@ -581,105 +557,45 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
       },
     ],
     dataSlots: [
-      {
-        slot: "sidebar-item",
-        description: (
-          <>
-            Row wrapper. Carries <DocsCode>data-active</DocsCode>,{" "}
-            <DocsCode>data-pinned</DocsCode>, and{" "}
-            <DocsCode>data-dragging</DocsCode>.
-          </>
-        ),
-      },
-      { slot: "sidebar-item-button", description: "The clickable row." },
-      { slot: "sidebar-item-input", description: "The rename input." },
-      {
-        slot: "sidebar-item-subtitle",
-        description: "The muted second line, when the item has a subtitle.",
-      },
-      {
-        slot: "sidebar-item-meta",
-        description: "The trailing node on the title line.",
-      },
-      {
-        slot: "sidebar-item-badge",
-        description: (
-          <>
-            The folder + branch line, with{" "}
-            <DocsCode>sidebar-item-badge-folder</DocsCode> and{" "}
-            <DocsCode>sidebar-item-badge-branch</DocsCode> inside it.
-          </>
-        ),
-      },
-      {
-        slot: "sidebar-item-status",
-        description: (
-          <>
-            Status dot. Carries <DocsCode>data-status</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "sidebar-item-list",
-        description: (
-          <>
-            The list. Carries <DocsCode>data-list-id</DocsCode>.
-          </>
-        ),
-      },
+      "sidebar-item",
+      "sidebar-item-button",
+      "sidebar-item-input",
+      "sidebar-item-subtitle",
+      "sidebar-item-meta",
+      "sidebar-item-badge",
+      "sidebar-item-status",
+      "sidebar-item-list",
     ],
-    customization: [
+    examples: [
       {
         title: "Extra context-menu entries",
         description: (
           <>
             <DocsCode>getMenuActions</DocsCode> entries render above the
-            built-in rename / pin / delete group.
+            built-in rename / pin / delete group, and{" "}
+            <DocsCode>separatorBefore</DocsCode> starts a new one. Right-click
+            any row.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<ChatSidebarItemList
-  items={items}
-  onDelete={remove}
-  getMenuActions={(item) => [
-    {
-      id: "duplicate",
-      label: "Duplicate",
-      icon: <Copy className="size-3.5" />,
-      onSelect: () => duplicate(item.id),
-    },
-    {
-      id: "export",
-      label: "Export as JSON",
-      icon: <Download className="size-3.5" />,
-      onSelect: () => exportChat(item.id),
-      separatorBefore: true,
-    },
-  ]}
-/>`,
+        example: {
+          name: "sidebar-item-menu-example",
+          node: <SidebarItemMenuExample />,
         },
       },
       {
         title: "Status dots and custom leading nodes",
         description: (
           <>
-            <DocsCode>status</DocsCode> covers the common states;{" "}
-            <DocsCode>leading</DocsCode> replaces the dot entirely when you need
-            an avatar or a project glyph.
+            <DocsCode>status</DocsCode> covers the common agent states;{" "}
+            <DocsCode>leading</DocsCode> replaces the dot outright when a row
+            needs an avatar or a project glyph.{" "}
+            <DocsCode>SidebarItemStatusDot</DocsCode> is exported on its own, so
+            a legend renders from the same component the rows use.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `const items: ChatSidebarItemData[] = [
-  { id: "1", title: "Release checklist", pinned: true },
-  { id: "2", title: "Streaming bugs", status: "streaming" },
-  { id: "3", title: "Retry tool call", status: "fault" },
-  { id: "4", title: "Design review", leading: <Avatar className="size-3.5" /> },
-]
-
-// The dot on its own, e.g. in a legend:
-<SidebarItemStatusDot status="fault" className="size-1.5" />`,
+        example: {
+          name: "sidebar-item-status-example",
+          node: <SidebarItemStatusExample />,
         },
       },
       {
@@ -989,7 +905,7 @@ export function Nav() {
         ],
       },
     ],
-    customization: [
+    examples: [
       {
         title: "Narrow the drop union",
         description: (
@@ -1185,26 +1101,10 @@ export function ArchiveZone() {
       },
     ],
     dataSlots: [
-      {
-        slot: "sidebar-drop-zone",
-        description: (
-          <>
-            Inline zone. Carries <DocsCode>data-over</DocsCode> and{" "}
-            <DocsCode>data-visible</DocsCode>.
-          </>
-        ),
-      },
-      {
-        slot: "sidebar-edge-drop-zone",
-        description: (
-          <>
-            Edge zone. Carries <DocsCode>data-over</DocsCode> and{" "}
-            <DocsCode>data-edge</DocsCode>.
-          </>
-        ),
-      },
+      "sidebar-drop-zone",
+      "sidebar-edge-drop-zone",
     ],
-    customization: [
+    examples: [
       {
         title: "Edge zones without lifting a finger",
         description: (
