@@ -3,6 +3,7 @@ import { DocsCode } from "@/components/docs/typography"
 import { AskQuestionExample } from "@/components/examples/ask-question-example"
 import { AskQuestionToolExample } from "@/components/examples/ask-question-tool-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
+import { FilePreviewExample } from "@/components/examples/file-preview-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { MessageExample } from "@/components/examples/message-example"
 import { MessageListExample } from "@/components/examples/message-list-example"
@@ -162,6 +163,23 @@ export function Turn() {
             name: "onReviewChanges",
             type: "() => void",
             description: "Makes the Review label on the change card a button.",
+          },
+          {
+            name: "onOpenFile",
+            type: "(tool: MessageToolCallData) => void",
+            description: (
+              <>
+                Forwarded to every tool row: Edit / Write / Read headlines that
+                name a file become buttons that open it — pair it with{" "}
+                <DocsCode>FilePreview</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "onChangeFileClick",
+            type: "(file: ChangeSummaryFile) => void",
+            description:
+              "Makes each row of the turn's change-summary card clickable.",
           },
           {
             name: "isAnimating",
@@ -330,6 +348,29 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
               "Fired when an Ask Question tool is submitted or skipped. Hide the composer send-as-skip yourself if you want Cursor's extra-details behavior.",
           },
           {
+            name: "onReviewChanges",
+            type: "(messageId: string) => void",
+            description:
+              "Makes the Review label on a turn's change card a button.",
+          },
+          {
+            name: "onOpenFile",
+            type: "(messageId: string, tool: MessageToolCallData) => void",
+            description: (
+              <>
+                Fired when an Edit / Write / Read headline is clicked. Pair it
+                with <DocsCode>filePreviewFromTool</DocsCode> and{" "}
+                <DocsCode>FilePreview</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "onChangeFileClick",
+            type: "(messageId: string, file: ChangeSummaryFile) => void",
+            description:
+              "Fired when a row of a turn's change-summary card is clicked.",
+          },
+          {
             name: "renderActions",
             type: "(message: ChatMessageData) => React.ReactNode",
             description:
@@ -391,8 +432,10 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         description: (
           <>
             Rows are memoized and the event callbacks you pass —{" "}
-            <DocsCode>onEditMessage</DocsCode> and{" "}
-            <DocsCode>onAskAnswer</DocsCode> — are held at one identity
+            <DocsCode>onEditMessage</DocsCode>,{" "}
+            <DocsCode>onAskAnswer</DocsCode>, <DocsCode>onOpenFile</DocsCode>,{" "}
+            <DocsCode>onChangeFileClick</DocsCode> and{" "}
+            <DocsCode>onReviewChanges</DocsCode> — are held at one identity
             internally, so a parent that re-renders on each streamed token only
             reaches the row whose message object actually changed. Keep the
             message objects themselves stable (patch the streaming turn, map the
@@ -547,6 +590,18 @@ export function Answer() {
               "Ask Question tools only. Continue and Skip both fire this — check result.skipped. The row reports its own id, so one handler can serve a whole turn without breaking memoization.",
           },
           {
+            name: "onOpenFile",
+            type: "(tool: MessageToolCallData) => void",
+            description: (
+              <>
+                Opt in to a clickable headline: an Edit / Write / Read row that
+                names a file splits into an open-file button plus a separate
+                chevron for the inline body. Without it the header stays one
+                disclosure, exactly as before.
+              </>
+            ),
+          },
+          {
             name: "collapseAt",
             type: "number",
             default: "3",
@@ -619,7 +674,23 @@ export function Answer() {
       },
       {
         slot: "message-tool-call-trigger",
-        description: "The headline button of one row.",
+        description: (
+          <>
+            The headline button of one row. With{" "}
+            <DocsCode>onOpenFile</DocsCode> it opens the file instead of the
+            body and carries <DocsCode>data-action=&quot;open-file&quot;</DocsCode>.
+          </>
+        ),
+      },
+      {
+        slot: "message-tool-call-header",
+        description:
+          "Wrapper around the headline and the chevron — only rendered for a clickable row.",
+      },
+      {
+        slot: "message-tool-call-chevron",
+        description:
+          "The separate expand/collapse button of a clickable row.",
       },
       {
         slot: "message-tool-call-body",
@@ -1209,6 +1280,17 @@ export function AfterTurn() {
               "Makes the header label a button. Omit it to keep Review as plain text.",
           },
           {
+            name: "onFileClick",
+            type: "(file: ChangeSummaryFile) => void",
+            description: (
+              <>
+                Turns every row into a button — open the file in a{" "}
+                <DocsCode>FilePreview</DocsCode> panel. Rows stay plain text
+                without it.
+              </>
+            ),
+          },
+          {
             name: "previewCount",
             type: "number",
             default: "4",
@@ -1256,7 +1338,9 @@ export function AfterTurn() {
           <>
             One file row, tagged <DocsCode>data-kind</DocsCode> —{" "}
             <DocsCode>code</DocsCode>, <DocsCode>style</DocsCode>,{" "}
-            <DocsCode>data</DocsCode>, <DocsCode>text</DocsCode>.
+            <DocsCode>data</DocsCode>, <DocsCode>text</DocsCode>. With{" "}
+            <DocsCode>onFileClick</DocsCode> it is a button and carries{" "}
+            <DocsCode>data-interactive</DocsCode>.
           </>
         ),
       },
@@ -1316,6 +1400,295 @@ export function AfterTurn() {
             <DocsCode>WorkedFor</DocsCode> (when <DocsCode>workedFor</DocsCode>{" "}
             is set) and this card under the answer. Thinking stays collapsed
             unless the reader opens it.
+          </>
+        ),
+      },
+    ],
+  },
+
+  "file-preview": {
+    title: "File Preview",
+    description:
+      "The right-hand panel Cursor opens when you click an edited file: the agent's diff, or the whole file with the edited lines marked and scrolled into view.",
+    registry: "file-preview",
+    registryDependencies: ["message-parts"],
+    preview: {
+      name: "file-preview-example",
+      node: <FilePreviewExample />,
+      align: "stretch",
+    },
+    usage: `"use client"
+
+import {
+  FilePreview,
+  filePreviewFromTool,
+  type FilePreviewFile,
+} from "@/components/ui/file-preview"
+import { MessageList } from "@/components/ui/message-list"
+
+export function Workspace({ messages }: { messages: ChatMessageData[] }) {
+  const [file, setFile] = useState<FilePreviewFile | null>(null)
+
+  return (
+    <div className="flex h-full min-h-0">
+      <MessageList
+        className="flex-1"
+        messages={messages}
+        onOpenFile={(_messageId, tool) => setFile(filePreviewFromTool(tool))}
+      />
+      {file ? (
+        <FilePreview
+          file={{ ...file, content: readFromDisk(file.path) }}
+          onClose={() => setFile(null)}
+          className="w-[30rem] shrink-0 border-l"
+        />
+      ) : null}
+    </div>
+  )
+}`,
+    props: [
+      {
+        caption: "FilePreview",
+        rows: [
+          {
+            name: "file",
+            type: "FilePreviewFile",
+            required: true,
+            description: "What to show — see the table below.",
+          },
+          {
+            name: "defaultView",
+            type: '"file" | "diff"',
+            description: (
+              <>
+                Defaults to <DocsCode>file</DocsCode> when{" "}
+                <DocsCode>content</DocsCode> is set, otherwise{" "}
+                <DocsCode>diff</DocsCode>. The toggle only appears when both
+                views are possible.
+              </>
+            ),
+          },
+          {
+            name: "onClose",
+            type: "() => void",
+            description:
+              "Renders the close button. While it is set, Escape closes the panel too.",
+          },
+          {
+            name: "classNames",
+            type: "{ root?, header?, body? }",
+            description: "Per-part overrides, merged after the defaults.",
+          },
+          {
+            name: "className",
+            type: "string",
+            description: "Merged onto the panel root.",
+          },
+          {
+            name: "...props",
+            type: 'React.ComponentProps<"div">',
+            description: "Everything else lands on the root.",
+          },
+        ],
+      },
+      {
+        caption: "FilePreviewFile",
+        rows: [
+          {
+            name: "path",
+            type: "string",
+            required: true,
+            description:
+              "Shown in the header — directory muted, basename emphasized — and used as the panel's accessible name.",
+          },
+          {
+            name: "content",
+            type: "string",
+            description: (
+              <>
+                Full post-edit file text. <strong>Your app supplies this</strong>{" "}
+                — a transcript rarely carries the whole file. Without it the
+                panel is diff-only.
+              </>
+            ),
+          },
+          {
+            name: "diff",
+            type: "string",
+            description: (
+              <>
+                Unified diff. <DocsCode>@@</DocsCode> hunks keep their real line
+                numbers, which is what places the highlight in the File view.
+              </>
+            ),
+          },
+          {
+            name: "oldText / newText",
+            type: "string",
+            description:
+              "Before/after pair, used when there is no patch. The changed range is located inside content by matching newText.",
+          },
+          {
+            name: "diffLines",
+            type: "ToolDiffLine[]",
+            description: (
+              <>
+                Already-parsed diff lines (what{" "}
+                <DocsCode>extractToolDiff</DocsCode> returns). Wins over the
+                three fields above — <DocsCode>filePreviewFromTool</DocsCode>{" "}
+                fills it in.
+              </>
+            ),
+          },
+          {
+            name: "added / removed",
+            type: "number",
+            description: "Stat overrides; otherwise counted off the diff.",
+          },
+          {
+            name: "language",
+            type: "string",
+            description: "Falls back to the extension of the path.",
+          },
+          {
+            name: "startLine",
+            type: "number",
+            default: "1",
+            description: "First line number of content, for a partial read.",
+          },
+        ],
+      },
+      {
+        caption: "filePreviewFromTool(tool)",
+        rows: [
+          {
+            name: "tool",
+            type: "MessageToolCallData",
+            required: true,
+            description: (
+              <>
+                Returns a <DocsCode>FilePreviewFile</DocsCode>, or{" "}
+                <DocsCode>null</DocsCode> when the tool names no file. Diff and
+                read body come from the same extractors the inline tool row
+                uses, so the panel shows exactly what the row showed.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      {
+        slot: "file-preview",
+        description: (
+          <>
+            The panel. Carries <DocsCode>data-view</DocsCode> —{" "}
+            <DocsCode>file</DocsCode> or <DocsCode>diff</DocsCode>.
+          </>
+        ),
+      },
+      { slot: "file-preview-header", description: "Path, stats, toggle, close." },
+      { slot: "file-preview-path", description: "Directory + basename." },
+      { slot: "file-preview-stats", description: "The +/- counts." },
+      { slot: "file-preview-view-toggle", description: "File / Diff switch." },
+      { slot: "file-preview-close", description: "The × button." },
+      { slot: "file-preview-body", description: "The scroller — full height." },
+      {
+        slot: "file-preview-line",
+        description: (
+          <>
+            One rendered line, tagged <DocsCode>data-line-type</DocsCode> —{" "}
+            <DocsCode>add</DocsCode>, <DocsCode>remove</DocsCode>,{" "}
+            <DocsCode>context</DocsCode>. File rows also carry{" "}
+            <DocsCode>data-line</DocsCode>.
+          </>
+        ),
+      },
+      { slot: "file-preview-gutter", description: "The line-number column." },
+      {
+        slot: "file-preview-note",
+        description: "Muted message for an empty or unparsable payload.",
+      },
+    ],
+    customization: [
+      {
+        title: "Open it from a message list",
+        description: (
+          <>
+            <DocsCode>MessageList</DocsCode> takes{" "}
+            <DocsCode>onOpenFile</DocsCode> and{" "}
+            <DocsCode>onChangeFileClick</DocsCode>: the first fires from an
+            Edit / Write / Read headline, the second from a row of the
+            change-summary card. Both are bound to the message id for you.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<MessageList
+  messages={messages}
+  onOpenFile={(_messageId, tool) => setFile(filePreviewFromTool(tool))}
+  onChangeFileClick={(_messageId, change) => setFile({ path: change.path })}
+/>`,
+        },
+      },
+      {
+        title: "Dock it beside the conversation",
+        description: (
+          <>
+            The panel fills its parent, so the layout is yours. Mirror the
+            sidebar: an in-flow column on desktop, an overlay below{" "}
+            <DocsCode>md</DocsCode>.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<div
+  className="z-50 h-full shrink-0 overflow-hidden transition-[width] duration-300
+             max-md:absolute max-md:inset-y-0 max-md:right-0 md:relative"
+  style={{ width: file ? "30rem" : 0 }}
+>
+  {file ? <FilePreview file={file} onClose={close} className="border-l" /> : null}
+</div>`,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Where the content comes from",
+        description: (
+          <>
+            A transcript carries the diff, not the file — so the{" "}
+            <DocsCode>File</DocsCode> view only appears once your app puts the
+            post-edit body on <DocsCode>content</DocsCode> (read it from disk,
+            or from whatever the agent streamed as{" "}
+            <DocsCode>streamContent</DocsCode>/<DocsCode>fileText</DocsCode>,
+            which <DocsCode>filePreviewFromTool</DocsCode> picks up). Changed
+            lines are verified against that body before they are highlighted: a
+            diff that does not line up highlights nothing rather than the wrong
+            line.
+          </>
+        ),
+      },
+      {
+        title: "Truncated diffs",
+        description: (
+          <>
+            Agents cut long patches off mid-hunk. Whatever parses is rendered,
+            with a muted note underneath; a patch that yields nothing at all
+            leaves the note alone. Nothing here throws on a malformed payload.
+          </>
+        ),
+      },
+      {
+        title: "Cost",
+        description: (
+          <>
+            One Shiki pass per rendered block (never one per line), rows are
+            memoized, and the parse runs behind{" "}
+            <DocsCode>useDeferredValue</DocsCode> so a streaming file does not
+            re-diff on every chunk. Bodies over ~150k characters skip
+            highlighting and render as plain lines, gutter and highlights
+            intact.
           </>
         ),
       },

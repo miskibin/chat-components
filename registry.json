@@ -182,6 +182,20 @@
       ]
     },
     {
+      "name": "file-preview",
+      "type": "registry:ui",
+      "title": "File Preview",
+      "description": "Side panel that shows an edited file: the agent's unified diff, or the whole file with the edited lines marked and scrolled into view.",
+      "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
+      "registryDependencies": ["miskibin/chat-components/message-parts"],
+      "files": [
+        {
+          "path": "components/ui/file-preview.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "message",
       "type": "registry:ui",
       "title": "Message",

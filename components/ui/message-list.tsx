@@ -49,6 +49,12 @@ export type MessageListProps = React.ComponentProps<"div"> & {
     toolId: string,
     result: AskQuestionResult
   ) => void
+  /** Makes the Review label on a turn's change card a button. */
+  onReviewChanges?: (messageId: string) => void
+  /** Clicking an Edit / Write / Read headline — open it in a file panel. */
+  onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
+  /** Clicking a row of a turn's change-summary card. */
+  onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
   renderActions?: (message: ChatMessageData) => React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -155,6 +161,9 @@ const MessageListRow = React.memo(function MessageListRow({
   patternHandlers,
   onEditMessage,
   onAskAnswer,
+  onReviewChanges,
+  onOpenFile,
+  onChangeFileClick,
 }: {
   message: ChatMessageData
   isStreaming: boolean
@@ -166,6 +175,9 @@ const MessageListRow = React.memo(function MessageListRow({
     toolId: string,
     result: AskQuestionResult
   ) => void
+  onReviewChanges?: (messageId: string) => void
+  onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
+  onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
 }) {
   const isUser = message.sender === "user"
 
@@ -177,6 +189,18 @@ const MessageListRow = React.memo(function MessageListRow({
     (toolId: string, result: AskQuestionResult) =>
       onAskAnswer?.(message.id, toolId, result),
     [message.id, onAskAnswer]
+  )
+  const handleReviewChanges = React.useCallback(
+    () => onReviewChanges?.(message.id),
+    [message.id, onReviewChanges]
+  )
+  const handleOpenFile = React.useCallback(
+    (tool: MessageToolCallData) => onOpenFile?.(message.id, tool),
+    [message.id, onOpenFile]
+  )
+  const handleChangeFileClick = React.useCallback(
+    (file: ChangeSummaryFile) => onChangeFileClick?.(message.id, file),
+    [message.id, onChangeFileClick]
   )
 
   return (
@@ -199,6 +223,9 @@ const MessageListRow = React.memo(function MessageListRow({
       /* Only the row that is actually asking takes a callback, so every other
          memoized Message keeps its render while the turn streams. */
       onAskAnswer={openAsk && onAskAnswer ? handleAskAnswer : undefined}
+      onReviewChanges={onReviewChanges ? handleReviewChanges : undefined}
+      onOpenFile={onOpenFile ? handleOpenFile : undefined}
+      onChangeFileClick={onChangeFileClick ? handleChangeFileClick : undefined}
     />
   )
 })
@@ -210,6 +237,9 @@ export function MessageList({
   patternHandlers = EMPTY_PATTERNS,
   onEditMessage,
   onAskAnswer,
+  onReviewChanges,
+  onOpenFile,
+  onChangeFileClick,
   renderActions,
   emptyState,
   className,
@@ -222,6 +252,9 @@ export function MessageList({
 
   const stableEdit = useStableCallback(onEditMessage)
   const stableAskAnswer = useStableCallback(onAskAnswer)
+  const stableReviewChanges = useStableCallback(onReviewChanges)
+  const stableOpenFile = useStableCallback(onOpenFile)
+  const stableChangeFileClick = useStableCallback(onChangeFileClick)
 
   return (
     <div
@@ -268,6 +301,13 @@ export function MessageList({
                     patternHandlers={patternHandlers}
                     onEditMessage={onEditMessage ? stableEdit : undefined}
                     onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
+                    onReviewChanges={
+                      onReviewChanges ? stableReviewChanges : undefined
+                    }
+                    onOpenFile={onOpenFile ? stableOpenFile : undefined}
+                    onChangeFileClick={
+                      onChangeFileClick ? stableChangeFileClick : undefined
+                    }
                   />
                   {waiting ? (
                     <div className="mb-4">

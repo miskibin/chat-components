@@ -128,7 +128,7 @@ export const MessageReasoning = React.memo(function MessageReasoning({
   )
 })
 
-function parseToolArgs(input?: string): Record<string, unknown> {
+export function parseToolArgs(input?: string): Record<string, unknown> {
   if (!input?.trim()) return {}
   try {
     const value = JSON.parse(input) as unknown
@@ -248,9 +248,9 @@ function toolHeadline(tool: MessageToolCallData) {
   }
 }
 
-type DiffSegment = { text: string; highlight: boolean }
+export type DiffSegment = { text: string; highlight: boolean }
 
-type ToolDiffLine = {
+export type ToolDiffLine = {
   type: "add" | "remove" | "context"
   text: string
   oldLine?: number
@@ -262,7 +262,7 @@ function asRawString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined
 }
 
-function isFileMutationTool(name: string) {
+export function isFileMutationTool(name: string) {
   const kind = name.replace(/\s+/g, "").toLowerCase()
   return (
     kind.includes("write") ||
@@ -291,7 +291,7 @@ function asPositiveInt(value: unknown): number | undefined {
 }
 
 /** Pull file body out of a Read tool's output (`N lines\\n…` or raw text). */
-function extractReadFile(
+export function extractReadFile(
   tool: MessageToolCallData
 ): { content: string; lineCount?: number; startLine: number } | null {
   if (!isReadTool(tool.name) || tool.status === "error") return null
@@ -340,7 +340,7 @@ function wordSegments(
   }
 }
 
-function buildDiffLines(oldText: string, newText: string): ToolDiffLine[] {
+export function buildDiffLines(oldText: string, newText: string): ToolDiffLine[] {
   const changes = diffLines(oldText, newText) as Change[]
   const lines: ToolDiffLine[] = []
   let oldLine = 1
@@ -405,7 +405,7 @@ function looksLikeUnifiedPatch(text: string) {
   return /^(diff --git |--- |\+\+\+ |@@ )/m.test(text)
 }
 
-function parseUnifiedPatch(patch: string): ToolDiffLine[] | null {
+export function parseUnifiedPatch(patch: string): ToolDiffLine[] | null {
   if (!looksLikeUnifiedPatch(patch)) return null
   const lines: ToolDiffLine[] = []
   let oldLine = 0
@@ -474,7 +474,7 @@ function applyWordHighlights(lines: ToolDiffLine[]): ToolDiffLine[] {
 }
 
 /** Build a Cursor-style unified diff from Edit / Write / ApplyPatch tool args. */
-function extractToolDiff(tool: MessageToolCallData): ToolDiffLine[] | null {
+export function extractToolDiff(tool: MessageToolCallData): ToolDiffLine[] | null {
   if (!isFileMutationTool(tool.name)) return null
   const args = parseToolArgs(tool.input)
 
@@ -532,15 +532,18 @@ function formatDiffStats(lines: ToolDiffLine[]) {
  * Added / removed is the one place a raw palette earns its keep — no theme
  * token carries "this line grew". Every pair below ships a dark variant or
  * an alpha blend, so a re-themed app still reads correctly.
+ *
+ * Props spread after `data-slot`, so a host that reuses this outside a tool
+ * row — the file preview header, say — can stamp its own slot name.
  */
-function DiffStats({
+export function DiffStats({
   added,
   removed,
   className,
-}: {
+  ...props
+}: React.ComponentProps<"span"> & {
   added: number
   removed: number
-  className?: string
 }) {
   if (added === 0 && removed === 0) return null
   return (
@@ -550,6 +553,7 @@ function DiffStats({
         "inline-flex shrink-0 items-center gap-1.5 font-mono text-[12px] tabular-nums",
         className
       )}
+      {...props}
     >
       {added > 0 ? (
         <span className="text-emerald-600 dark:text-emerald-400">+{added}</span>
@@ -561,7 +565,7 @@ function DiffStats({
   )
 }
 
-function langFromPath(path?: string) {
+export function langFromPath(path?: string) {
   if (!path) return undefined
   const base = path.split(/[\\/]/).pop() ?? path
   const ext = base.includes(".") ? base.split(".").pop()?.toLowerCase() : undefined
@@ -615,9 +619,9 @@ const SHIKI_LANGS = new Set([
 ])
 
 /** Everything below feeds Shiki, which only accepts languages it bundles. */
-type HighlightLang = BundledLanguage | SpecialLanguage
+export type HighlightLang = BundledLanguage | SpecialLanguage
 
-function normalizeLang(lang?: string): HighlightLang {
+export function normalizeLang(lang?: string): HighlightLang {
   if (!lang) return "text"
   const l = lang.toLowerCase().trim()
   if (l === "typescript") return "ts"
@@ -663,7 +667,7 @@ async function highlight(
   return html
 }
 
-type ShikiToken = { content: string; color?: string }
+export type ShikiToken = { content: string; color?: string }
 
 const tokenCache = new Map<string, ShikiToken[][]>()
 const TOKEN_CACHE_MAX = 32
@@ -692,7 +696,7 @@ async function highlightLines(
 }
 
 /** One Shiki pass for `code`, or null until it lands (and for plain text). */
-function useHighlightedLines(code: string, language?: string) {
+export function useHighlightedLines(code: string, language?: string) {
   const { resolvedTheme } = useTheme()
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
@@ -724,7 +728,7 @@ function useHighlightedLines(code: string, language?: string) {
 }
 
 /** One highlighted line — plain text until (or unless) its tokens arrive. */
-const CodeLine = React.memo(function CodeLine({
+export const CodeLine = React.memo(function CodeLine({
   text,
   tokens,
 }: {
@@ -895,6 +899,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   tool,
   defaultOpen = false,
   onAskAnswer,
+  onOpenFile,
   className,
 }: {
   tool: MessageToolCallData
@@ -904,6 +909,12 @@ export const MessageToolCall = React.memo(function MessageToolCall({
    * id first so the same handler can be shared by every row in a turn.
    */
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
+  /**
+   * Opt in to “click the headline to open the file” — the row splits into an
+   * open button and a separate chevron. Only fires for Edit / Write / Read
+   * rows that carry a path; without it the header stays one disclosure.
+   */
+  onOpenFile?: (tool: MessageToolCallData) => void
   className?: string
 }) {
   const [open, setOpen] = React.useState(defaultOpen)
@@ -976,6 +987,10 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     answerAsk({ skipped: true, answers: {} })
   }, [answerAsk])
 
+  const openFile = React.useCallback(() => {
+    onOpenFile?.(tool)
+  }, [onOpenFile, tool])
+
   if (ask && askOpen) {
     return (
       <AskQuestion
@@ -1012,65 +1027,119 @@ export const MessageToolCall = React.memo(function MessageToolCall({
       ? displayTool.output
       : null
 
+  /**
+   * The headline only becomes an “open the file” button where the owner asked
+   * for it and the row actually points at a file — otherwise the markup below
+   * is the plain disclosure it has always been.
+   */
+  const openable =
+    !!onOpenFile &&
+    !!path &&
+    (isFileMutationTool(displayTool.name) || isReadTool(displayTool.name))
+
+  const chevron = hasBody ? (
+    <ChevronDown
+      className={cn(
+        "size-3 opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-40",
+        open && "rotate-180 opacity-40"
+      )}
+    />
+  ) : null
+
+  const headlineContent = (
+    <>
+      {running ? (
+        <Loader2 className="size-3 animate-spin opacity-70" />
+      ) : errored ? (
+        <TriangleAlert className="size-3 text-destructive" />
+      ) : null}
+      <span className="shrink-0">{headline.label}</span>
+      {headline.detail ? (
+        <span
+          className={cn(
+            "min-w-0 truncate font-mono text-[12px] font-medium",
+            errored ? "text-destructive" : "text-foreground/90"
+          )}
+          title={headline.detail}
+        >
+          {headline.detail}
+        </span>
+      ) : null}
+      {stats ? (
+        <DiffStats added={stats.added} removed={stats.removed} />
+      ) : readMeta ? (
+        <span className="shrink-0 text-[12px] text-muted-foreground">
+          {readMeta}
+        </span>
+      ) : shortOutput ? (
+        <span className="shrink-0 text-[12px] text-muted-foreground">
+          {shortOutput}
+        </span>
+      ) : null}
+    </>
+  )
+
   return (
     <Collapsible
       open={open}
       onOpenChange={setOpen}
       data-slot="message-tool-call"
       data-status={status}
+      data-tool-id={tool.id}
       className={cn("group animate-in fade-in duration-150", className)}
     >
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          data-slot="message-tool-call-trigger"
-          disabled={!hasBody}
-          className={cn(
-            disclosureTrigger,
-            "py-[3px]",
-            hasBody
-              ? "cursor-pointer"
-              : "cursor-default hover:text-muted-foreground"
-          )}
+      {openable ? (
+        <div
+          data-slot="message-tool-call-header"
+          className="flex min-w-0 items-center gap-1"
         >
-          {running ? (
-            <Loader2 className="size-3 animate-spin opacity-70" />
-          ) : errored ? (
-            <TriangleAlert className="size-3 text-destructive" />
-          ) : null}
-          <span className="shrink-0">{headline.label}</span>
-          {headline.detail ? (
-            <span
-              className={cn(
-                "min-w-0 truncate font-mono text-[12px] font-medium",
-                errored ? "text-destructive" : "text-foreground/90"
-              )}
-              title={headline.detail}
-            >
-              {headline.detail}
-            </span>
-          ) : null}
-          {stats ? (
-            <DiffStats added={stats.added} removed={stats.removed} />
-          ) : readMeta ? (
-            <span className="shrink-0 text-[12px] text-muted-foreground">
-              {readMeta}
-            </span>
-          ) : shortOutput ? (
-            <span className="shrink-0 text-[12px] text-muted-foreground">
-              {shortOutput}
-            </span>
-          ) : null}
+          <button
+            type="button"
+            data-slot="message-tool-call-trigger"
+            data-action="open-file"
+            onClick={openFile}
+            title={path}
+            className={cn(disclosureTrigger, "min-w-0 cursor-pointer py-[3px]")}
+          >
+            {headlineContent}
+          </button>
           {hasBody ? (
-            <ChevronDown
-              className={cn(
-                "size-3 opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-40",
-                open && "rotate-180 opacity-40"
-              )}
-            />
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                data-slot="message-tool-call-chevron"
+                aria-label={open ? "Hide tool details" : "Show tool details"}
+                className={cn(
+                  disclosureTrigger,
+                  "cursor-pointer px-0.5 py-[3px]",
+                  // The glyph is hover-revealed; keyboard focus has to show it too.
+                  "focus-visible:[&_svg]:opacity-60"
+                )}
+              >
+                {chevron}
+              </button>
+            </CollapsibleTrigger>
           ) : null}
-        </button>
-      </CollapsibleTrigger>
+        </div>
+      ) : (
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            data-slot="message-tool-call-trigger"
+            disabled={!hasBody}
+            className={cn(
+              disclosureTrigger,
+              "py-[3px]",
+              hasBody
+                ? "cursor-pointer"
+                : "cursor-default hover:text-muted-foreground"
+            )}
+          >
+            {headlineContent}
+            {chevron}
+          </button>
+        </CollapsibleTrigger>
+      )}
       {hasBody ? (
         <CollapsibleContent>
           <div
@@ -1120,6 +1189,7 @@ export function MessageToolCalls({
   collapseAt = 3,
   defaultOpen,
   onAskAnswer,
+  onOpenFile,
 }: {
   tools: MessageToolCallData[]
   className?: string
@@ -1127,6 +1197,8 @@ export function MessageToolCalls({
   collapseAt?: number
   defaultOpen?: boolean
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
+  /** Forwarded to every row — see `MessageToolCall`. */
+  onOpenFile?: (tool: MessageToolCallData) => void
 }) {
   const pendingAsk = tools.some(
     (tool) => isPendingAskTool(tool) || (!!onAskAnswer && isOpenAskTool(tool))
@@ -1141,7 +1213,12 @@ export function MessageToolCalls({
   const list = (
     <div data-slot="message-tool-list" className="flex flex-col">
       {tools.map((tool) => (
-        <MessageToolCall key={tool.id} tool={tool} onAskAnswer={onAskAnswer} />
+        <MessageToolCall
+          key={tool.id}
+          tool={tool}
+          onAskAnswer={onAskAnswer}
+          onOpenFile={onOpenFile}
+        />
       ))}
     </div>
   )

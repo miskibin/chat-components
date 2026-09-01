@@ -33,11 +33,20 @@ import {
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
 import {
+  FilePreview,
+  filePreviewFromTool,
+  type FilePreviewFile,
+} from "@/components/ui/file-preview"
+import {
   MessageList,
   type ChatMessageData,
 } from "@/components/ui/message-list"
 import type { GenerationStage } from "@/components/ui/generation-status"
-import type { MessagePart, MessageToolCallData } from "@/components/ui/message"
+import type {
+  ChangeSummaryFile,
+  MessagePart,
+  MessageToolCallData,
+} from "@/components/ui/message"
 import {
   formatAskQuestionOutput,
   isOpenAskTool,
@@ -240,6 +249,8 @@ export default function ChatExample() {
   ])
   const [activeId, setActiveId] = useState("1")
   const [messages, setMessages] = useState<MessageData[]>([])
+  // The right-hand file panel — opened from a tool headline or a change row.
+  const [previewFile, setPreviewFile] = useState<FilePreviewFile | null>(null)
   const [modelOptions, setModelOptions] = useState<ModelOption[]>(FALLBACK_MODELS)
   const [selectedModel, setSelectedModel] = useState("composer-2.5")
   // Effort is UI-only here — the mock agent ignores it.
@@ -619,6 +630,41 @@ export default function ChatExample() {
     stopSession(activeId)
   }
 
+  const closePreview = () => setPreviewFile(null)
+
+  const openToolFile = (_messageId: string, tool: MessageToolCallData) => {
+    const file = filePreviewFromTool(tool)
+    if (!file) {
+      toast.message("That tool call has no file to preview")
+      return
+    }
+    setPreviewFile(file)
+  }
+
+  /**
+   * A change-summary row names a path, not a tool — so reach back into the
+   * turn for the last tool that touched it, and fall back to a path-only
+   * panel when the transcript no longer carries the body.
+   */
+  const openChangeFile = (messageId: string, change: ChangeSummaryFile) => {
+    const message = messages.find((item) => item.id === messageId)
+    const tools = message?.tools?.length
+      ? message.tools
+      : toolsFromParts(message?.parts ?? [])
+    let match: FilePreviewFile | null = null
+    for (const tool of tools) {
+      const file = filePreviewFromTool(tool)
+      if (file?.path === change.path) match = file
+    }
+    setPreviewFile(
+      match ?? {
+        path: change.path,
+        added: change.additions,
+        removed: change.deletions,
+      }
+    )
+  }
+
   const handleAskAnswer = (
     messageId: string,
     toolId: string,
@@ -849,6 +895,17 @@ export default function ChatExample() {
                 })
               }
               onAskAnswer={handleAskAnswer}
+              onOpenFile={openToolFile}
+              onChangeFileClick={openChangeFile}
+              onReviewChanges={(messageId) => {
+                const message = messages.find((item) => item.id === messageId)
+                const tools = message?.tools?.length
+                  ? message.tools
+                  : toolsFromParts(message?.parts ?? [])
+                const first = tools.map(filePreviewFromTool).find(Boolean)
+                if (first) setPreviewFile(first)
+                else toast.message("Wire Review to your own diff view")
+              }}
               renderActions={(message) => {
                 if (message.sender !== "assistant") return null
                 return (
@@ -929,6 +986,35 @@ export default function ChatExample() {
             ) : null}
           </div>
         </div>
+      </div>
+
+      {/* Mobile: the file panel slides over the conversation, like the sidebar. */}
+      <div
+        aria-hidden={!previewFile}
+        onClick={closePreview}
+        className={cn(
+          "absolute inset-0 z-40 bg-foreground/20 backdrop-blur-[1px] transition-opacity duration-200 md:hidden",
+          previewFile ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+      />
+      <div
+        data-slot="demo-file-panel"
+        className={cn(
+          "z-50 h-full shrink-0 overflow-hidden bg-background",
+          "transition-[width,opacity,transform] duration-300 ease-in-out",
+          "max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:w-[min(30rem,100%)] max-md:shadow-xl md:relative",
+          previewFile
+            ? "md:w-[30rem] md:opacity-100"
+            : "max-md:translate-x-full md:w-0 md:opacity-0"
+        )}
+      >
+        {previewFile ? (
+          <FilePreview
+            file={previewFile}
+            onClose={closePreview}
+            className="border-l"
+          />
+        ) : null}
       </div>
     </div>
   )
