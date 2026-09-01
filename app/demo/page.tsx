@@ -54,7 +54,10 @@ import {
   type PromptSuggestion,
 } from "@/components/ui/prompt-suggestions"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
-import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
+import type {
+  AgentStatusStage,
+  AgentStreamEvent,
+} from "@/lib/cursor-agent-types"
 import { runLayoutTransition } from "@/lib/layout-transition"
 import { streamCursorChat } from "@/lib/cursor-stream"
 import { cn } from "@/lib/utils"
@@ -99,6 +102,14 @@ const STAGE_SUBTITLES: Record<Exclude<GenerationStage, "idle">, string> = {
   thinking: "Thinking",
   searching: "Searching",
   responding: "Responding",
+}
+
+/**
+ * `AgentStatusStage` is finer than the indicator's own three stages — setup
+ * phases have no dot of their own, and read as thinking.
+ */
+function statusStage(stage: AgentStatusStage | undefined): GenerationStage {
+  return stage === "searching" || stage === "responding" ? stage : "thinking"
 }
 
 /**
@@ -160,12 +171,17 @@ type MessageData = ChatMessageData & {
     model?: string
     responseTime?: number
     tokens?: number
+    inputTokens?: number
+    outputTokens?: number
+    tokensPerSecond?: number
   }
 }
 
 type SessionRun = {
   startedAt: number
   stage: GenerationStage
+  /** Latest `status` line from the backend, shown instead of the stage word. */
+  status?: string
 }
 
 type ChatSession = ChatSidebarItemData & {
@@ -283,6 +299,7 @@ export default function ChatExample() {
   const activeSession = sessions.find((s) => s.id === activeId)
   const isGenerating = !!activeSession?.run
   const generationStage = activeSession?.run?.stage ?? "idle"
+  const generationLabel = activeSession?.run?.status
   const anyRunning = sessions.some((session) => !!session.run)
 
   // Tick every second while something is Working so elapsed labels stay fresh;
@@ -437,11 +454,19 @@ export default function ChatExample() {
     if (animateOpening) runLayoutTransition(paint)
     else paint()
 
+    /* Real output supersedes whatever the backend last said it was doing, so
+       the stage change drops the status line with it. */
     const setRunStage = (stage: GenerationStage) => {
       persistSession(sessionId, (session) =>
         session.run
-          ? { ...session, run: { ...session.run, stage } }
+          ? { ...session, run: { startedAt: session.run.startedAt, stage } }
           : session
+      )
+    }
+
+    const setRunStatus = (status: string, stage: GenerationStage) => {
+      persistSession(sessionId, (session) =>
+        session.run ? { ...session, run: { ...session.run, stage, status } } : session
       )
     }
 
@@ -479,6 +504,10 @@ export default function ChatExample() {
           ...session,
           cursorSessionId: event.sessionId,
         }))
+        return
+      }
+      if (event.type === "status") {
+        setRunStatus(event.text, statusStage(event.stage))
         return
       }
       if (event.type === "thinking") {
@@ -546,6 +575,13 @@ export default function ChatExample() {
             metadata: {
               model,
               responseTime: (nowMs() - started) / 1000,
+              tokens:
+                event.usage?.output != null || event.usage?.input != null
+                  ? (event.usage.input ?? 0) + (event.usage.output ?? 0)
+                  : undefined,
+              inputTokens: event.usage?.input,
+              outputTokens: event.usage?.output,
+              tokensPerSecond: event.usage?.tokensPerSecond,
             },
           }),
           event.sessionId
@@ -869,6 +905,7 @@ export default function ChatExample() {
               messages={messages}
               isGenerating={isGenerating}
               generationStage={generationStage}
+              generationLabel={generationLabel}
               onEditMessage={(id, content) =>
                 setMessages((prev) => {
                   const next = prev.map((msg) =>

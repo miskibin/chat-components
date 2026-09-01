@@ -376,6 +376,18 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             description: "Label for that status.",
           },
           {
+            name: "generationLabel",
+            type: "string",
+            description: (
+              <>
+                Replaces the stage word while the turn is still empty — for a
+                backend that can say something more useful than “Thinking”
+                (“Loading qwen3:8b into memory”). Drop it as soon as real
+                output arrives.
+              </>
+            ),
+          },
+          {
             name: "onEditMessage",
             type: "(id: string, content: string) => void",
             description: "Enables inline editing on user turns.",

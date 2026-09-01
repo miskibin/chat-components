@@ -44,6 +44,12 @@ export type MessageListProps = React.ComponentProps<"div"> & {
   messages: ChatMessageData[]
   isGenerating?: boolean
   generationStage?: GenerationStage
+  /**
+   * Overrides the stage's own word in the waiting indicator — for a backend
+   * that can say something more useful than "Thinking" ("Loading qwen3:8b into
+   * memory", "Waiting for the first token").
+   */
+  generationLabel?: string
   patternHandlers?: PatternHandler[]
   onEditMessage?: (id: string, content: string) => void
   onAskAnswer?: (
@@ -210,6 +216,7 @@ export function MessageList({
   messages,
   isGenerating = false,
   generationStage = "idle",
+  generationLabel,
   patternHandlers = EMPTY_PATTERNS,
   onEditMessage,
   onAskAnswer,
@@ -274,7 +281,11 @@ export function MessageList({
                   />
                   {waiting ? (
                     <div className="mb-4">
-                      <GenerationStatus active stage={generationStage} />
+                      <GenerationStatus
+                        active
+                        stage={generationStage}
+                        label={generationLabel}
+                      />
                     </div>
                   ) : isStreaming || openAsk ? null : (
                     renderActions?.(message)
