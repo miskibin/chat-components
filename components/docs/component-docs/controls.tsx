@@ -396,6 +396,19 @@ export function Picker() {
               </>
             ),
           },
+          {
+            name: "contextLength",
+            type: "number",
+            description: (
+              <>
+                Usable context window in tokens. The picker never renders it —
+                it rides along so a host that already has this list can size a{" "}
+                <DocsCode>ContextMeter</DocsCode> without a second lookup table
+                beside it. Put a human-readable size in <DocsCode>meta</DocsCode>{" "}
+                if you want it on the row.
+              </>
+            ),
+          },
         ],
       },
       {

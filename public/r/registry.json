@@ -67,6 +67,20 @@
       ]
     },
     {
+      "name": "todo-list",
+      "type": "registry:ui",
+      "title": "Todo List",
+      "description": "The agent's plan as one line above the composer: the live task and a count, opening into the whole checklist.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["collapsible"],
+      "files": [
+        {
+          "path": "components/ui/todo-list.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "chat-navbar",
       "type": "registry:ui",
       "title": "Chat Navbar",
@@ -145,6 +159,18 @@
       ]
     },
     {
+      "name": "context-meter",
+      "type": "registry:ui",
+      "title": "Context Meter",
+      "description": "Ring showing how much of a model's context window the next request would take, sized for a composer toolbar.",
+      "files": [
+        {
+          "path": "components/ui/context-meter.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "folder-picker",
       "type": "registry:ui",
       "title": "Folder Picker",
@@ -214,7 +240,8 @@
         "miskibin/chat-components/message-markdown",
         "miskibin/chat-components/ask-question",
         "miskibin/chat-components/change-summary",
-        "miskibin/chat-components/file-icon"
+        "miskibin/chat-components/file-icon",
+        "miskibin/chat-components/todo-list"
       ],
       "files": [
         {

@@ -198,6 +198,19 @@ export function Composer() {
             ),
           },
           {
+            name: "onTextChange",
+            type: "(text: string) => void",
+            description: (
+              <>
+                Fired as the draft changes, including the clear after a send.
+                The composer keeps owning the text — this is a read-only tap for
+                things that track the draft, such as sizing a{" "}
+                <DocsCode>ContextMeter</DocsCode>. It is held in a ref, so
+                passing an unstable closure does not re-render the composer.
+              </>
+            ),
+          },
+          {
             name: "onStop",
             type: "() => void",
             description: "Called by the stop button while generating.",
