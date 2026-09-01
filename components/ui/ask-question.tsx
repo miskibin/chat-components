@@ -153,10 +153,15 @@ export function isPendingAskTool(tool: { name: string; status?: string }) {
 }
 
 /**
- * An ask still waiting on a human: in flight, or already closed by the agent
+ * An ask with no answer on it: in flight, or already closed by the agent
  * without a single selection. Headless backends resolve their own ask tool the
  * moment they emit it, so keying the form off `isPendingAskTool` alone means
  * the questions flash past and land as an unanswerable "No selection" summary.
+ *
+ * Unanswered is not the same as actionable — an agent-closed ask three turns
+ * back is history, not a prompt. Only the caller knows where the tool sits, so
+ * `MessageList` offers the form on the latest turn only, and `MessageToolCall`
+ * follows the `onAskAnswer` handler it is given.
  */
 export function isOpenAskTool(tool: {
   name: string
@@ -253,10 +258,18 @@ export function parseAskQuestionInput(input?: string): {
   }
 }
 
+/** Exactly what older versions of this component wrote for a Skip. */
+const LEGACY_SKIP_OUTPUT = "Questions skipped"
+
 export function parseAskQuestionResult(
   output?: string
 ): AskQuestionResult | null {
   if (!output?.trim()) return null
+  // Matched literally, not by keyword: an agent's own free-text "skipped the
+  // questions" is not a user decision and must stay answerable.
+  if (output.trim() === LEGACY_SKIP_OUTPUT) {
+    return { skipped: true, answers: {}, source: "user" }
+  }
   if (/skip/i.test(output) && !output.trim().startsWith("{")) {
     return { skipped: true, answers: {} }
   }
@@ -268,10 +281,13 @@ export function parseAskQuestionResult(
     if (record.skipped === true) {
       return { skipped: true, answers: {}, source }
     }
-    const answersRecord = asRecord(record.answers) ?? record
+    const nested = asRecord(record.answers)
+    const answersRecord = nested ?? record
     const answers: Record<string, AskQuestionSelection> = {}
     for (const [key, item] of Object.entries(answersRecord)) {
-      if (key === "skipped" || key === "source") continue
+      // Only the flat fallback shape can collide with the result's own keys;
+      // under `answers` they are question ids and `source` is a valid one.
+      if (!nested && (key === "skipped" || key === "source")) continue
       if (Array.isArray(item)) {
         answers[key] = {
           optionIds: item.filter((id): id is string => typeof id === "string"),

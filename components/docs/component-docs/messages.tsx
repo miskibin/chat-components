@@ -390,14 +390,16 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         title: "Streaming cost",
         description: (
           <>
-            Rows are memoized and every callback you pass —{" "}
-            <DocsCode>onEditMessage</DocsCode>,{" "}
-            <DocsCode>onAskAnswer</DocsCode>,{" "}
-            <DocsCode>renderActions</DocsCode> — is held at one identity
+            Rows are memoized and the event callbacks you pass —{" "}
+            <DocsCode>onEditMessage</DocsCode> and{" "}
+            <DocsCode>onAskAnswer</DocsCode> — are held at one identity
             internally, so a parent that re-renders on each streamed token only
             reaches the row whose message object actually changed. Keep the
             message objects themselves stable (patch the streaming turn, map the
-            rest through) and the list stays flat as it grows.
+            rest through) and the list stays flat as it grows.{" "}
+            <DocsCode>renderActions</DocsCode> is a render prop, not a callback:
+            it runs on every render with your current closure, outside the
+            memoized row, so the buttons it returns never go stale.
           </>
         ),
       },
@@ -1010,7 +1012,9 @@ export function Clarify() {
             non-interactively skips it the moment it is emitted — which used to
             make the card flash past and land as an unanswerable &ldquo;No
             selection&rdquo; summary. <DocsCode>isOpenAskTool</DocsCode> treats
-            an ask closed with no answers as still open, so the user can pick.{" "}
+            an ask closed with no answers as still open, so the user can pick —
+            on the latest turn only, so an ask from an earlier turn stays
+            history rather than reopening on every reload.{" "}
             <DocsCode>formatAskQuestionOutput</DocsCode> stamps{" "}
             <DocsCode>{`source: "user"`}</DocsCode> on what the card produces,
             and <DocsCode>parseAskQuestionResult</DocsCode> reads it back, so a

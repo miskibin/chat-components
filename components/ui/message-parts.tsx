@@ -26,6 +26,7 @@ import {
   formatAskQuestionOutput,
   isAskToolName,
   isOpenAskTool,
+  isPendingAskTool,
   parseAskQuestionInput,
   parseAskQuestionResult,
   type AskQuestionResult,
@@ -942,8 +943,15 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     [deferredTool]
   )
   const showFile = !!readFile
-  // An ask the agent closed without a selection is still the user's to answer.
-  const askOpen = !!ask && !askResult && isOpenAskTool(tool)
+  /**
+   * An ask the agent closed without a selection is still the user's to answer,
+   * but only where the owner says so: `onAskAnswer` is the signal that this row
+   * is the live one. Without it an ask from an old turn would reopen on reload.
+   */
+  const askOpen =
+    !!ask &&
+    !askResult &&
+    (running || (!!onAskAnswer && isOpenAskTool(tool)))
   const showAskSummary = !!ask && !!resolvedAsk && !askOpen && !running
   const hasBody =
     showDiff ||
@@ -1120,7 +1128,9 @@ export function MessageToolCalls({
   defaultOpen?: boolean
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
 }) {
-  const pendingAsk = tools.some(isOpenAskTool)
+  const pendingAsk = tools.some(
+    (tool) => isPendingAskTool(tool) || (!!onAskAnswer && isOpenAskTool(tool))
+  )
   const many = !pendingAsk && tools.length >= collapseAt
   const [open, setOpen] = React.useState(defaultOpen ?? !many)
 

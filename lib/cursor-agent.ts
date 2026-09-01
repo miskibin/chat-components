@@ -94,9 +94,9 @@ export async function* runCursorAgent(
     let sawStreamingDelta = false
     let gotText = false
     let gotResult = false
-    // Tail of what has already gone out, so a final full assistant message
-    // that repeats the deltas is dropped instead of printed twice.
-    let emittedTail = ""
+    // Everything that has already gone out, so a closing full-text message
+    // repeating the whole turn is dropped instead of printed twice.
+    let emitted = ""
 
     for await (const line of rl) {
       if (options.signal?.aborted) break
@@ -125,9 +125,9 @@ export async function* runCursorAgent(
         if (typeof event.timestamp_ms === "number" && !event.model_call_id) {
           sawStreamingDelta = true
         }
-        if (text && !endsWithText(emittedTail, text)) {
+        if (text && !repeatsWholeTurn(emitted, text)) {
           gotText = true
-          emittedTail = tailOf(emittedTail + text)
+          emitted += text
           yield { type: "text", text }
         }
         continue
@@ -150,7 +150,7 @@ export async function* runCursorAgent(
           typeof event.result === "string" &&
           event.result
         ) {
-          emittedTail = tailOf(emittedTail + event.result)
+          emitted += event.result
           yield { type: "text", text: event.result }
         }
         yield {
@@ -236,17 +236,14 @@ export async function listCursorModels(): Promise<
 /**
  * The CLI is not consistent about how it marks the closing full-text message
  * of a streamed turn, so `assistantText`'s timestamp heuristic can let one
- * through and the UI prints the answer twice. Comparing against what actually
- * went out settles it whatever the shape of the event.
+ * through and the UI prints the answer twice. Shape does not settle it, but
+ * content does: only that closing message restates the entire turn.
+ *
+ * The test is whole-turn equality, never a suffix match — a delta that merely
+ * ends the emitted text (a lone `"\n"`, a closing `")"`) is real output.
  */
-const EMITTED_TAIL_MAX = 64_000
-
-function tailOf(text: string) {
-  return text.length > EMITTED_TAIL_MAX ? text.slice(-EMITTED_TAIL_MAX) : text
-}
-
-function endsWithText(tail: string, text: string) {
-  return text.length <= tail.length && tail.endsWith(text)
+function repeatsWholeTurn(emitted: string, text: string) {
+  return emitted.length > 0 && text === emitted
 }
 
 function assistantText(event: CliEvent, sawStreamingDelta: boolean): string {

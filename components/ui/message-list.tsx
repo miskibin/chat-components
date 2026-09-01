@@ -10,6 +10,7 @@ import {
 import {
   Message,
   isOpenAskTool,
+  isPendingAskTool,
   type ChangeSummaryFile,
   type MessageArtifactData,
   type MessageCodeBlockData,
@@ -112,8 +113,11 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
       programmaticScrollUntilRef.current = Date.now() + 500
       node.scrollTo({
         top: node.scrollHeight,
-        // Smooth only when a whole message appears; growing text just tracks.
-        behavior: curr === prev && distance < node.clientHeight ? "auto" : "smooth",
+        // Smooth only when a single new message arrives. The first paint and
+        // multi-message jumps stay instant — animating the height of a whole
+        // transcript outruns the 500ms window above and reads as the user
+        // scrolling away, which switches following off.
+        behavior: isInitialOrJump || curr === prev ? "auto" : "smooth",
       })
     })
   }, [messages])
@@ -128,22 +132,33 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
   return { scrollRef, handleMessageScroll }
 }
 
+function hasAskTool(
+  message: ChatMessageData,
+  match: (tool: MessageToolCallData) => boolean
+) {
+  return Boolean(
+    message.tools?.some(match) ||
+      message.parts?.some((part) => part.type === "tool" && match(part.tool))
+  )
+}
+
 /**
  * Memoized: the per-row closures live inside this boundary, so a re-render of
- * the list only reaches the rows whose message object actually changed.
+ * the list only reaches the rows whose message object actually changed. Every
+ * prop here is safe to freeze — `renderActions` is a render prop and stays
+ * outside, in the list, where it re-runs with the caller's current closure.
  */
 const MessageListRow = React.memo(function MessageListRow({
   message,
   isStreaming,
-  generationStage,
+  openAsk,
   patternHandlers,
   onEditMessage,
   onAskAnswer,
-  renderActions,
 }: {
   message: ChatMessageData
   isStreaming: boolean
-  generationStage: GenerationStage
+  openAsk: boolean
   patternHandlers: PatternHandler[]
   onEditMessage?: (id: string, content: string) => void
   onAskAnswer?: (
@@ -151,21 +166,8 @@ const MessageListRow = React.memo(function MessageListRow({
     toolId: string,
     result: AskQuestionResult
   ) => void
-  renderActions?: (message: ChatMessageData) => React.ReactNode
 }) {
   const isUser = message.sender === "user"
-  const openAsk = Boolean(
-    message.tools?.some(isOpenAskTool) ||
-      message.parts?.some(
-        (part) => part.type === "tool" && isOpenAskTool(part.tool)
-      )
-  )
-  const waiting =
-    isStreaming &&
-    !message.reasoning &&
-    !message.content?.trim() &&
-    !message.tools?.length &&
-    !message.parts?.length
 
   const handleEdit = React.useCallback(
     (content: string) => onEditMessage?.(message.id, content),
@@ -178,35 +180,26 @@ const MessageListRow = React.memo(function MessageListRow({
   )
 
   return (
-    <div data-slot="message-list-item">
-      <Message
-        content={message.content}
-        sender={message.sender}
-        reasoning={message.reasoning}
-        reasoningDuration={message.reasoningDuration}
-        reasoningDefaultOpen={message.reasoningDefaultOpen}
-        tools={message.tools}
-        parts={message.parts}
-        codeBlocks={message.codeBlocks}
-        artifacts={message.artifacts}
-        workedFor={message.workedFor}
-        changes={message.changes}
-        patternHandlers={patternHandlers}
-        isAnimating={isStreaming}
-        editable={isUser && !!onEditMessage}
-        onEdit={isUser && onEditMessage ? handleEdit : undefined}
-        /* Only the row that is actually asking takes a callback, so every
-           other memoized Message keeps its render while the turn streams. */
-        onAskAnswer={openAsk && onAskAnswer ? handleAskAnswer : undefined}
-      />
-      {waiting ? (
-        <div className="mb-4">
-          <GenerationStatus active stage={generationStage} />
-        </div>
-      ) : isStreaming || openAsk ? null : (
-        renderActions?.(message)
-      )}
-    </div>
+    <Message
+      content={message.content}
+      sender={message.sender}
+      reasoning={message.reasoning}
+      reasoningDuration={message.reasoningDuration}
+      reasoningDefaultOpen={message.reasoningDefaultOpen}
+      tools={message.tools}
+      parts={message.parts}
+      codeBlocks={message.codeBlocks}
+      artifacts={message.artifacts}
+      workedFor={message.workedFor}
+      changes={message.changes}
+      patternHandlers={patternHandlers}
+      isAnimating={isStreaming}
+      editable={isUser && !!onEditMessage}
+      onEdit={isUser && onEditMessage ? handleEdit : undefined}
+      /* Only the row that is actually asking takes a callback, so every other
+         memoized Message keeps its render while the turn streams. */
+      onAskAnswer={openAsk && onAskAnswer ? handleAskAnswer : undefined}
+    />
   )
 })
 
@@ -229,7 +222,6 @@ export function MessageList({
 
   const stableEdit = useStableCallback(onEditMessage)
   const stableAskAnswer = useStableCallback(onAskAnswer)
-  const stableRenderActions = useStableCallback(renderActions)
 
   return (
     <div
@@ -249,23 +241,42 @@ export function MessageList({
         {messages.length === 0
           ? (emptyState ?? <div className="flex flex-1 items-center justify-center" />)
           : messages.map((message, index) => {
+              const isLast = index === lastIndex
               const isStreaming =
                 (isGenerating || generationStage !== "idle") &&
-                index === lastIndex &&
+                isLast &&
                 message.sender === "assistant"
+              /* An ask in flight is always live. One the agent closed without
+                 answers is the user's to pick up only on the latest turn —
+                 further back it is history, not a prompt. */
+              const openAsk =
+                hasAskTool(message, isPendingAskTool) ||
+                (isLast && hasAskTool(message, isOpenAskTool))
+              const waiting =
+                isStreaming &&
+                !message.reasoning &&
+                !message.content?.trim() &&
+                !message.tools?.length &&
+                !message.parts?.length
+
               return (
-                <MessageListRow
-                  key={message.id}
-                  message={message}
-                  isStreaming={isStreaming}
-                  // Settled rows never read the stage; pinning it keeps their
-                  // props identical while the live turn cycles through it.
-                  generationStage={isStreaming ? generationStage : "idle"}
-                  patternHandlers={patternHandlers}
-                  onEditMessage={onEditMessage ? stableEdit : undefined}
-                  onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
-                  renderActions={renderActions ? stableRenderActions : undefined}
-                />
+                <div key={message.id} data-slot="message-list-item">
+                  <MessageListRow
+                    message={message}
+                    isStreaming={isStreaming}
+                    openAsk={openAsk}
+                    patternHandlers={patternHandlers}
+                    onEditMessage={onEditMessage ? stableEdit : undefined}
+                    onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
+                  />
+                  {waiting ? (
+                    <div className="mb-4">
+                      <GenerationStatus active stage={generationStage} />
+                    </div>
+                  ) : isStreaming || openAsk ? null : (
+                    renderActions?.(message)
+                  )}
+                </div>
               )
             })}
         {children}
