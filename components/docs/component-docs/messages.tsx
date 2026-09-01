@@ -118,6 +118,20 @@ export function Turn() {
             description: "Artifact cards appended after the code blocks.",
           },
           {
+            name: "attachments",
+            type: "MessageAttachmentData[]",
+            default: "[]",
+            description: (
+              <>
+                Files attached to a user turn —{" "}
+                <DocsCode>{"{ id, name, mimeType, url }"}</DocsCode>. Images
+                render as thumbnails above the bubble, opening full-size in a
+                new tab; other mime types fall back to a named chip. Ignored
+                on assistant turns.
+              </>
+            ),
+          },
+          {
             name: "editable",
             type: "boolean",
             default: "false",
@@ -196,6 +210,8 @@ export function Turn() {
     dataSlots: [
       "message",
       "message-content",
+      "message-attachments",
+      "message-attachment",
       "message-actions",
       "message-process",
       "message-turn-summary",
@@ -225,6 +241,27 @@ export function Turn() {
         example: {
           name: "message-sender-example",
           node: <MessageSenderExample />,
+        },
+      },
+      {
+        title: "Attach images to a user turn",
+        description: (
+          <>
+            <DocsCode>url</DocsCode> can be a <DocsCode>data:</DocsCode> URL —
+            handy when the composer reads a file with{" "}
+            <DocsCode>FileReader</DocsCode> and never needs to upload it
+            anywhere just to show a thumbnail.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<Message
+  sender="user"
+  content="What's wrong with this chart?"
+  attachments={[
+    { id: "a1", name: "chart.png", mimeType: "image/png", url: dataUrl },
+  ]}
+/>`,
         },
       },
       {
@@ -653,6 +690,24 @@ export function Answer() {
           },
         ],
       },
+      {
+        caption: "MessageAttachments",
+        rows: [
+          {
+            name: "attachments",
+            type: "MessageAttachmentData[]",
+            required: true,
+            description: (
+              <>
+                <DocsCode>{"{ id, name, mimeType, url }"}</DocsCode> per file.
+                Images render as a thumbnail linking to the full-size{" "}
+                <DocsCode>url</DocsCode>; anything else is a named chip.
+              </>
+            ),
+          },
+          { name: "className", type: "string", description: "Merged last." },
+        ],
+      },
     ],
     dataSlots: [
       "message-process",
@@ -680,6 +735,8 @@ export function Answer() {
       "message-artifact",
       "message-artifact-trigger",
       "message-artifact-content",
+      "message-attachments",
+      "message-attachment",
     ],
     examples: [
       {
