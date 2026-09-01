@@ -81,6 +81,19 @@ export type MessageProps = {
   /** Explicit file-change card. When omitted, Edit / Write tools are summarised. */
   changes?: ChangeSummaryFile[]
   onReviewChanges?: () => void
+  /**
+   * Opt in to clickable Edit / Write / Read headlines — the row reports the
+   * whole tool so the owner can open it in a file panel.
+   */
+  onOpenFile?: (tool: MessageToolCallData) => void
+  /** Makes each row of the change-summary card clickable. */
+  onChangeFileClick?: (file: ChangeSummaryFile) => void
+  /**
+   * Makes the file references inside the answer's markdown clickable — the
+   * path arrives without its `:line` suffix. Keep it stable: an unstable
+   * handler re-renders every markdown block on every streamed token.
+   */
+  onFileReferenceClick?: (path: string) => void
 }
 
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
@@ -135,6 +148,9 @@ export const Message = React.memo(function Message({
   workedFor,
   changes,
   onReviewChanges,
+  onOpenFile,
+  onChangeFileClick,
+  onFileReferenceClick,
 }: MessageProps) {
   const [isEditing, setIsEditing] = React.useState(false)
   const [editedContent, setEditedContent] = React.useState(content)
@@ -367,6 +383,7 @@ export const Message = React.memo(function Message({
           key={part.id}
           tool={part.tool}
           onAskAnswer={onAskAnswer}
+          onOpenFile={onOpenFile}
         />
       )
     }
@@ -388,6 +405,7 @@ export const Message = React.memo(function Message({
         key={part.id}
         isAnimating={isAnimating}
         patternHandlers={patternHandlers}
+        onFileClick={onFileReferenceClick}
       >
         {part.text}
       </MessageMarkdown>
@@ -406,6 +424,7 @@ export const Message = React.memo(function Message({
             tools={tools}
             defaultOpen
             onAskAnswer={onAskAnswer}
+            onOpenFile={onOpenFile}
           />,
         ]
       : []
@@ -417,6 +436,7 @@ export const Message = React.memo(function Message({
             key="content"
             isAnimating={isAnimating}
             patternHandlers={patternHandlers}
+            onFileClick={onFileReferenceClick}
           >
             {displayContent}
           </MessageMarkdown>,
@@ -460,7 +480,11 @@ export const Message = React.memo(function Message({
             data-slot="message-turn-summary"
             className="mt-3 flex flex-col items-start gap-2.5"
           >
-            <ChangeSummary files={derivedChanges} onAction={onReviewChanges} />
+            <ChangeSummary
+              files={derivedChanges}
+              onAction={onReviewChanges}
+              onFileClick={onChangeFileClick}
+            />
           </div>
         ) : null}
 

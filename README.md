@@ -129,6 +129,8 @@ npx shadcn@latest add miskibin/chat-components/message
 npx shadcn@latest add miskibin/chat-components/message-list
 npx shadcn@latest add miskibin/chat-components/message-parts
 npx shadcn@latest add miskibin/chat-components/ask-question
+npx shadcn@latest add miskibin/chat-components/file-preview
+npx shadcn@latest add miskibin/chat-components/file-icon
 npx shadcn@latest add miskibin/chat-components/message-markdown
 npx shadcn@latest add miskibin/chat-components/generation-status
 npx shadcn@latest add miskibin/chat-components/model-picker
@@ -138,6 +140,7 @@ npx shadcn@latest add miskibin/chat-components/sidebar-item
 npx shadcn@latest add miskibin/chat-components/sidebar-dnd
 npx shadcn@latest add miskibin/chat-components/sidebar-drop-zones
 npx shadcn@latest add miskibin/chat-components/chat-navbar
+npx shadcn@latest add miskibin/chat-components/resizable
 npx shadcn@latest add miskibin/chat-components/theme-toggle
 npx shadcn@latest add miskibin/chat-components/use-click-outside
 ```
@@ -154,6 +157,8 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **message** | User bubble + assistant turn (reasoning, tools, code, artifacts, think tags, interleaved `parts`, edit) — a finished turn folds its process into one “Worked for 12s” row | [message](https://chat-input-azure.vercel.app/docs/components/message) |
 | **message-parts** | `MessageProcess`, `MessageReasoning`, `MessageToolCall(s)`, `MessageCode`, `MessageArtifact`; Ask Question tools render `AskQuestion` | [message-parts](https://chat-input-azure.vercel.app/docs/components/message-parts) |
 | **ask-question** | Cursor-style questionnaire: radios, checkboxes, Other…, Skip / Continue | [ask-question](https://chat-input-azure.vercel.app/docs/components/ask-question) |
+| **file-preview** | Side panel for an edited file: unified diff, or the whole file with the edited lines marked | [file-preview](https://chat-input-azure.vercel.app/docs/components/file-preview) |
+| **file-icon** | Material Icon Theme file glyphs as inline SVG, picked by filename then extension | [file-icon](https://chat-input-azure.vercel.app/docs/components/file-icon) |
 | **message-markdown** | Streamdown renderer (GFM, Shiki code, Mermaid, KaTeX) + styles | [message-markdown](https://chat-input-azure.vercel.app/docs/components/message-markdown) |
 | **message-list** | Scroll container with smart auto-scroll | [message-list](https://chat-input-azure.vercel.app/docs/components/message-list) |
 | **generation-status** | Pulsing-dot generation status | [generation-status](https://chat-input-azure.vercel.app/docs/components/generation-status) |
@@ -164,6 +169,7 @@ npx shadcn@latest add miskibin/chat-components/use-click-outside
 | **sidebar-dnd** | Drag-and-drop context: declarative zones + drag-to-reorder events | [sidebar-dnd](https://chat-input-azure.vercel.app/docs/components/sidebar-dnd) |
 | **sidebar-drop-zones** | Edge and inline drop-zone renderers with tone variants | [sidebar-drop-zones](https://chat-input-azure.vercel.app/docs/components/sidebar-drop-zones) |
 | **chat-navbar** | Thin top bar with title and left/right slots | [chat-navbar](https://chat-input-azure.vercel.app/docs/components/chat-navbar) |
+| **resizable** | Draggable, keyboard-resizable panel split — pairs with `file-preview` | [resizable](https://chat-input-azure.vercel.app/docs/components/resizable) |
 | **theme-toggle** | Light/dark chip — floating by default, inline via `floating={false}` | [theme-toggle](https://chat-input-azure.vercel.app/docs/components/theme-toggle) |
 | **use-click-outside** | Dismiss-on-outside-click hook for surfaces you build by hand | [use-click-outside](https://chat-input-azure.vercel.app/docs/components/use-click-outside) |
 

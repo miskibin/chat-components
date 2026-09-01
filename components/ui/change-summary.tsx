@@ -1,6 +1,6 @@
 "use client"
 
-import { FileCode, FileJson, FileText, Hash, MoreHorizontal } from "lucide-react"
+import { MoreHorizontal } from "lucide-react"
 import * as React from "react"
 
 import {
@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { FileIcon } from "@/components/ui/file-icon"
 import { cn } from "@/lib/utils"
 
 export type ChangeSummaryFile = {
@@ -29,6 +30,8 @@ export type ChangeSummaryProps = Omit<React.ComponentProps<"div">, "title"> & {
   title?: React.ReactNode
   actionLabel?: React.ReactNode
   onAction?: () => void
+  /** Makes every file row a button — open the file in a preview panel. */
+  onFileClick?: (file: ChangeSummaryFile) => void
   /** How many files to show before “Show N more”. */
   previewCount?: number
 }
@@ -48,17 +51,14 @@ function fileName(path: string) {
 }
 
 /**
- * File kind reads from the icon, not from colour — the palette stays on the
- * theme tokens so the card survives a re-themed light/dark pair.
+ * Coarse kind, exposed as `data-kind` so a host can style rows by family. The
+ * glyph itself comes from `FileIcon`, which knows the file type in far more
+ * detail than these four buckets do.
  */
-function fileGlyph(path: string) {
+function fileKind(path: string) {
   const ext = fileName(path).split(".").pop()?.toLowerCase()
-  if (ext === "css" || ext === "scss" || ext === "less") {
-    return { kind: "style", Icon: Hash }
-  }
-  if (ext === "json" || ext === "jsonc") {
-    return { kind: "data", Icon: FileJson }
-  }
+  if (ext === "css" || ext === "scss" || ext === "less") return "style"
+  if (ext === "json" || ext === "jsonc") return "data"
   if (
     ext === "ts" ||
     ext === "tsx" ||
@@ -67,9 +67,9 @@ function fileGlyph(path: string) {
     ext === "mts" ||
     ext === "cts"
   ) {
-    return { kind: "code", Icon: FileCode }
+    return "code"
   }
-  return { kind: "text", Icon: FileText }
+  return "text"
 }
 
 /** +/- is the one raw-palette exception: no theme token means "grew". */
@@ -98,27 +98,59 @@ function DiffStats({
   )
 }
 
-function FileRow({ file }: { file: ChangeSummaryFile }) {
-  const { kind, Icon } = fileGlyph(file.path)
-  return (
-    <div
-      data-slot="change-summary-file"
-      data-kind={kind}
-      className="flex min-w-0 items-center gap-2 py-[3px] text-[13px] leading-snug"
-    >
-      <Icon
-        aria-hidden
+function FileRow({
+  file,
+  onSelect,
+}: {
+  file: ChangeSummaryFile
+  onSelect?: (file: ChangeSummaryFile) => void
+}) {
+  const kind = fileKind(file.path)
+  const select = React.useCallback(() => onSelect?.(file), [file, onSelect])
+  const content = (
+    <>
+      <FileIcon
         data-slot="change-summary-file-icon"
-        className="size-3.5 shrink-0 text-muted-foreground"
+        path={file.path}
+        size={14}
       />
       <span
-        className="min-w-0 flex-1 truncate text-foreground"
+        className="min-w-0 flex-1 truncate text-left text-foreground"
         title={file.path}
       >
         {fileName(file.path)}
       </span>
       <DiffStats additions={file.additions} deletions={file.deletions} />
-    </div>
+    </>
+  )
+  const shared =
+    "flex min-w-0 items-center gap-2 py-[3px] text-[13px] leading-snug"
+
+  // Without a handler the row stays the plain, non-interactive line it was.
+  if (!onSelect) {
+    return (
+      <div data-slot="change-summary-file" data-kind={kind} className={shared}>
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      data-slot="change-summary-file"
+      data-kind={kind}
+      data-interactive="true"
+      onClick={select}
+      className={cn(
+        shared,
+        "-mx-1 w-[calc(100%+0.5rem)] cursor-pointer rounded-sm px-1 outline-none transition-colors",
+        "hover:bg-accent hover:text-accent-foreground",
+        "focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      )}
+    >
+      {content}
+    </button>
   )
 }
 
@@ -159,6 +191,7 @@ export const ChangeSummary = React.memo(function ChangeSummary({
   title,
   actionLabel = "Review",
   onAction,
+  onFileClick,
   previewCount = 4,
   className,
   ...props
@@ -209,7 +242,7 @@ export const ChangeSummary = React.memo(function ChangeSummary({
 
       <div data-slot="change-summary-list" className="flex flex-col">
         {preview.map((file) => (
-          <FileRow key={file.path} file={file} />
+          <FileRow key={file.path} file={file} onSelect={onFileClick} />
         ))}
       </div>
 
@@ -218,7 +251,7 @@ export const ChangeSummary = React.memo(function ChangeSummary({
           <CollapsibleContent>
             <div data-slot="change-summary-rest" className="flex flex-col">
               {rest.map((file) => (
-                <FileRow key={file.path} file={file} />
+                <FileRow key={file.path} file={file} onSelect={onFileClick} />
               ))}
             </div>
           </CollapsibleContent>

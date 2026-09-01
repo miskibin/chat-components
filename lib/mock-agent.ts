@@ -79,6 +79,53 @@ const scenarios: Scenario[] = [
   composerScenario,
 ]
 
+/**
+ * The after-file for the Edit below, the way `cursor-agent` streams it as
+ * `streamContent`. It is what lets the demo's file panel offer a File view —
+ * whole body, edited lines marked — next to the unified diff.
+ */
+const EDITED_FILE = [
+  '"use client"',
+  "",
+  'import * as React from "react"',
+  "",
+  'import { extractToolDiff } from "@/lib/tool-diff"',
+  'import { cn } from "@/lib/utils"',
+  "",
+  "export type ToolCall = {",
+  "  id: string",
+  "  name: string",
+  "  input?: string",
+  "  output?: string",
+  "}",
+  "",
+  "/** One tool row: a headline, then the body it can expand into. */",
+  "export function ToolRow({ tool }: { tool: ToolCall }) {",
+  "  const [open, setOpen] = React.useState(false)",
+  "  const diff = extractToolDiff(tool)",
+  "  const showDiff = !!diff?.length",
+  "  const hasBody = showDiff || !!(tool.input || tool.output)",
+  "",
+  "  return (",
+  '    <div data-slot="tool-row" data-open={open}>',
+  "      <button",
+  '        type="button"',
+  "        onClick={() => setOpen((value) => !value)}",
+  "        disabled={!hasBody}",
+  '        className={cn("flex w-full items-center gap-2", !hasBody && "opacity-60")}',
+  "      >",
+  '        <span className="truncate">{tool.name}</span>',
+  "      </button>",
+  "      {open && hasBody ? (",
+  '        <div className="border-l pl-3">',
+  "          {showDiff ? <ToolDiff lines={diff} /> : <pre>{tool.output}</pre>}",
+  "        </div>",
+  "      ) : null}",
+  "    </div>",
+  "  )",
+  "}",
+].join("\n")
+
 export async function* runMockAgent(
   options: MockAgentOptions
 ): AsyncGenerator<AgentStreamEvent> {
@@ -240,12 +287,17 @@ function streamingScenario(topic: string): MockStep[] {
         diff: [
           "--- a/components/ui/message-parts.tsx",
           "+++ b/components/ui/message-parts.tsx",
-          "@@ -220,1 +220,3 @@",
-          "-const hasBody = !!(tool.input || tool.output)",
-          "+const diff = extractToolDiff(tool)",
-          "+const showDiff = !!diff?.length",
-          "+const hasBody = showDiff || !!(tool.input || tool.output)",
+          "@@ -16,4 +16,6 @@",
+          " export function ToolRow({ tool }: { tool: ToolCall }) {",
+          "   const [open, setOpen] = React.useState(false)",
+          "-  const hasBody = !!(tool.input || tool.output)",
+          "+  const diff = extractToolDiff(tool)",
+          "+  const showDiff = !!diff?.length",
+          "+  const hasBody = showDiff || !!(tool.input || tool.output)",
+          " ",
+          "   return (",
         ].join("\n"),
+        streamContent: EDITED_FILE,
       },
       status: "done",
       output: "+3 −1",
@@ -268,6 +320,10 @@ function streamingScenario(topic: string): MockStep[] {
         "which splits the payload into **ordered parts** — text, tool calls and",
         "reasoning. A streaming run can therefore interleave them without",
         "re-rendering the whole thread.",
+        "",
+        "The row itself lives in `components/ui/message-parts.tsx`, and the script",
+        "that fakes this answer is `lib/mock-agent.ts:42` — both are inline code, so",
+        "they render as file chips you can click.",
         "",
         "### The part that matters",
         "",
