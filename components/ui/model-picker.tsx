@@ -32,6 +32,12 @@ export type ModelOption = {
   disabledReason?: string
   /** Id of the ModelPickerGroup this model belongs to. */
   group?: string
+  /**
+   * Usable context window in tokens. The picker does not render it — it is
+   * carried here so a host that already has this list can size a context
+   * meter without keeping a second lookup table beside it.
+   */
+  contextLength?: number
 }
 
 export type ModelPickerGroup = {

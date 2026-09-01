@@ -145,6 +145,18 @@
       ]
     },
     {
+      "name": "context-meter",
+      "type": "registry:ui",
+      "title": "Context Meter",
+      "description": "Ring showing how much of a model's context window the next request would take, sized for a composer toolbar.",
+      "files": [
+        {
+          "path": "components/ui/context-meter.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "folder-picker",
       "type": "registry:ui",
       "title": "Folder Picker",

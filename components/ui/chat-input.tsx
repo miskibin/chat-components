@@ -38,6 +38,12 @@ export type ChatInputProps = {
   placeholder?: string
   /** Rendered next to the attach button — model/mode pickers belong here. */
   tools?: React.ReactNode
+  /**
+   * Fires on every change to the draft, the clear after a send and the text a
+   * slash command inserts included. The composer keeps owning the value; this
+   * is for a host that has to react to it, such as a context meter.
+   */
+  onTextChange?: (text: string) => void
   skills?: ChatSkill[]
   slashCommands?: ChatSlashCommand[]
   className?: string
@@ -84,6 +90,7 @@ export function ChatInput({
   isGenerating = false,
   placeholder = "Ask anything",
   tools,
+  onTextChange,
   skills = EMPTY_SKILLS,
   slashCommands = EMPTY_COMMANDS,
   className,
@@ -100,6 +107,21 @@ export function ChatInput({
   >(null)
   const taRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  /**
+   * Read through a ref so `changeText` — and the callbacks that close over it
+   * — stay stable across renders. A host that rebuilds the handler on every
+   * keystroke must not be able to rebuild this composer's memoized ones too.
+   */
+  const notifyText = React.useRef(onTextChange)
+  React.useEffect(() => {
+    notifyText.current = onTextChange
+  }, [onTextChange])
+
+  const changeText = React.useCallback((value: string) => {
+    setText(value)
+    notifyText.current?.(value)
+  }, [])
 
   const slashEnabled = skills.length > 0 || slashCommands.length > 0
   const slashQuery = slashEnabled ? parseSlashQuery(text) : null
@@ -154,26 +176,26 @@ export function ChatInput({
     const value = text.trim()
     if ((!value && pending.length === 0) || isGenerating || disabled) return
     onSend({ text: value, files: pending, skills: forcedSkills })
-    setText("")
+    changeText("")
     setPending([])
     setForcedSkills([])
-  }, [disabled, forcedSkills, isGenerating, onSend, pending, text])
+  }, [changeText, disabled, forcedSkills, isGenerating, onSend, pending, text])
 
   const selectSlashItem = React.useCallback((item: SlashMenuItem) => {
     if (item.kind === "command") {
-      setText(`/${item.name} `)
+      changeText(`/${item.name} `)
     } else {
       setForcedSkills((prev) =>
         prev.includes(item.name) || prev.length >= MAX_FORCED_SKILLS
           ? prev
           : [...prev, item.name]
       )
-      setText("")
+      changeText("")
     }
     setSlashIndex(0)
     setSlashDismissedText(null)
     requestAnimationFrame(() => taRef.current?.focus())
-  }, [])
+  }, [changeText])
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Never steal keys from an IME candidate window.
@@ -306,7 +328,7 @@ export function ChatInput({
             data-slot="chat-input-textarea"
             rows={1}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => changeText(e.target.value)}
             onKeyDown={onKeyDown}
             onPaste={(e) => {
               if (!e.clipboardData?.files?.length) return

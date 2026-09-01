@@ -2,6 +2,8 @@ import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { FolderPickerEmptyExample } from "@/components/examples/folder-picker-empty-example"
 import { FolderPickerExample } from "@/components/examples/folder-picker-example"
+import { ContextMeterExample } from "@/components/examples/context-meter-example"
+import { ContextMeterToolbarExample } from "@/components/examples/context-meter-toolbar-example"
 import { ModePickerExample } from "@/components/examples/mode-picker-example"
 import { ModePickerStyledExample } from "@/components/examples/mode-picker-styled-example"
 import { ModelPickerDisabledExample } from "@/components/examples/model-picker-disabled-example"
@@ -718,6 +720,119 @@ export function Header() {
           </>
         ),
       },
+    ],
+  },
+  "context-meter": {
+    title: "Context Meter",
+    description:
+      "Ring showing how much of a model's context window the next request would take, sized for a composer toolbar.",
+    registry: "context-meter",
+    preview: { name: "context-meter-example", node: <ContextMeterExample /> },
+    usage: `"use client"
+
+import { ContextMeter } from "@/components/ui/context-meter"
+
+export function Meter({ used, total }: { used: number; total: number }) {
+  return <ContextMeter used={used} total={total} />
+}`,
+    examples: [
+      {
+        title: "In the composer",
+        description: (
+          <>
+            The meter is <DocsCode>h-7</DocsCode>, so it lines up with
+            everything else in <DocsCode>tools</DocsCode>. Pair it with{" "}
+            <DocsCode>onTextChange</DocsCode> and the ring follows the draft as
+            it is typed.
+          </>
+        ),
+        example: {
+          name: "context-meter-toolbar-example",
+          node: <ContextMeterToolbarExample />,
+          align: "stretch",
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Two numbers, both yours",
+        description: (
+          <>
+            <DocsCode>used</DocsCode> is whatever the host can account for —
+            tokens a backend reported, an estimate over the transcript, or both
+            added together. <DocsCode>total</DocsCode> should be the window the
+            model is actually served with, which for a local runtime is often
+            far below what the architecture supports.
+          </>
+        ),
+      },
+    ],
+    props: [
+      {
+        caption: "ContextMeter",
+        rows: [
+          {
+            name: "used",
+            type: "number",
+            required: true,
+            description: "Tokens the next request would carry.",
+          },
+          {
+            name: "total",
+            type: "number",
+            required: true,
+            description:
+              "The usable context window. Zero or negative renders nothing.",
+          },
+          {
+            name: "warnAt",
+            type: "number",
+            default: "0.75",
+            description: "Fraction at which the ring stops being quiet.",
+          },
+          {
+            name: "dangerAt",
+            type: "number",
+            default: "0.9",
+            description: "Fraction at which the ring turns destructive.",
+          },
+          {
+            name: "showFrom",
+            type: "number",
+            default: "0.05",
+            description:
+              "Below this fraction the meter renders nothing, so an untouched composer stays clean.",
+          },
+          {
+            name: "hideValue",
+            type: "boolean",
+            default: "false",
+            description: "Drops the percentage and leaves the ring alone.",
+          },
+          {
+            name: "label",
+            type: "(used: number, total: number) => string",
+            description: (
+              <>
+                Replaces the hover title. Return <DocsCode>&quot;&quot;</DocsCode>{" "}
+                to drop it.
+              </>
+            ),
+          },
+          {
+            name: "size",
+            type: "number",
+            default: "14",
+            description: "Ring diameter in px.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "context-meter",
+      "context-meter-ring",
+      "context-meter-arc",
+      "context-meter-value",
     ],
   },
 } satisfies Record<string, ComponentDoc>
