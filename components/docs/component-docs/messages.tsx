@@ -28,6 +28,7 @@ import { MessageSenderExample } from "@/components/examples/message-sender-examp
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
 import { MessageToolsCollapsedExample } from "@/components/examples/message-tools-collapsed-example"
 import { MessageToolsStatusExample } from "@/components/examples/message-tools-status-example"
+import { MessageToolsTodoExample } from "@/components/examples/message-tools-todo-example"
 
 export const messageDocs = {
   message: {
@@ -601,6 +602,7 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
       "ask-question",
       "change-summary",
       "file-icon",
+      "todo-list",
     ],
     preview: { name: "message-parts-example", node: <MessagePartsExample /> },
     usage: `import {
@@ -873,6 +875,25 @@ export function Answer() {
         example: {
           name: "message-tools-status-example",
           node: <MessageToolsStatusExample />,
+        },
+      },
+      {
+        title: "Plans, not payloads",
+        description: (
+          <>
+            A tool whose name says todo or plan is read as a checklist:{" "}
+            <DocsCode>todo_write</DocsCode>, <DocsCode>TodoWrite</DocsCode>,{" "}
+            <DocsCode>write_todos</DocsCode>, <DocsCode>update_plan</DocsCode>.
+            The headline counts the plan instead of guessing a file was
+            written, and the body renders{" "}
+            <DocsCode>TodoList</DocsCode> rather than the raw arguments. For the
+            same plan as a live bar above the composer, see{" "}
+            <DocsCode>TodoPanel</DocsCode>.
+          </>
+        ),
+        example: {
+          name: "message-tools-todo-example",
+          node: <MessageToolsTodoExample />,
         },
       },
       {

@@ -31,6 +31,13 @@ import {
   parseAskQuestionResult,
   type AskQuestionResult,
 } from "@/components/ui/ask-question"
+import {
+  TodoList,
+  isTodoToolName,
+  parseTodoItems,
+  todoProgress,
+  type TodoItem,
+} from "@/components/ui/todo-list"
 import { formatWorkedFor } from "@/components/ui/change-summary"
 import { FileIcon } from "@/components/ui/file-icon"
 import { cn } from "@/lib/utils"
@@ -183,6 +190,18 @@ function toolHeadline(tool: MessageToolCallData) {
     asString(args.glob) ??
     asString(args.search)
 
+  if (isTodoToolName(tool.name)) {
+    const items = parseTodoItems(tool.input)
+    const progress = items ? todoProgress(items) : null
+    return {
+      label: failed
+        ? "Couldn’t update the plan"
+        : running
+          ? "Updating plan"
+          : "Updated plan",
+      detail: progress ? `${progress.completed}/${progress.total}` : undefined,
+    }
+  }
   if (kind.includes("shell") || kind === "bash" || kind === "command") {
     return {
       label: failed
@@ -965,6 +984,19 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   )
   const showFile = !!readFile
   /**
+   * A plan the agent rewrote. The same list is usually shown above the
+   * composer; the row keeps it too so an old turn still says what the plan
+   * was at that point in the thread.
+   */
+  const todos = React.useMemo<TodoItem[] | null>(
+    () =>
+      isTodoToolName(deferredTool.name)
+        ? parseTodoItems(deferredTool.input)
+        : null,
+    [deferredTool]
+  )
+  const showTodos = !!todos && todos.length > 0
+  /**
    * An ask the agent closed without a selection is still the user's to answer,
    * but only where the owner says so: `onAskAnswer` is the signal that this row
    * is the live one. Without it an ask from an old turn would reopen on reload.
@@ -977,6 +1009,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   const hasBody =
     showDiff ||
     showFile ||
+    showTodos ||
     showAskSummary ||
     !!(displayTool.input || displayTool.output)
   const headline = toolHeadline(displayTool)
@@ -1028,6 +1061,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
         : null
   const shortOutput =
     !ask &&
+    !showTodos &&
     !stats &&
     !readMeta &&
     displayTool.output &&
@@ -1171,6 +1205,9 @@ export const MessageToolCall = React.memo(function MessageToolCall({
                 result={resolvedAsk}
               />
             ) : null}
+            {showTodos && todos ? (
+              <TodoList items={todos} className="py-1" />
+            ) : null}
             {showDiff ? <ToolDiff lines={diff} language={language} /> : null}
             {showFile && readFile ? (
               <ToolFileView
@@ -1181,6 +1218,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
             ) : null}
             {!showDiff &&
             !showFile &&
+            !showTodos &&
             !showAskSummary &&
             displayTool.input ? (
               <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
@@ -1189,7 +1227,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
             ) : null}
             {displayTool.output &&
             (errored ||
-              (!showDiff && !showFile && !showAskSummary)) ? (
+              (!showDiff && !showFile && !showTodos && !showAskSummary)) ? (
               <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
                 {displayTool.output}
               </pre>

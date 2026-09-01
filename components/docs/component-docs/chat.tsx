@@ -10,6 +10,9 @@ import { ChatNavbarExample } from "@/components/examples/chat-navbar-example"
 import { ChatNavbarStyledExample } from "@/components/examples/chat-navbar-styled-example"
 import { PromptSuggestionsExample } from "@/components/examples/prompt-suggestions-example"
 import { PromptSuggestionsStyledExample } from "@/components/examples/prompt-suggestions-styled-example"
+import { TodoListChecklistExample } from "@/components/examples/todo-list-checklist-example"
+import { TodoListComposerExample } from "@/components/examples/todo-list-composer-example"
+import { TodoListExample } from "@/components/examples/todo-list-example"
 import { ResizableExample } from "@/components/examples/resizable-example"
 
 export const chatDocs = {
@@ -463,6 +466,175 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
           </>
         ),
       },
+    ],
+  },
+
+  "todo-list": {
+    title: "Todo List",
+    description:
+      "The agent's plan as one line above the composer: the live task and a count, opening into the whole checklist.",
+    registry: "todo-list",
+    registryDependencies: ["collapsible"],
+    preview: { name: "todo-list-example", node: <TodoListExample /> },
+    usage: `"use client"
+
+import { TodoPanel, parseTodoItems } from "@/components/ui/todo-list"
+
+export function Plan({ toolInput }: { toolInput?: string }) {
+  const items = parseTodoItems(toolInput) ?? []
+
+  return <TodoPanel items={items} />
+}`,
+    examples: [
+      {
+        title: "Above the composer",
+        description: (
+          <>
+            The panel carries the same <DocsCode>max-w-3xl</DocsCode> measure as{" "}
+            <DocsCode>ChatInput</DocsCode>, so the two stack without a call-site
+            override. <DocsCode>parseTodoItems</DocsCode> turns a todo tool
+            call&apos;s arguments straight into the list.
+          </>
+        ),
+        example: {
+          name: "todo-list-composer-example",
+          node: <TodoListComposerExample />,
+          align: "stretch",
+        },
+      },
+      {
+        title: "The checklist alone",
+        description: (
+          <>
+            <DocsCode>TodoList</DocsCode> is the list with no chrome — for a
+            plan that is already framed by something else, like a tool row or a
+            sidebar section.
+          </>
+        ),
+        example: {
+          name: "todo-list-checklist-example",
+          node: <TodoListChecklistExample />,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "One list, whoever wrote it",
+        description: (
+          <>
+            <DocsCode>parseTodoItems</DocsCode> accepts a bare array or an
+            object keyed <DocsCode>todos</DocsCode>,{" "}
+            <DocsCode>items</DocsCode>, <DocsCode>tasks</DocsCode>,{" "}
+            <DocsCode>plan</DocsCode>, <DocsCode>entries</DocsCode> or{" "}
+            <DocsCode>steps</DocsCode>, and reads the task from{" "}
+            <DocsCode>content</DocsCode>, <DocsCode>text</DocsCode>,{" "}
+            <DocsCode>title</DocsCode>, <DocsCode>task</DocsCode> and friends.
+            Statuses fold onto three states through{" "}
+            <DocsCode>normalizeTodoStatus</DocsCode>; anything unrecognized is{" "}
+            <DocsCode>pending</DocsCode>, never <DocsCode>completed</DocsCode>.
+          </>
+        ),
+      },
+      {
+        title: "State belongs to the host",
+        description: (
+          <>
+            The panel keeps nothing about the run. Derive{" "}
+            <DocsCode>items</DocsCode> from the last todo tool call in the
+            thread and a reloaded conversation shows the same plan the live one
+            did. <DocsCode>isTodoToolName</DocsCode> is the matcher, and{" "}
+            <DocsCode>todoProgress</DocsCode> gives the counts if you want to
+            label the bar yourself.
+          </>
+        ),
+      },
+    ],
+    props: [
+      {
+        caption: "TodoPanel",
+        rows: [
+          {
+            name: "items",
+            type: "TodoItem[]",
+            required: true,
+            description:
+              "The plan, in order. An empty array renders nothing at all.",
+          },
+          {
+            name: "defaultOpen",
+            type: "boolean",
+            default: "false",
+            description:
+              "Start expanded. Collapsed, the panel is a single status line.",
+          },
+          {
+            name: "open",
+            type: "boolean",
+            description: "Controlled open state; pair with onOpenChange.",
+          },
+          {
+            name: "onOpenChange",
+            type: "(open: boolean) => void",
+            description: "Fired when the disclosure is toggled.",
+          },
+          {
+            name: "label",
+            type: "ReactNode",
+            description:
+              "Replaces the collapsed headline, which is otherwise the in-progress task (or the next unfinished one).",
+          },
+        ],
+      },
+      {
+        caption: "TodoList",
+        rows: [
+          {
+            name: "items",
+            type: "TodoItem[]",
+            required: true,
+            description: "The same list, rendered as a bare ordered list.",
+          },
+        ],
+      },
+      {
+        caption: "Helpers",
+        rows: [
+          {
+            name: "parseTodoItems",
+            type: "(input?: string | null) => TodoItem[] | null",
+            description:
+              "Parses a todo tool call's JSON arguments into items. Null when the payload holds no list.",
+          },
+          {
+            name: "isTodoToolName",
+            type: "(name: string) => boolean",
+            description:
+              "True for todo_write, TodoWrite, write_todos, update_plan and the like.",
+          },
+          {
+            name: "todoProgress",
+            type: "(items: TodoItem[]) => { completed, total, active, current, done }",
+            description:
+              "Counts plus the in-progress item and the one worth naming in a single line.",
+          },
+          {
+            name: "normalizeTodoStatus",
+            type: "(value: unknown) => TodoStatus",
+            description:
+              "Folds any spelling onto pending | in_progress | completed.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "todo-panel",
+      "todo-panel-root",
+      "todo-panel-trigger",
+      "todo-panel-headline",
+      "todo-panel-count",
+      "todo-panel-list",
+      "todo-list",
+      "todo-item",
     ],
   },
 
