@@ -9,11 +9,20 @@ import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
 
 export type { AgentStreamEvent }
 
+/**
+ * The CLI's own conversation modes. `agent` is what it runs without a flag —
+ * full tool access; `ask` answers without touching the workspace, and `plan`
+ * writes a plan instead of the change. Only the two non-default ones are ever
+ * passed, so a caller that says nothing gets the CLI's own behaviour.
+ */
+export type CursorAgentMode = "agent" | "ask" | "plan"
+
 export type AgentRunOptions = {
   prompt: string
   model: string
   sessionId?: string
   workspace?: string
+  mode?: CursorAgentMode
   signal?: AbortSignal
 }
 
@@ -59,6 +68,11 @@ export async function* runCursorAgent(
 
   if (process.platform !== "win32") {
     args.splice(args.indexOf("--approve-mcps"), 0, "--sandbox", "enabled")
+  }
+
+  // `agent` is the CLI's default and takes no flag.
+  if (options.mode && options.mode !== "agent") {
+    args.push("--mode", options.mode)
   }
 
   if (options.sessionId) {
