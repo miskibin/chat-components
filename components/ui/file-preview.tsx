@@ -654,9 +654,9 @@ export function FilePreview({
       markCopied()
       return
     }
-    const written = navigator.clipboard?.writeText(path)
-    if (!written) return
-    void written.then(markCopied, () => {})
+    const clipboard = navigator.clipboard
+    if (!clipboard) return
+    void clipboard.writeText(path).then(markCopied, () => {})
   }, [copy, hasCopyHandler, path])
 
   const showFile = React.useCallback(() => setRequested("file"), [])
