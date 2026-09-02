@@ -521,6 +521,12 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             description: "Attach to your own scroll container.",
           },
           {
+            name: "contentRef",
+            type: "RefObject<HTMLDivElement>",
+            description:
+              "Attach to the box inside it that actually holds the messages. Height that arrives after the last message — a mermaid diagram mounting, Shiki replacing a plain block, an image loading — re-pins a reader who is still following, which a message-keyed effect alone cannot see.",
+          },
+          {
             name: "handleMessageScroll",
             type: "() => void",
             description:
