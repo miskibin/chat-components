@@ -5,18 +5,24 @@ import { DocsCode } from "@/components/docs/typography"
 import { AskQuestionExample } from "@/components/examples/ask-question-example"
 import { AskQuestionToolExample } from "@/components/examples/ask-question-tool-example"
 import { AskQuestionStyledExample } from "@/components/examples/ask-question-styled-example"
+import { ChangeSummaryActionsExample } from "@/components/examples/change-summary-actions-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
 import { ChangeSummaryStyledExample } from "@/components/examples/change-summary-styled-example"
 import { FileIconExample } from "@/components/examples/file-icon-example"
+import { FilePreviewActionsExample } from "@/components/examples/file-preview-actions-example"
 import { FilePreviewExample } from "@/components/examples/file-preview-example"
+import { FilePreviewImageExample } from "@/components/examples/file-preview-image-example"
+import { FilePreviewSplitExample } from "@/components/examples/file-preview-split-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { GenerationStatusStyledExample } from "@/components/examples/generation-status-styled-example"
 import { MessageActionsExample } from "@/components/examples/message-actions-example"
 import { MessageCitationsExample } from "@/components/examples/message-citations-example"
 import { MessageExample } from "@/components/examples/message-example"
+import { MessageFileActionsExample } from "@/components/examples/message-file-actions-example"
 import { MessageListActionsExample } from "@/components/examples/message-list-actions-example"
 import { MessageListEmptyExample } from "@/components/examples/message-list-empty-example"
 import { MessageListExample } from "@/components/examples/message-list-example"
+import { MessageListJumpExample } from "@/components/examples/message-list-jump-example"
 import { MessageListStreamingExample } from "@/components/examples/message-list-streaming-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
 import { MessageMarkdownImagesExample } from "@/components/examples/message-markdown-images-example"
@@ -24,9 +30,11 @@ import { MessageMarkdownMermaidExample } from "@/components/examples/message-mar
 import { MessageMarkdownStyledExample } from "@/components/examples/message-markdown-styled-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
 import { MessageProcessExample } from "@/components/examples/message-process-example"
+import { MessageQuoteExample } from "@/components/examples/message-quote-example"
 import { MessageSenderExample } from "@/components/examples/message-sender-example"
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
 import { MessageToolsCollapsedExample } from "@/components/examples/message-tools-collapsed-example"
+import { MessageToolsCommandsExample } from "@/components/examples/message-tools-commands-example"
 import { MessageToolsStatusExample } from "@/components/examples/message-tools-status-example"
 import { MessageToolsTodoExample } from "@/components/examples/message-tools-todo-example"
 
@@ -216,13 +224,49 @@ export function Turn() {
           },
           {
             name: "onFileReferenceClick",
-            type: "(path: string) => void",
+            type: "(path: string, line?: number) => void",
             description: (
               <>
                 Makes the file references inside the answer&apos;s markdown
                 clickable — every <DocsCode>MessageMarkdown</DocsCode> in the
                 turn gets it. The path arrives without its{" "}
-                <DocsCode>:line</DocsCode> suffix.
+                <DocsCode>:line</DocsCode> suffix, and the line it named
+                arrives beside it.
+              </>
+            ),
+          },
+          {
+            name: "fileActions",
+            type: "FileActionItem[]",
+            description: (
+              <>
+                Right-click menu for every file this turn names — the change
+                card, the tool rows, the path chips and the images in the
+                answer. Keep the array stable; see{" "}
+                <DocsCode>ChangeSummary</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "onQuote",
+            type: "(text: string) => void",
+            description: (
+              <>
+                Offers a “Quote” pill over a selection inside an assistant
+                answer, for dropping the selected text into a composer.
+                Assistant turns only.
+              </>
+            ),
+          },
+          {
+            name: "resolveFileUrl",
+            type: "(path: string) => string | undefined",
+            description: (
+              <>
+                Turns a path a tool names into a URL this page can load. Only
+                the host knows how the machine&apos;s files reach the browser,
+                so this is how a tool row shows an image the agent wrote or
+                read instead of its bytes.
               </>
             ),
           },
@@ -245,6 +289,7 @@ export function Turn() {
     dataSlots: [
       "message",
       "message-content",
+      "message-quote",
       "message-attachments",
       "message-attachment",
       "message-actions",
@@ -252,6 +297,37 @@ export function Turn() {
       "message-turn-summary",
     ],
     examples: [
+      {
+        title: "Right-click any file, click any line",
+        description: (
+          <>
+            One <DocsCode>fileActions</DocsCode> array reaches the change card,
+            the tool rows, the path chips and the images — the host decides
+            what “open” means and gets the path back. A chip such as{" "}
+            <DocsCode>app/page.tsx:42</DocsCode> reports its line through{" "}
+            <DocsCode>onFileReferenceClick</DocsCode>, ready for{" "}
+            <DocsCode>FilePreview</DocsCode>&apos;s <DocsCode>focusLine</DocsCode>.
+          </>
+        ),
+        example: {
+          name: "message-file-actions-example",
+          node: <MessageFileActionsExample />,
+        },
+      },
+      {
+        title: "Quote a selection",
+        description: (
+          <>
+            Select text inside an assistant answer and a “Quote” pill appears
+            over it; <DocsCode>onQuote</DocsCode> receives the selection, for
+            a composer to turn into a blockquote.
+          </>
+        ),
+        example: {
+          name: "message-quote-example",
+          node: <MessageQuoteExample />,
+        },
+      },
       {
         title: "Recolor the bubble",
         description: (
@@ -458,11 +534,40 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
           },
           {
             name: "onFileReferenceClick",
-            type: "(messageId: string, path: string) => void",
+            type: "(messageId: string, path: string, line?: number) => void",
             description: (
               <>
                 Fired when a file chip inside an answer&apos;s markdown is
-                clicked — see <DocsCode>MessageMarkdown</DocsCode>.
+                clicked, with the line the chip named — see{" "}
+                <DocsCode>MessageMarkdown</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "fileActions",
+            type: "FileActionItem[]",
+            description: (
+              <>
+                Right-click menu for every file the transcript names — change
+                cards, tool rows, path chips and images. Handed to the memoized
+                rows by reference, so keep the array stable.
+              </>
+            ),
+          },
+          {
+            name: "onQuote",
+            type: "(messageId: string, text: string) => void",
+            description:
+              "A selection quoted out of an assistant answer, for the composer. Stabilized like the other callbacks.",
+          },
+          {
+            name: "resolveFileUrl",
+            type: "(path: string) => string | undefined",
+            description: (
+              <>
+                Turns a path a tool names into a URL the page can load —
+                forwarded to every row so an image the agent wrote or read
+                renders as a picture. Stabilized internally.
               </>
             ),
           },
@@ -499,12 +604,25 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             description:
               "Call from onScroll. Re-arms following when the reader returns to the bottom.",
           },
+          {
+            name: "atBottom",
+            type: "boolean",
+            description:
+              "Whether the reader is at (or within a few pixels of) the bottom — what shows and hides the jump button.",
+          },
+          {
+            name: "scrollToBottom",
+            type: "() => void",
+            description:
+              "Smooth-scrolls to the end and re-arms following.",
+          },
         ],
       },
     ],
     dataSlots: [
       "message-list",
       "message-list-item",
+      "message-list-jump",
     ],
     notes: [
       {
@@ -542,6 +660,23 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
       },
     ],
     examples: [
+      {
+        title: "Jump back to the bottom",
+        description: (
+          <>
+            Scroll up and a round button appears over the end of the list —
+            while a turn streams too, which is the point. Clicking it scrolls
+            down and re-arms following. It carries{" "}
+            <DocsCode>data-slot=&quot;message-list-jump&quot;</DocsCode> and{" "}
+            <DocsCode>data-visible</DocsCode>.
+          </>
+        ),
+        example: {
+          name: "message-list-jump-example",
+          node: <MessageListJumpExample />,
+          align: "stretch",
+        },
+      },
       {
         title: "Per-message actions",
         description: (
@@ -743,6 +878,23 @@ export function Answer() {
             ),
           },
           {
+            name: "fileActions",
+            type: "FileActionItem[]",
+            description:
+              "Right-click menu on a row that names a file — same actions as the change-summary card. MessageToolCalls forwards it to every row.",
+          },
+          {
+            name: "resolveFileUrl",
+            type: "(path: string) => string | undefined",
+            description: (
+              <>
+                Turns a path the tool names into a URL this page can load.
+                Where it answers for an image, the row shows the picture instead
+                of the bytes.
+              </>
+            ),
+          },
+          {
             name: "collapseAt",
             type: "number",
             default: "3",
@@ -752,6 +904,42 @@ export function Answer() {
             name: "defaultOpen",
             type: "boolean",
             description: "Overrides the automatic collapse decision.",
+          },
+        ],
+      },
+      {
+        caption: "Helpers",
+        rows: [
+          {
+            name: "summarizeCommand",
+            type: "(command: string) => { display: string; label: string }",
+            description: (
+              <>
+                What a shell row&apos;s headline says.{" "}
+                <DocsCode>display</DocsCode> is the command with the
+                harness&apos;s wrapper peeled off —{" "}
+                <DocsCode>/bin/zsh -lc &apos;cd /repo &amp;&amp; npm test&apos;</DocsCode>{" "}
+                reads <DocsCode>npm test</DocsCode> — and{" "}
+                <DocsCode>label</DocsCode> is how it is named (“Ran npm test”).
+                The full command stays in the expanded body and the title.
+              </>
+            ),
+          },
+          {
+            name: "isImagePath",
+            type: "(path?: string) => boolean",
+            description:
+              "True for a file whose bytes are a picture — png, jpeg, gif, webp, avif, bmp, ico, svg.",
+          },
+          {
+            name: "imageDimensions",
+            type: "(output?: string) => string | null",
+            description: (
+              <>
+                <DocsCode>1531×889</DocsCode> out of the stand-in text a Read
+                tool returns for an image.
+              </>
+            ),
           },
         ],
       },
@@ -831,6 +1019,7 @@ export function Answer() {
       "message-tool-diff-line",
       "message-tool-file",
       "message-tool-file-line",
+      "message-tool-image",
       "message-tool-show-all",
       "message-code",
       "message-code-header",
@@ -842,6 +1031,21 @@ export function Answer() {
       "message-attachment",
     ],
     examples: [
+      {
+        title: "Shell rows say what ran",
+        description: (
+          <>
+            A harness wraps commands in its own shell — the row unwraps them
+            and drops a leading <DocsCode>cd</DocsCode>, so the headline reads
+            “Ran npm test” rather than <DocsCode>/bin/zsh -lc …</DocsCode>.
+            Expand a row for the untouched command.
+          </>
+        ),
+        example: {
+          name: "message-tools-commands-example",
+          node: <MessageToolsCommandsExample />,
+        },
+      },
       {
         title: "Collapse a finished turn",
         description: (
@@ -1236,13 +1440,24 @@ export function Answer({ text }: { text: string }) {
           },
           {
             name: "onFileClick",
-            type: "(path: string) => void",
+            type: "(path: string, line?: number) => void",
             description: (
               <>
                 Makes every detected file chip a button. The path arrives with
-                any <DocsCode>:line:col</DocsCode> suffix stripped. Keep the
-                handler stable — it is read through context so the inline
-                renderer stays memoized while text streams.
+                any <DocsCode>:line:col</DocsCode> suffix stripped, and the line
+                beside it. Keep the handler stable — it is read through context
+                so the inline renderer stays memoized while text streams.
+              </>
+            ),
+          },
+          {
+            name: "fileActions",
+            type: "FileActionItem[]",
+            description: (
+              <>
+                Right-click menu on the file chips and on the images the answer
+                renders (a <DocsCode>data:</DocsCode> image gets none — it is
+                not a file). Read through the same context; keep it stable.
               </>
             ),
           },
@@ -1252,6 +1467,8 @@ export function Answer({ text }: { text: string }) {
     dataSlots: [
       "message-markdown",
       "message-file-ref",
+      "message-markdown-image",
+      "file-context-menu",
       "file-icon",
     ],
     examples: [
@@ -1275,7 +1492,7 @@ export function Answer({ text }: { text: string }) {
         ),
         code: {
           lang: "tsx",
-          code: `<MessageMarkdown onFileClick={(path) => setPreviewFile({ path })}>
+          code: `<MessageMarkdown onFileClick={(path, line) => setPreviewFile({ path, focusLine: line })}>
   {"Renamed \`lib/store/reducer.ts\`; the call site is \`app/page.tsx:120\`."}
 </MessageMarkdown>
 
@@ -1355,7 +1572,7 @@ export function Answer({ text }: { text: string }) {
     description:
       "The card Cursor shows after a coding turn: file count, a Review action, a few rows with +/- stats, and “Show N more”. Pair it with WorkedFor for the elapsed-time badge.",
     registry: "change-summary",
-    registryDependencies: ["collapsible", "file-icon"],
+    registryDependencies: ["collapsible", "context-menu", "file-icon"],
     preview: {
       name: "change-summary-example",
       node: <ChangeSummaryExample />,
@@ -1424,10 +1641,60 @@ export function AfterTurn() {
             ),
           },
           {
+            name: "fileActions",
+            type: "FileActionItem[]",
+            description: (
+              <>
+                Right-click menu on every row — open in an editor, reveal in
+                the file manager, copy the path. Each action gets the row&apos;s
+                path back. Keep the array stable: the rows are memoized.
+              </>
+            ),
+          },
+          {
             name: "previewCount",
             type: "number",
             default: "4",
             description: "How many rows to show before “Show N more”.",
+          },
+        ],
+      },
+      {
+        caption: "FileActionItem",
+        rows: [
+          {
+            name: "id / label / icon",
+            type: "string / string / React.ReactNode",
+            description: "One menu entry.",
+          },
+          {
+            name: "onSelect",
+            type: "(path: string) => void",
+            required: true,
+            description: "Called with the path of the file the menu was opened on.",
+          },
+          {
+            name: "destructive / separatorBefore",
+            type: "boolean",
+            description: "Red text for the entry; a rule above it.",
+          },
+        ],
+      },
+      {
+        caption: "FileContextMenu",
+        rows: [
+          {
+            name: "path",
+            type: "string",
+            required: true,
+            description: (
+              <>
+                Wraps any trigger in the same menu the rows use —{" "}
+                <DocsCode>FilePreview</DocsCode> and{" "}
+                <DocsCode>MessageMarkdown</DocsCode> share it. With no{" "}
+                <DocsCode>actions</DocsCode> the child renders untouched.
+              </>
+            ),
           },
         ],
       },
@@ -1453,6 +1720,7 @@ export function AfterTurn() {
       "change-summary-file-icon",
       "change-summary-stats",
       "change-summary-more",
+      "file-context-menu",
       "worked-for",
     ],
     examples: [
@@ -1472,6 +1740,21 @@ export function AfterTurn() {
           code: `import { fileChangesFromTools } from "@/components/ui/change-summary"
 
 <ChangeSummary files={fileChangesFromTools(tools)} />`,
+        },
+      },
+      {
+        title: "Right-click a row",
+        description: (
+          <>
+            <DocsCode>fileActions</DocsCode> puts a context menu on every row.
+            The card only shows the menu; what “open” or “reveal” means on this
+            machine is the host&apos;s call, which is why each action is handed the
+            path and nothing else.
+          </>
+        ),
+        example: {
+          name: "change-summary-actions-example",
+          node: <ChangeSummaryActionsExample />,
         },
       },
       {
@@ -1520,7 +1803,7 @@ export function AfterTurn() {
     description:
       "The right-hand panel Cursor opens when you click an edited file: the agent's diff, or the whole file with the edited lines marked and scrolled into view.",
     registry: "file-preview",
-    registryDependencies: ["message-parts", "file-icon"],
+    registryDependencies: ["message-parts", "file-icon", "change-summary", "dropdown-menu"],
     preview: {
       name: "file-preview-example",
       node: <FilePreviewExample />,
@@ -1587,6 +1870,48 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
                 <DocsCode>content</DocsCode> is set, otherwise{" "}
                 <DocsCode>diff</DocsCode>. The toggle only appears when both
                 views are possible.
+              </>
+            ),
+          },
+          {
+            name: "diffLayout / defaultDiffLayout / onDiffLayoutChange",
+            type: '"unified" | "split"',
+            default: '"unified"',
+            description: (
+              <>
+                Side-by-side or one column, controlled or not. The header shows
+                the toggle only in the diff view; a run of removed lines
+                followed by added ones pairs up row by row on the two sides.
+              </>
+            ),
+          },
+          {
+            name: "wrap / defaultWrap / onWrapChange",
+            type: "boolean",
+            default: "true",
+            description:
+              "Soft-wrap long lines. Off, the body scrolls sideways instead — in both views and both layouts.",
+          },
+          {
+            name: "actions",
+            type: "FileActionItem[]",
+            description: (
+              <>
+                Right-click menu on the header, and the same items behind a
+                kebab button — open in an editor, reveal, copy the path. The
+                type lives in <DocsCode>change-summary</DocsCode>; keep the
+                array stable.
+              </>
+            ),
+          },
+          {
+            name: "onCopyPath",
+            type: "(path: string) => void",
+            description: (
+              <>
+                Clicking the path in the header copies it. Set this to copy
+                something else — an absolute path — instead of the built-in
+                clipboard write; the “Copied” state shows either way.
               </>
             ),
           },
@@ -1668,6 +1993,31 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
             default: "1",
             description: "First line number of content, for a partial read.",
           },
+          {
+            name: "focusLine",
+            type: "number",
+            description: (
+              <>
+                1-based line of the File view to centre and mark — where a{" "}
+                <DocsCode>file.ts:42</DocsCode> reference pointed. Outranks the
+                first changed line, and opens the File view when there is
+                content.
+              </>
+            ),
+          },
+          {
+            name: "imageSrc",
+            type: "string",
+            description: (
+              <>
+                A URL the page can load this file&apos;s picture from. Set it
+                for an image and the panel shows the picture instead of a text
+                body — only the host knows how a path on the machine reaches
+                the browser. <DocsCode>filePreviewFromTool</DocsCode> leaves an
+                image&apos;s stand-in text out so the host can fill this in.
+              </>
+            ),
+          },
         ],
       },
       {
@@ -1695,14 +2045,68 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
       "file-preview-path",
       "file-preview-stats",
       "file-preview-view-toggle",
+      "file-preview-prefs",
+      "file-preview-layout-toggle",
+      "file-preview-wrap-toggle",
+      "file-preview-actions",
       "file-preview-close",
       "file-preview-body",
+      "file-preview-image",
       "file-preview-line",
+      "file-preview-side",
       "file-preview-gutter",
       "file-preview-note",
       "file-icon",
     ],
     examples: [
+      {
+        title: "Split view and wrapping",
+        description: (
+          <>
+            The two preferences in the header — side-by-side against unified,
+            and soft-wrap against a sideways scroll — are controlled here so
+            the host can remember them. Removed and added runs pair up row by
+            row; a longer side leaves the other cell empty.
+          </>
+        ),
+        example: {
+          name: "file-preview-split-example",
+          node: <FilePreviewSplitExample />,
+          align: "stretch",
+        },
+      },
+      {
+        title: "Actions, copy path, focus line",
+        description: (
+          <>
+            <DocsCode>actions</DocsCode> puts a menu on the header — right-click
+            it, or use the kebab — and clicking the path copies it.{" "}
+            <DocsCode>focusLine</DocsCode> centres and marks a line the host
+            wants you to see, ahead of the first edit.
+          </>
+        ),
+        example: {
+          name: "file-preview-actions-example",
+          node: <FilePreviewActionsExample />,
+          align: "stretch",
+        },
+      },
+      {
+        title: "An image instead of text",
+        description: (
+          <>
+            A chart the agent rendered has no text to show. Hand the panel an{" "}
+            <DocsCode>imageSrc</DocsCode> — a route on your origin that serves
+            the file, a data URL — and it shows the picture, letterboxed in the
+            body.
+          </>
+        ),
+        example: {
+          name: "file-preview-image-example",
+          node: <FilePreviewImageExample />,
+          align: "stretch",
+        },
+      },
       {
         title: "Open it from a message list",
         description: (

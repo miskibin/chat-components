@@ -38,7 +38,11 @@ import {
   todoProgress,
   type TodoItem,
 } from "@/components/ui/todo-list"
-import { formatWorkedFor } from "@/components/ui/change-summary"
+import {
+  FileContextMenu,
+  formatWorkedFor,
+  type FileActionItem,
+} from "@/components/ui/change-summary"
 import { FileIcon } from "@/components/ui/file-icon"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
@@ -172,7 +176,87 @@ function clip(text: string, max = 48) {
   return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max - 1)}…`
 }
 
-function toolHeadline(tool: MessageToolCallData) {
+/**
+ * `/bin/zsh -lc '…'`, `cmd /c …`, `powershell -Command …` — the harness's own
+ * wrapper around the command the user actually asked for. The capture is
+ * everything after the flag that says “the rest is the command”.
+ */
+const SHELL_WRAPPER_RE =
+  /^(?:\S*\benv(?:\.exe)?\s+(?:(?:-\S+|[A-Za-z_]\w*=\S*)\s+)*)?\S*\b(?:sh|bash|zsh|ksh|dash|fish|ash|cmd|powershell|pwsh)(?:\.exe)?\s+(?:-{1,2}[a-z]+\s+)*(?:-{1,2}[a-z]*c(?:ommand)?|\/c)\s+([\s\S]+)$/i
+/** `cd packages/web && …` is where the command ran, not what it did. */
+const CD_PREFIX_RE = /^cd\s+(?:'[^']*'|"[^"]*"|[^\s;&|]+)\s*(?:&&|;)\s*/
+
+/** Interpreters and runners whose second word is the real verb. */
+const COMMAND_HOSTS = new Set([
+  "sudo",
+  "npx",
+  "env",
+  "time",
+  "nohup",
+  "uv",
+  "uvx",
+  "pnpm",
+  "yarn",
+  "npm",
+  "bun",
+  "python",
+  "python3",
+  "node",
+  "cargo",
+  "go",
+  "git",
+  "docker",
+  "make",
+])
+
+function unwrapShell(command: string) {
+  const match = SHELL_WRAPPER_RE.exec(command.trim())
+  if (!match) return command
+  const rest = match[1].trim()
+  const quote = rest[0]
+  const quoted =
+    (quote === "'" || quote === '"') && rest.length > 1 && rest.endsWith(quote)
+  if (quoted) return rest.slice(1, -1).replace(/\\(['"])/g, "$1")
+  return rest
+}
+
+/**
+ * What the headline says a shell tool did. `display` is the command with the
+ * harness's wrapper and `cd` prefix peeled off; `label` is how it is named —
+ * the binary, plus its subcommand where the binary alone says nothing
+ * (`npm test`, `git status`, `cargo build`).
+ */
+export function summarizeCommand(command: string): {
+  display: string
+  label: string
+} {
+  let display = unwrapShell(command)
+  let next = display.replace(CD_PREFIX_RE, "")
+  while (next !== display) {
+    display = next
+    next = display.replace(CD_PREFIX_RE, "")
+  }
+  display = display.replace(/\s+/g, " ").trim()
+
+  const words = display.split(" ")
+  const first = (words[0] ?? "").replace(/^.*[\\/]/, "")
+  if (!first) return { display, label: "command" }
+  const second = words[1]
+  const label =
+    COMMAND_HOSTS.has(first.toLowerCase()) && second && !second.startsWith("-")
+      ? `${first} ${second}`
+      : first
+  return { display, label }
+}
+
+type ToolHeadline = {
+  label: string
+  detail?: string
+  /** Hover text for the detail — the untouched command behind a summary. */
+  title?: string
+}
+
+function toolHeadline(tool: MessageToolCallData): ToolHeadline {
   const args = parseToolArgs(tool.input)
   const kind = tool.name.replace(/\s+/g, "").toLowerCase()
   const running = tool.status === "running" || tool.status === "pending"
@@ -203,13 +287,25 @@ function toolHeadline(tool: MessageToolCallData) {
     }
   }
   if (kind.includes("shell") || kind === "bash" || kind === "command") {
+    const summary = command ? summarizeCommand(command) : null
+    if (!summary) {
+      return {
+        label: failed
+          ? "Command failed"
+          : running
+            ? "Running command"
+            : "Ran command",
+      }
+    }
     return {
       label: failed
-        ? "Command failed"
+        ? `${summary.label} failed`
         : running
-          ? "Running command"
-          : "Ran command",
-      detail: command ? clip(command) : undefined,
+          ? `Running ${summary.label}`
+          : `Ran ${summary.label}`,
+      detail: clip(summary.display),
+      // The row shows the unwrapped line; the hover keeps the original.
+      title: command,
     }
   }
   if (kind.includes("read")) {
@@ -617,6 +713,37 @@ export function langFromPath(path?: string) {
   return undefined
 }
 
+/**
+ * Image files an agent writes or reads — a chart it just rendered, a
+ * screenshot it took. Their bytes are not text, so every text view in this
+ * file has nothing to show for them; the row renders the picture instead,
+ * given a URL the host can serve it from.
+ */
+const IMAGE_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+  "bmp",
+  "ico",
+  "svg",
+])
+
+export function isImagePath(path?: string) {
+  if (!path) return false
+  const base = path.split(/[\\/]/).pop() ?? path
+  const ext = base.includes(".") ? base.split(".").pop()?.toLowerCase() : undefined
+  return !!ext && IMAGE_EXTENSIONS.has(ext)
+}
+
+/** `1531x889 px` out of a Read tool's stand-in text, as `1531×889`. */
+export function imageDimensions(output?: string) {
+  const match = output?.match(/(\d+)\s*[x×]\s*(\d+)\s*px/i)
+  return match ? `${match[1]}×${match[2]}` : null
+}
+
 const SHIKI_LANGS = new Set([
   "ts",
   "tsx",
@@ -923,12 +1050,58 @@ const ToolFileView = React.memo(function ToolFileView({
   )
 })
 
+/**
+ * The picture itself, for a tool row that touched an image. Kept inside the
+ * row's own box so a tall render cannot push the conversation around, and
+ * `loading="lazy"` so a transcript full of charts still opens instantly.
+ */
+const ToolImageView = React.memo(function ToolImageView({
+  src,
+  alt,
+}: {
+  src: string
+  alt: string
+}) {
+  const [failed, setFailed] = React.useState(false)
+  const fail = React.useCallback(() => setFailed(true), [])
+
+  if (failed) {
+    return (
+      <p
+        data-slot="message-tool-image-error"
+        className="py-1 text-[12px] text-muted-foreground"
+      >
+        That image could not be loaded.
+      </p>
+    )
+  }
+
+  return (
+    <div
+      data-slot="message-tool-image"
+      className="overflow-hidden rounded-md border border-border/60 bg-muted/30 p-1.5"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- a local path served by the host, not an optimizable asset */}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        onError={fail}
+        className="max-h-[min(22rem,55vh)] w-auto max-w-full rounded-sm object-contain"
+      />
+    </div>
+  )
+})
+
 /** Single Cursor-style tool row — no card chrome. */
 export const MessageToolCall = React.memo(function MessageToolCall({
   tool,
   defaultOpen = false,
   onAskAnswer,
   onOpenFile,
+  fileActions,
+  resolveFileUrl,
   className,
 }: {
   tool: MessageToolCallData
@@ -944,6 +1117,18 @@ export const MessageToolCall = React.memo(function MessageToolCall({
    * rows that carry a path; without it the header stays one disclosure.
    */
   onOpenFile?: (tool: MessageToolCallData) => void
+  /**
+   * Right-click menu for a row that names a file — same actions as the
+   * change-summary card. Keep the array stable: the row is memoized.
+   */
+  fileActions?: FileActionItem[]
+  /**
+   * Turns a path the tool names into a URL this page can load — the one thing
+   * a component cannot work out on its own, since only the host knows how the
+   * machine's files reach the browser. Where it answers for an image, the row
+   * shows the picture instead of the bytes.
+   */
+  resolveFileUrl?: (path: string) => string | undefined
   className?: string
 }) {
   const [open, setOpen] = React.useState(defaultOpen)
@@ -1052,9 +1237,20 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     asString(args.target_file) ??
     asString(args.file)
   const language = langFromPath(path)
+  /**
+   * An image has no text body worth printing — a Read of one hands back a
+   * stand-in line like `image/png image, 1531x889 px`. Given a URL for it, the
+   * row shows the picture in place of that.
+   */
+  const imageSrc =
+    !errored && !running && isImagePath(path)
+      ? resolveFileUrl?.(path as string)
+      : undefined
+  const showImage = !!imageSrc
   const stats = showDiff ? formatDiffStats(diff) : null
-  const readMeta =
-    showFile && readFile.lineCount != null
+  const readMeta = showImage
+    ? imageDimensions(displayTool.output)
+    : showFile && readFile.lineCount != null
       ? `${readFile.lineCount} lines`
       : showFile
         ? `${readFile.content.split("\n").length} lines`
@@ -1113,7 +1309,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
             "min-w-0 truncate font-mono text-[12px] font-medium",
             errored ? "text-destructive" : "text-foreground/90"
           )}
-          title={headline.detail}
+          title={headline.title ?? headline.detail}
         >
           {headline.detail}
         </span>
@@ -1142,38 +1338,43 @@ export const MessageToolCall = React.memo(function MessageToolCall({
       className={cn("group animate-in fade-in duration-150", className)}
     >
       {openable ? (
-        <div
-          data-slot="message-tool-call-header"
-          className="flex min-w-0 items-center gap-1"
-        >
-          <button
-            type="button"
-            data-slot="message-tool-call-trigger"
-            data-action="open-file"
-            onClick={openFile}
-            title={path}
-            className={cn(disclosureTrigger, "min-w-0 cursor-pointer py-[3px]")}
+        <FileContextMenu path={path ?? ""} actions={fileActions}>
+          <div
+            data-slot="message-tool-call-header"
+            className="flex min-w-0 items-center gap-1"
           >
-            {headlineContent}
-          </button>
-          {hasBody ? (
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                data-slot="message-tool-call-chevron"
-                aria-label={open ? "Hide tool details" : "Show tool details"}
-                className={cn(
-                  disclosureTrigger,
-                  "cursor-pointer px-0.5 py-[3px]",
-                  // The glyph is hover-revealed; keyboard focus has to show it too.
-                  "focus-visible:[&_svg]:opacity-60"
-                )}
-              >
-                {chevron}
-              </button>
-            </CollapsibleTrigger>
-          ) : null}
-        </div>
+            <button
+              type="button"
+              data-slot="message-tool-call-trigger"
+              data-action="open-file"
+              onClick={openFile}
+              title={path}
+              className={cn(
+                disclosureTrigger,
+                "min-w-0 cursor-pointer py-[3px]"
+              )}
+            >
+              {headlineContent}
+            </button>
+            {hasBody ? (
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  data-slot="message-tool-call-chevron"
+                  aria-label={open ? "Hide tool details" : "Show tool details"}
+                  className={cn(
+                    disclosureTrigger,
+                    "cursor-pointer px-0.5 py-[3px]",
+                    // The glyph is hover-revealed; keyboard focus has to show it too.
+                    "focus-visible:[&_svg]:opacity-60"
+                  )}
+                >
+                  {chevron}
+                </button>
+              </CollapsibleTrigger>
+            ) : null}
+          </div>
+        </FileContextMenu>
       ) : (
         <CollapsibleTrigger asChild>
           <button
@@ -1208,8 +1409,14 @@ export const MessageToolCall = React.memo(function MessageToolCall({
             {showTodos && todos ? (
               <TodoList items={todos} className="py-1" />
             ) : null}
+            {showImage && imageSrc ? (
+              <ToolImageView
+                src={imageSrc}
+                alt={path ? fileName(path) : "Image"}
+              />
+            ) : null}
             {showDiff ? <ToolDiff lines={diff} language={language} /> : null}
-            {showFile && readFile ? (
+            {showFile && readFile && !showImage ? (
               <ToolFileView
                 content={readFile.content}
                 language={language}
@@ -1218,6 +1425,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
             ) : null}
             {!showDiff &&
             !showFile &&
+            !showImage &&
             !showTodos &&
             !showAskSummary &&
             displayTool.input ? (
@@ -1227,7 +1435,11 @@ export const MessageToolCall = React.memo(function MessageToolCall({
             ) : null}
             {displayTool.output &&
             (errored ||
-              (!showDiff && !showFile && !showTodos && !showAskSummary)) ? (
+              (!showDiff &&
+                !showFile &&
+                !showImage &&
+                !showTodos &&
+                !showAskSummary)) ? (
               <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
                 {displayTool.output}
               </pre>
@@ -1247,6 +1459,8 @@ export function MessageToolCalls({
   defaultOpen,
   onAskAnswer,
   onOpenFile,
+  fileActions,
+  resolveFileUrl,
 }: {
   tools: MessageToolCallData[]
   className?: string
@@ -1256,6 +1470,9 @@ export function MessageToolCalls({
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
   /** Forwarded to every row — see `MessageToolCall`. */
   onOpenFile?: (tool: MessageToolCallData) => void
+  /** Forwarded to every row — see `MessageToolCall`. */
+  fileActions?: FileActionItem[]
+  resolveFileUrl?: (path: string) => string | undefined
 }) {
   const pendingAsk = tools.some(
     (tool) => isPendingAskTool(tool) || (!!onAskAnswer && isOpenAskTool(tool))
@@ -1275,6 +1492,8 @@ export function MessageToolCalls({
           tool={tool}
           onAskAnswer={onAskAnswer}
           onOpenFile={onOpenFile}
+          fileActions={fileActions}
+          resolveFileUrl={resolveFileUrl}
         />
       ))}
     </div>

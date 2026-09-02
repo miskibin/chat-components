@@ -31,9 +31,13 @@
       "name": "change-summary",
       "type": "registry:ui",
       "title": "Change Summary",
-      "description": "Collapsed files-changed card with +/- stats, a Review action, and a WorkedFor elapsed-time badge.",
+      "description": "Collapsed files-changed card with +/- stats, a Review action, a right-click menu per file, and a WorkedFor elapsed-time badge.",
       "dependencies": ["lucide-react"],
-      "registryDependencies": ["collapsible", "miskibin/chat-components/file-icon"],
+      "registryDependencies": [
+        "collapsible",
+        "context-menu",
+        "miskibin/chat-components/file-icon"
+      ],
       "files": [
         {
           "path": "components/ui/change-summary.tsx",
@@ -109,8 +113,9 @@
       "name": "chat-input",
       "type": "registry:ui",
       "title": "Chat Input",
-      "description": "Composer with attachments, drag-and-drop, a skills/slash menu, and Enter-to-send.",
+      "description": "Composer with attachments, drag-and-drop, a skills/slash menu, @-mentions, a mid-turn message queue, collapsed long pastes, and Enter-to-send.",
       "dependencies": ["lucide-react", "class-variance-authority"],
+      "registryDependencies": ["miskibin/chat-components/file-icon"],
       "files": [
         {
           "path": "components/ui/chat-input.tsx",
@@ -188,7 +193,7 @@
       "name": "message-markdown",
       "type": "registry:ui",
       "title": "Message Markdown",
-      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, KaTeX, and inline data: images.",
+      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, KaTeX, inline data: images, clickable file references with their line, and a right-click menu per file.",
       "dependencies": [
         "streamdown",
         "@streamdown/code",
@@ -254,11 +259,13 @@
       "name": "file-preview",
       "type": "registry:ui",
       "title": "File Preview",
-      "description": "Side panel that shows an edited file: the agent's unified diff, or the whole file with the edited lines marked and scrolled into view.",
+      "description": "Side panel that shows an edited file: the agent's diff (unified or split), or the whole file with the edited lines marked and scrolled into view, with copy-path, wrap and a file actions menu.",
       "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
       "registryDependencies": [
+        "dropdown-menu",
         "miskibin/chat-components/message-parts",
-        "miskibin/chat-components/file-icon"
+        "miskibin/chat-components/file-icon",
+        "miskibin/chat-components/change-summary"
       ],
       "files": [
         {
@@ -288,7 +295,7 @@
       "name": "message-list",
       "type": "registry:ui",
       "title": "Message List",
-      "description": "Memoized, offscreen-aware message list with smart auto-scroll, stable actions, and generation status.",
+      "description": "Memoized, offscreen-aware message list with smart auto-scroll, a jump-to-bottom button, stable actions, quoting, file actions, and generation status.",
       "registryDependencies": [
         "miskibin/chat-components/message",
         "miskibin/chat-components/generation-status"

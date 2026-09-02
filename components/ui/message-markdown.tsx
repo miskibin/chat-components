@@ -9,6 +9,10 @@ import { createMathPlugin } from "@streamdown/math"
 import "katex/dist/katex.min.css"
 import "./message-markdown.css"
 
+import {
+  FileContextMenu,
+  type FileActionItem,
+} from "@/components/ui/change-summary"
 import { FileIcon } from "@/components/ui/file-icon"
 import { cn } from "@/lib/utils"
 
@@ -71,20 +75,31 @@ export type MessageMarkdownProps = {
   patternHandlers?: MarkdownPatternHandler[]
   /**
    * Makes an inline-code file reference a button — the path arrives without
-   * its `:line` suffix, ready to hand to a file panel.
+   * its `:line` suffix, and the line it named arrives beside it, ready to
+   * hand to a file panel.
    */
-  onFileClick?: (path: string) => void
+  onFileClick?: (path: string, line?: number) => void
+  /**
+   * Right-click menu for every file the answer names — the path chips and the
+   * images it renders. Keep the array stable: it reaches memoized blocks.
+   */
+  fileActions?: FileActionItem[]
 }
 
+type FileRefContextValue = {
+  onFileClick: ((path: string, line?: number) => void) | null
+  fileActions?: FileActionItem[]
+}
+
+const NO_FILE_REFS: FileRefContextValue = { onFileClick: null }
+
 /**
- * The click handler reaches the inline-code renderer through context rather
- * than through a closure, so that renderer can stay module-scope: Streamdown
- * memoizes each block against `components` key by key, by reference, and a
- * fresh function per render would re-render every block on every token.
+ * What a file reference can do reaches the renderers through context rather
+ * than through a closure, so they can stay module-scope: Streamdown memoizes
+ * each block against `components` key by key, by reference, and a fresh
+ * function per render would re-render every block on every token.
  */
-const FileClickContext = React.createContext<((path: string) => void) | null>(
-  null
-)
+const FileRefContext = React.createContext<FileRefContextValue>(NO_FILE_REFS)
 
 const LINE_SUFFIX_RE = /:\d+(?::\d+)?$/
 const URL_SCHEME_RE = /^[a-zA-Z][\w+.-]*:\/\//
@@ -123,6 +138,14 @@ function fileReferencePath(raw: string): string | null {
   return segments.length >= 3 ? path : null
 }
 
+/** The `:12` (or `:12:5`) a reference trails — the line, never the column. */
+function fileReferenceLine(raw: string): number | undefined {
+  const match = LINE_SUFFIX_RE.exec(raw.trim())
+  if (!match) return undefined
+  const line = Number(match[0].slice(1).split(":")[0])
+  return Number.isFinite(line) ? line : undefined
+}
+
 function textOf(node: React.ReactNode): string {
   if (typeof node === "string") return node
   if (typeof node === "number") return String(node)
@@ -148,8 +171,9 @@ function InlineCode({
   // `node` is Streamdown's hast element — destructured out so it never reaches
   // the DOM, and of no use to a chip that reads its own text.
   void node
-  const onFileClick = React.useContext(FileClickContext)
-  const path = fileReferencePath(textOf(children))
+  const { onFileClick, fileActions } = React.useContext(FileRefContext)
+  const text = textOf(children)
+  const path = fileReferencePath(text)
 
   if (!path) {
     return (
@@ -166,6 +190,8 @@ function InlineCode({
     )
   }
 
+  // The chip keeps saying `file.ts:42`; only the handler is told the number.
+  const line = fileReferenceLine(text)
   const label = (
     <>
       <FileIcon path={path} size={13} aria-hidden />
@@ -174,27 +200,23 @@ function InlineCode({
   )
 
   // A chip is only a control where the host can act on the click.
-  if (!onFileClick) {
-    return (
-      <span
-        data-slot="message-file-ref"
-        data-path={path}
-        className={cn(fileRefChip, className)}
-        {...props}
-      >
-        {label}
-      </span>
-    )
-  }
-
-  return (
+  const chip = !onFileClick ? (
+    <span
+      data-slot="message-file-ref"
+      data-path={path}
+      className={cn(fileRefChip, className)}
+      {...props}
+    >
+      {label}
+    </span>
+  ) : (
     <button
       type="button"
       data-slot="message-file-ref"
       data-path={path}
       data-interactive="true"
       title={path}
-      onClick={() => onFileClick(path)}
+      onClick={() => onFileClick(path, line)}
       className={cn(
         fileRefChip,
         "cursor-pointer outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -204,6 +226,49 @@ function InlineCode({
     >
       {label}
     </button>
+  )
+
+  return (
+    <FileContextMenu path={path} actions={fileActions}>
+      {chip}
+    </FileContextMenu>
+  )
+}
+
+/**
+ * Only used when the host offered file actions — Streamdown's own renderer,
+ * with its hover download control, stays in place otherwise.
+ *
+ * A `data:` image is its own bytes rather than a file on the machine, so it
+ * gets no menu. Anything else is handed over as written: a host that rewrote a
+ * local path into `/api/files?path=…` gets that URL back and decodes it.
+ */
+function MarkdownImage({
+  node,
+  className,
+  src,
+  alt,
+  ...props
+}: Omit<React.ComponentProps<"img">, "ref"> & { node?: unknown }) {
+  void node
+  const { fileActions } = React.useContext(FileRefContext)
+  const path = typeof src === "string" && !src.startsWith("data:") ? src : null
+  const image = (
+    // eslint-disable-next-line @next/next/no-img-element -- data: URLs and arbitrary remote hosts, not a next/image-friendly asset
+    <img
+      data-slot="message-markdown-image"
+      data-streamdown="image"
+      src={src}
+      alt={alt ?? ""}
+      className={cn("max-w-full rounded-lg", className)}
+      {...props}
+    />
+  )
+  if (!path) return image
+  return (
+    <FileContextMenu path={path} actions={fileActions}>
+      {image}
+    </FileContextMenu>
   )
 }
 
@@ -231,6 +296,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
   isAnimating = false,
   patternHandlers = EMPTY_HANDLERS,
   onFileClick,
+  fileActions,
 }: MessageMarkdownProps) {
   const { resolvedTheme } = useTheme()
   const mermaidConfig = React.useMemo(
@@ -242,10 +308,15 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
     [resolvedTheme]
   )
 
+  /* Overriding `img` costs Streamdown's own download control, so it is only
+     swapped in where the host actually has something to offer on a picture. */
+  const menuOnImages = !!fileActions?.length
+
   const components = React.useMemo(() => {
+    const image = menuOnImages ? { img: MarkdownImage } : null
     // `inlineCode` is the same function every time — Streamdown compares the
     // map key by key, by reference, so rebuilding the object costs nothing.
-    if (patternHandlers.length === 0) return { inlineCode: InlineCode }
+    if (patternHandlers.length === 0) return { inlineCode: InlineCode, ...image }
     /**
      * Scanning from an offset needs `lastIndex`, which is state on the regex —
      * so each handler gets a private copy, always global. The caller's own
@@ -308,6 +379,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
     }
     return {
       inlineCode: InlineCode,
+      ...image,
       p: ({ children: kids, ...props }: { children?: React.ReactNode }) => (
         <p {...props}>{wrap(kids)}</p>
       ),
@@ -315,16 +387,20 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
         <li {...props}>{wrap(kids)}</li>
       ),
     }
-  }, [patternHandlers])
+  }, [patternHandlers, menuOnImages])
 
   /* Either the stable callback or null — one identity each, so the provider
      never invalidates the blocks below it mid-stream. */
   const stableFileClick = useStableCallback(onFileClick)
   const fileClick = onFileClick ? stableFileClick : null
+  const fileRefs = React.useMemo(
+    () => ({ onFileClick: fileClick, fileActions }),
+    [fileClick, fileActions]
+  )
 
   return (
     <div data-slot="message-markdown" className="min-w-0">
-      <FileClickContext.Provider value={fileClick}>
+      <FileRefContext.Provider value={fileRefs}>
         <Streamdown
           className={cn("lc-markdown max-w-none", className)}
           plugins={plugins}
@@ -339,7 +415,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
         >
           {children}
         </Streamdown>
-      </FileClickContext.Provider>
+      </FileRefContext.Provider>
     </div>
   )
 })

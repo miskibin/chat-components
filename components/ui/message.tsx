@@ -1,6 +1,6 @@
 "use client"
 
-import { Pencil, Save, Undo2 } from "lucide-react"
+import { Pencil, Quote, Save, Undo2 } from "lucide-react"
 import * as React from "react"
 
 import {
@@ -25,6 +25,7 @@ import {
   ChangeSummary,
   fileChangesFromTools,
   type ChangeSummaryFile,
+  type FileActionItem,
 } from "@/components/ui/change-summary"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
@@ -89,11 +90,28 @@ export type MessageProps = {
   /** Makes each row of the change-summary card clickable. */
   onChangeFileClick?: (file: ChangeSummaryFile) => void
   /**
-   * Makes the file references inside the answer's markdown clickable — the
-   * path arrives without its `:line` suffix. Keep it stable: an unstable
-   * handler re-renders every markdown block on every streamed token.
+   * Turns a path a tool names into a URL this page can load. Only the host
+   * knows how the machine's files reach the browser, so this is how a tool row
+   * gets to show an image the agent wrote or read instead of its bytes.
    */
-  onFileReferenceClick?: (path: string) => void
+  resolveFileUrl?: (path: string) => string | undefined
+  /**
+   * Makes the file references inside the answer's markdown clickable — the
+   * path arrives without its `:line` suffix, and the line it named arrives
+   * beside it. Keep it stable: an unstable handler re-renders every markdown
+   * block on every streamed token.
+   */
+  onFileReferenceClick?: (path: string, line?: number) => void
+  /**
+   * Right-click menu for every file this turn names — the change card, the
+   * tool rows, the path chips and images in the answer. Keep the array stable.
+   */
+  fileActions?: FileActionItem[]
+  /**
+   * Offers a “Quote” pill over a selection inside an assistant answer, for
+   * dropping the selected text into the composer. Assistant turns only.
+   */
+  onQuote?: (text: string) => void
 }
 
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
@@ -150,7 +168,10 @@ export const Message = React.memo(function Message({
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
+  resolveFileUrl,
   onFileReferenceClick,
+  fileActions,
+  onQuote,
 }: MessageProps) {
   const [isEditing, setIsEditing] = React.useState(false)
   const [editedContent, setEditedContent] = React.useState(content)
@@ -251,6 +272,79 @@ export const Message = React.memo(function Message({
         .map((part) => part.tool) ?? []
     return fileChangesFromTools(fromParts.length > 0 ? fromParts : tools)
   }, [changes, isAnimating, parts, tools])
+
+  /**
+   * The pill lives beside the answer rather than in a portal: one absolutely
+   * positioned button inside the turn, placed from the selection's own rect.
+   */
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const pillRef = React.useRef<HTMLButtonElement>(null)
+  const [quotePos, setQuotePos] = React.useState<{
+    top: number
+    left: number
+  } | null>(null)
+  const quotable = sender === "assistant" && !!onQuote
+
+  const readSelection = React.useCallback(() => {
+    const host = contentRef.current
+    if (!host) return
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      setQuotePos(null)
+      return
+    }
+    // Both ends have to be in this answer — a selection dragged across two
+    // turns belongs to neither.
+    const inside =
+      !!selection.anchorNode &&
+      !!selection.focusNode &&
+      host.contains(selection.anchorNode) &&
+      host.contains(selection.focusNode)
+    if (!inside || !selection.toString().trim()) {
+      setQuotePos(null)
+      return
+    }
+    const rect = selection.getRangeAt(0).getBoundingClientRect()
+    const box = host.getBoundingClientRect()
+    setQuotePos({
+      top: rect.top - box.top - 6,
+      left: rect.left - box.left + rect.width / 2,
+    })
+  }, [])
+
+  const quoteSelection = React.useCallback(() => {
+    const selection = window.getSelection()
+    const text = selection?.toString().trim() ?? ""
+    selection?.removeAllRanges()
+    setQuotePos(null)
+    if (text) onQuote?.(text)
+  }, [onQuote])
+
+  /* Only while the pill is up: it is the selection going away — collapsed,
+     dismissed or replaced — that takes it back down again. */
+  React.useEffect(() => {
+    if (!quotePos) return
+    const onSelectionChange = () => {
+      const selection = window.getSelection()
+      if (!selection || selection.isCollapsed) setQuotePos(null)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQuotePos(null)
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (target && pillRef.current?.contains(target)) return
+      setQuotePos(null)
+    }
+    document.addEventListener("selectionchange", onSelectionChange)
+    document.addEventListener("keydown", onKeyDown)
+    document.addEventListener("mousedown", onPointerDown)
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange)
+      document.removeEventListener("keydown", onKeyDown)
+      document.removeEventListener("mousedown", onPointerDown)
+    }
+  }, [quotePos])
 
   if (sender === "user") {
     if (isEditing) {
@@ -384,6 +478,8 @@ export const Message = React.memo(function Message({
           tool={part.tool}
           onAskAnswer={onAskAnswer}
           onOpenFile={onOpenFile}
+          fileActions={fileActions}
+          resolveFileUrl={resolveFileUrl}
         />
       )
     }
@@ -406,6 +502,7 @@ export const Message = React.memo(function Message({
         isAnimating={isAnimating}
         patternHandlers={patternHandlers}
         onFileClick={onFileReferenceClick}
+        fileActions={fileActions}
       >
         {part.text}
       </MessageMarkdown>
@@ -425,6 +522,8 @@ export const Message = React.memo(function Message({
             defaultOpen
             onAskAnswer={onAskAnswer}
             onOpenFile={onOpenFile}
+            fileActions={fileActions}
+            resolveFileUrl={resolveFileUrl}
           />,
         ]
       : []
@@ -437,6 +536,7 @@ export const Message = React.memo(function Message({
             isAnimating={isAnimating}
             patternHandlers={patternHandlers}
             onFileClick={onFileReferenceClick}
+            fileActions={fileActions}
           >
             {displayContent}
           </MessageMarkdown>,
@@ -450,9 +550,14 @@ export const Message = React.memo(function Message({
       className={cn("group mb-7", className)}
     >
       <div
+        ref={contentRef}
         data-slot="message-content"
+        onMouseUp={quotable ? readSelection : undefined}
+        // Keyboard selections (shift + arrows) end on a key release, not a click.
+        onKeyUp={quotable ? readSelection : undefined}
         className={cn(
           "min-w-0 max-w-full text-[15px] leading-[1.65] text-foreground",
+          quotable && "relative",
           contentClassName
         )}
       >
@@ -484,6 +589,7 @@ export const Message = React.memo(function Message({
               files={derivedChanges}
               onAction={onReviewChanges}
               onFileClick={onChangeFileClick}
+              fileActions={fileActions}
             />
           </div>
         ) : null}
@@ -517,6 +623,22 @@ export const Message = React.memo(function Message({
               </button>
             )}
           </div>
+        ) : null}
+
+        {quotable && quotePos ? (
+          <button
+            ref={pillRef}
+            type="button"
+            data-slot="message-quote"
+            style={{ top: quotePos.top, left: quotePos.left }}
+            // Mousing down on the pill must not clear what it is about to quote.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={quoteSelection}
+            className="absolute z-10 inline-flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-md border bg-popover px-2 py-1 text-[12px] text-popover-foreground shadow-md outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:size-3"
+          >
+            <Quote />
+            Quote
+          </button>
         ) : null}
       </div>
     </div>
