@@ -37,6 +37,14 @@ export type AgentStreamEvent =
       status: "running" | "done" | "error"
       input?: string
       output?: string
+      /**
+       * Process exit code, for the harnesses whose shell tool reports one.
+       * `status` already says whether the call succeeded; this is the extra
+       * detail a consumer needs to tell "the tests ran and failed" from "the
+       * tool itself broke". Only set when the backend actually publishes it —
+       * absent is not zero.
+       */
+      exitCode?: number
     }
   | {
       type: "done"
