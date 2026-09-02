@@ -8,6 +8,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import { FileIcon } from "@/components/ui/file-icon"
 import { cn } from "@/lib/utils"
 
@@ -24,6 +31,68 @@ export type ChangeSummaryTool = {
   output?: string
 }
 
+/**
+ * One entry of the right-click menu a host attaches to anything that names a
+ * file — a change-summary row, the file panel's header, a path chip or an
+ * image in an answer. The host gets the path back and decides what "open" or
+ * "reveal" means on its machine; the components only know how to show the
+ * menu. Keep the array stable: the rows holding it are memoized.
+ */
+export type FileActionItem = {
+  id: string
+  label: string
+  icon?: React.ReactNode
+  onSelect: (path: string) => void
+  destructive?: boolean
+  separatorBefore?: boolean
+}
+
+export type FileContextMenuProps = {
+  /** The path handed to every action. */
+  path: string
+  /** Nothing to show → the children render as they are, without a menu. */
+  actions?: FileActionItem[]
+  children: React.ReactNode
+}
+
+/**
+ * Wraps a trigger in the shadcn context menu, one item per action. Shared by
+ * the change-summary rows, the file panel and the markdown chips so every
+ * file in the UI answers a right-click the same way.
+ */
+export function FileContextMenu({
+  path,
+  actions,
+  children,
+}: FileContextMenuProps) {
+  if (!actions?.length) return <>{children}</>
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent
+        data-slot="file-context-menu"
+        data-path={path}
+        className="min-w-44"
+      >
+        {actions.map((action) => (
+          <React.Fragment key={action.id}>
+            {action.separatorBefore ? <ContextMenuSeparator /> : null}
+            <ContextMenuItem
+              data-action={action.id}
+              variant={action.destructive ? "destructive" : "default"}
+              onSelect={() => action.onSelect(path)}
+              className="text-[12.5px]"
+            >
+              {action.icon}
+              {action.label}
+            </ContextMenuItem>
+          </React.Fragment>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
 export type ChangeSummaryProps = Omit<React.ComponentProps<"div">, "title"> & {
   files: ChangeSummaryFile[]
   /** Defaults to “N Files Changed”. */
@@ -32,6 +101,8 @@ export type ChangeSummaryProps = Omit<React.ComponentProps<"div">, "title"> & {
   onAction?: () => void
   /** Makes every file row a button — open the file in a preview panel. */
   onFileClick?: (file: ChangeSummaryFile) => void
+  /** Right-click menu on every row — open in an editor, reveal, copy the path. */
+  fileActions?: FileActionItem[]
   /** How many files to show before “Show N more”. */
   previewCount?: number
 }
@@ -101,9 +172,11 @@ function DiffStats({
 function FileRow({
   file,
   onSelect,
+  actions,
 }: {
   file: ChangeSummaryFile
   onSelect?: (file: ChangeSummaryFile) => void
+  actions?: FileActionItem[]
 }) {
   const kind = fileKind(file.path)
   const select = React.useCallback(() => onSelect?.(file), [file, onSelect])
@@ -128,15 +201,7 @@ function FileRow({
     "flex min-w-0 items-center gap-2 py-[3px] text-[13px] leading-snug text-foreground"
 
   // Without a handler the row stays the plain, non-interactive line it was.
-  if (!onSelect) {
-    return (
-      <div data-slot="change-summary-file" data-kind={kind} className={shared}>
-        {content}
-      </div>
-    )
-  }
-
-  return (
+  const row = onSelect ? (
     <button
       type="button"
       data-slot="change-summary-file"
@@ -152,6 +217,27 @@ function FileRow({
     >
       {content}
     </button>
+  ) : (
+    /* Not a control, but with a menu attached it still has to be reachable:
+       focused, Shift+F10 and the Menu key open it. */
+    <div
+      data-slot="change-summary-file"
+      data-kind={kind}
+      tabIndex={actions?.length ? 0 : undefined}
+      className={cn(
+        shared,
+        actions?.length &&
+          "-mx-1 w-[calc(100%+0.5rem)] rounded-sm px-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      )}
+    >
+      {content}
+    </div>
+  )
+
+  return (
+    <FileContextMenu path={file.path} actions={actions}>
+      {row}
+    </FileContextMenu>
   )
 }
 
@@ -193,6 +279,7 @@ export const ChangeSummary = React.memo(function ChangeSummary({
   actionLabel = "Review",
   onAction,
   onFileClick,
+  fileActions,
   previewCount = 4,
   className,
   ...props
@@ -243,7 +330,12 @@ export const ChangeSummary = React.memo(function ChangeSummary({
 
       <div data-slot="change-summary-list" className="flex flex-col">
         {preview.map((file) => (
-          <FileRow key={file.path} file={file} onSelect={onFileClick} />
+          <FileRow
+            key={file.path}
+            file={file}
+            onSelect={onFileClick}
+            actions={fileActions}
+          />
         ))}
       </div>
 
@@ -252,7 +344,12 @@ export const ChangeSummary = React.memo(function ChangeSummary({
           <CollapsibleContent>
             <div data-slot="change-summary-rest" className="flex flex-col">
               {rest.map((file) => (
-                <FileRow key={file.path} file={file} onSelect={onFileClick} />
+                <FileRow
+                  key={file.path}
+                  file={file}
+                  onSelect={onFileClick}
+                  actions={fileActions}
+                />
               ))}
             </div>
           </CollapsibleContent>

@@ -6,6 +6,10 @@ import { ChatInputExample } from "@/components/examples/chat-input-example"
 import { ChatInputStyledExample } from "@/components/examples/chat-input-styled-example"
 import { ChatInputToolsExample } from "@/components/examples/chat-input-tools-example"
 import { ChatInputGeneratingExample } from "@/components/examples/chat-input-generating-example"
+import { ChatInputHandleExample } from "@/components/examples/chat-input-handle-example"
+import { ChatInputMentionsExample } from "@/components/examples/chat-input-mentions-example"
+import { ChatInputPasteExample } from "@/components/examples/chat-input-paste-example"
+import { ChatInputQueueExample } from "@/components/examples/chat-input-queue-example"
 import { ChatNavbarExample } from "@/components/examples/chat-navbar-example"
 import { ChatNavbarStyledExample } from "@/components/examples/chat-navbar-styled-example"
 import { PromptSuggestionsExample } from "@/components/examples/prompt-suggestions-example"
@@ -160,8 +164,9 @@ export default function Page() {
   "chat-input": {
     title: "Chat Input",
     description:
-      "Composer with auto-growing textarea, attachments (button, paste, drag-and-drop), an optional slash menu for skills and commands, and Enter-to-send.",
+      "Composer with auto-growing textarea, attachments (button, paste, drag-and-drop), a slash menu for skills and commands, @-mentions, a queue for messages typed mid-turn, and Enter-to-send.",
     registry: "chat-input",
+    registryDependencies: ["file-icon"],
     preview: { name: "chat-input-example", node: <ChatInputExample /> },
     usage: `"use client"
 
@@ -226,7 +231,82 @@ export function Composer() {
             name: "placeholder",
             type: "string",
             default: '"Ask anything"',
-            description: "Textarea placeholder.",
+            description: (
+              <>
+                Textarea placeholder. While a turn streams and{" "}
+                <DocsCode>onQueue</DocsCode> is set it reads “Queue a message…”
+                instead, unless you pass your own.
+              </>
+            ),
+          },
+          {
+            name: "ref",
+            type: "React.Ref<ChatInputHandle>",
+            description: (
+              <>
+                Imperative access — <DocsCode>focus</DocsCode>,{" "}
+                <DocsCode>getDraft</DocsCode>, <DocsCode>setDraft</DocsCode>,{" "}
+                <DocsCode>insertText</DocsCode> — for a host that drives the
+                composer from outside: quoting a selection into it, restoring a
+                saved draft, putting a queued message back. Every change made
+                through it fires <DocsCode>onTextChange</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "defaultValue",
+            type: "string",
+            default: '""',
+            description: "Initial draft text. The composer owns the value from then on.",
+          },
+          {
+            name: "onQueue",
+            type: "(payload: ChatInputPayload) => void",
+            description: (
+              <>
+                Lets the user keep typing while a turn streams: Enter (and the
+                send button, now labelled “queue”) hands the message to the
+                host instead of locking the textarea. The host owns the queue
+                and sends the next entry when the turn ends.
+              </>
+            ),
+          },
+          {
+            name: "queue",
+            type: "ChatInputQueuedMessage[]",
+            default: "[]",
+            description: (
+              <>
+                Queued messages, listed above the surface with a remove
+                button; <DocsCode>onQueueRemove(id)</DocsCode> drops one, and{" "}
+                <DocsCode>onQueueEdit(id)</DocsCode> asks the host to put it
+                back into the composer (via <DocsCode>setDraft</DocsCode>).
+              </>
+            ),
+          },
+          {
+            name: "mentions",
+            type: "(query: string) => Promise<ChatInputMentionItem[]> | ChatInputMentionItem[]",
+            description: (
+              <>
+                Resolves the <DocsCode>@</DocsCode> token at the caret into a
+                menu — files, people, whatever the host can name. Debounced,
+                stale answers dropped; picking an item writes{" "}
+                <DocsCode>insert</DocsCode> (default <DocsCode>@label</DocsCode>)
+                into the draft.
+              </>
+            ),
+          },
+          {
+            name: "onStash",
+            type: "(payload: ChatInputPayload) => void",
+            description: (
+              <>
+                ⌘S / Ctrl+S in the textarea hands the draft — text, files,
+                skills — to the host and clears the composer, so a half-written
+                prompt can be parked and restored later through the handle.
+              </>
+            ),
           },
           {
             name: "tools",
@@ -301,6 +381,32 @@ export function Composer() {
             type: "{ name: string; description?: string; argHint?: string }",
             description: "Slash-menu command.",
           },
+          {
+            name: "ChatInputHandle",
+            type: "{ focus(); getDraft(): ChatInputDraft; setDraft(draft: Partial<ChatInputDraft>); insertText(text) }",
+            description: (
+              <>
+                What <DocsCode>ref</DocsCode> resolves to.{" "}
+                <DocsCode>getDraft().text</DocsCode> is the expanded text —
+                pasted blocks put back in place of their placeholders.
+              </>
+            ),
+          },
+          {
+            name: "ChatInputDraft",
+            type: "{ text: string; files: File[]; skills: string[] }",
+            description: "What the composer holds right now.",
+          },
+          {
+            name: "ChatInputMentionItem",
+            type: "{ id: string; label: string; description?: string; insert?: string }",
+            description: "One row of the @ menu.",
+          },
+          {
+            name: "ChatInputQueuedMessage",
+            type: "{ id: string; text: string; fileCount?: number }",
+            description: "One row of the host-owned queue.",
+          },
         ],
       },
     ],
@@ -310,7 +416,11 @@ export function Composer() {
       "chat-input-textarea",
       "chat-input-toolbar",
       "chat-input-chips",
+      "chat-input-chip",
       "chat-input-slash-menu",
+      "chat-input-mention-menu",
+      "chat-input-queue",
+      "chat-input-queue-item",
     ],
     examples: [
       {
@@ -325,6 +435,66 @@ export function Composer() {
         example: {
           name: "chat-input-generating-example",
           node: <ChatInputGeneratingExample />,
+        },
+      },
+      {
+        title: "Queue while a turn streams",
+        description: (
+          <>
+            With <DocsCode>onQueue</DocsCode> the textarea stays live during a
+            turn: Enter queues the message, the list above the surface shows
+            what is waiting, and the host sends the next entry when the turn
+            settles. Click a queued row to edit it.
+          </>
+        ),
+        example: {
+          name: "chat-input-queue-example",
+          node: <ChatInputQueueExample />,
+        },
+      },
+      {
+        title: "@-mention files",
+        description: (
+          <>
+            Type <DocsCode>@</DocsCode> and a few letters. The{" "}
+            <DocsCode>mentions</DocsCode> provider answers with whatever the
+            host can name — here a static list of paths behind a short delay —
+            and the pick replaces the token in place.
+          </>
+        ),
+        example: {
+          name: "chat-input-mentions-example",
+          node: <ChatInputMentionsExample />,
+        },
+      },
+      {
+        title: "Long pastes collapse to a chip",
+        description: (
+          <>
+            A paste over 800 characters or three lines is held out of the
+            textarea as <DocsCode>[Pasted text #1 +40 lines]</DocsCode> and
+            shown as a chip. Delete the chip or the token to drop it; sending
+            expands every token still present.
+          </>
+        ),
+        example: {
+          name: "chat-input-paste-example",
+          node: <ChatInputPasteExample />,
+        },
+      },
+      {
+        title: "Drive it from outside",
+        description: (
+          <>
+            The <DocsCode>ref</DocsCode> handle inserts at the caret, replaces
+            the draft, and reads it back — enough for “quote this into the
+            composer”, a per-chat draft store, or a stash you park with ⌘S
+            (<DocsCode>onStash</DocsCode>) and restore later.
+          </>
+        ),
+        example: {
+          name: "chat-input-handle-example",
+          node: <ChatInputHandleExample />,
         },
       },
       {

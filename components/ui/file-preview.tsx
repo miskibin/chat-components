@@ -1,8 +1,19 @@
 "use client"
 
-import { X } from "lucide-react"
+import { Check, Columns2, MoreHorizontal, Rows3, WrapText, X } from "lucide-react"
 import * as React from "react"
 
+import {
+  FileContextMenu,
+  type FileActionItem,
+} from "@/components/ui/change-summary"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { FileIcon } from "@/components/ui/file-icon"
 import {
   CodeLine,
@@ -40,6 +51,11 @@ export type FilePreviewFile = {
   /** First line number of `content` when it is a partial read. */
   startLine?: number
   /**
+   * 1-based line of the File view to centre and mark — "the app wants you
+   * here" (a search hit, a stack frame). Outranks the first changed line.
+   */
+  focusLine?: number
+  /**
    * A URL the page can load this file's picture from. Set it for an image and
    * the panel shows the picture instead of a text body — only the host knows
    * how a path on the machine reaches the browser.
@@ -49,10 +65,26 @@ export type FilePreviewFile = {
 
 export type FilePreviewView = "file" | "diff"
 
+export type FilePreviewDiffLayout = "unified" | "split"
+
 export type FilePreviewProps = Omit<React.ComponentProps<"div">, "children"> & {
   file: FilePreviewFile
   /** Defaults to `file` when there is content to show, else `diff`. */
   defaultView?: FilePreviewView
+  /** Side-by-side or one column. Controlled. */
+  diffLayout?: FilePreviewDiffLayout
+  /** Uncontrolled initial layout; defaults to `unified`. */
+  defaultDiffLayout?: FilePreviewDiffLayout
+  onDiffLayoutChange?: (layout: FilePreviewDiffLayout) => void
+  /** Soft-wrap long lines. Controlled. */
+  wrap?: boolean
+  /** Uncontrolled initial wrapping; defaults to `true`. */
+  defaultWrap?: boolean
+  onWrapChange?: (wrap: boolean) => void
+  /** Right-click menu on the header, and the same items behind the kebab. */
+  actions?: FileActionItem[]
+  /** Replaces the built-in clipboard write — the host may copy an absolute path. */
+  onCopyPath?: (path: string) => void
   /** Renders the close button. Escape closes the panel whenever this is set. */
   onClose?: () => void
   classNames?: {
@@ -65,7 +97,10 @@ export type FilePreviewProps = Omit<React.ComponentProps<"div">, "children"> & {
 /** Past this, syntax highlighting costs more than it is worth. */
 const HIGHLIGHT_MAX_CHARS = 150_000
 
-/** Quiet square button shared by the view toggle and the close control. */
+/** How long the header says "Copied" before falling back to the path. */
+const COPIED_MS = 1200
+
+/** Quiet square button shared by every header control. */
 const filePreviewButton =
   "inline-flex shrink-0 items-center justify-center gap-1 rounded-md text-[12px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:size-3.5"
 
@@ -183,6 +218,41 @@ function buildModel(file: FilePreviewFile): FilePreviewModel {
   }
 }
 
+/** One side of a split row: the diff line plus its index in `diffLines`. */
+type SplitSide = { line: ToolDiffLine; index: number }
+type SplitPair = { left?: SplitSide; right?: SplitSide }
+
+/**
+ * Unified lines → side-by-side rows. A run of removes followed by a run of
+ * adds is the shape of a replacement, so those pair up index by index; the
+ * longer side leaves the other cell empty. Context shows on both sides.
+ */
+function pairDiffLines(lines: ToolDiffLine[]): SplitPair[] {
+  const rows: SplitPair[] = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    if (line.type === "context") {
+      rows.push({ left: { line, index: i }, right: { line, index: i } })
+      i++
+      continue
+    }
+    const removes: SplitSide[] = []
+    while (i < lines.length && lines[i].type === "remove") {
+      removes.push({ line: lines[i], index: i })
+      i++
+    }
+    const adds: SplitSide[] = []
+    while (i < lines.length && lines[i].type === "add") {
+      adds.push({ line: lines[i], index: i })
+      i++
+    }
+    const span = Math.max(removes.length, adds.length)
+    for (let j = 0; j < span; j++) rows.push({ left: removes[j], right: adds[j] })
+  }
+  return rows
+}
+
 /**
  * Held at one identity for the lifetime of the panel, so the document-level
  * Escape listener is attached once instead of on every parent render.
@@ -198,15 +268,59 @@ function useStableCallback<A extends unknown[], R>(
 }
 
 const gutter =
-  "w-11 shrink-0 select-none border-r border-border/50 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/45"
+  "shrink-0 select-none border-r border-border/50 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/45"
 
-/** One diff row — same colours and word chips as the inline tool diff. */
-const DiffRow = React.memo(function FilePreviewDiffRow({
+/**
+ * Unwrapped rows grow past the panel and let the body scroll sideways as one
+ * block; wrapped rows stay inside it. Both keep the gutter column fixed.
+ */
+function rowClass(wrap: boolean) {
+  return wrap ? "flex" : "flex w-max min-w-full"
+}
+
+function codeClass(wrap: boolean) {
+  return wrap
+    ? "min-w-0 flex-1 break-words whitespace-pre-wrap"
+    : "shrink-0 whitespace-pre"
+}
+
+/** Word chips when the differ produced them, highlighted source otherwise. */
+function DiffText({
   line,
   tokens,
 }: {
   line: ToolDiffLine
   tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
+}) {
+  if (!line.segments) return <CodeLine text={line.text} tokens={tokens} />
+  return (
+    <>
+      {line.segments.map((segment, index) => (
+        <span
+          key={index}
+          className={cn(
+            segment.highlight &&
+              (line.type === "add"
+                ? "rounded-[2px] bg-emerald-500/25"
+                : "rounded-[2px] bg-red-500/25")
+          )}
+        >
+          {segment.text}
+        </span>
+      ))}
+    </>
+  )
+}
+
+/** One diff row — same colours and word chips as the inline tool diff. */
+const DiffRow = React.memo(function FilePreviewDiffRow({
+  line,
+  tokens,
+  wrap,
+}: {
+  line: ToolDiffLine
+  tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
+  wrap: boolean
 }) {
   const lineNo =
     line.type === "remove" ? line.oldLine : (line.newLine ?? line.oldLine)
@@ -215,12 +329,12 @@ const DiffRow = React.memo(function FilePreviewDiffRow({
       data-slot="file-preview-line"
       data-line-type={line.type}
       className={cn(
-        "flex",
+        rowClass(wrap),
         line.type === "add" && "bg-emerald-500/10",
         line.type === "remove" && "bg-red-500/10"
       )}
     >
-      <span data-slot="file-preview-gutter" className={gutter}>
+      <span data-slot="file-preview-gutter" className={cn(gutter, "w-11")}>
         {lineNo ?? ""}
       </span>
       <span
@@ -233,49 +347,116 @@ const DiffRow = React.memo(function FilePreviewDiffRow({
       >
         {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
       </span>
-      <span className="min-w-0 flex-1 break-words whitespace-pre-wrap px-1 text-foreground/90">
-        {line.segments ? (
-          line.segments.map((segment, index) => (
-            <span
-              key={index}
-              className={cn(
-                segment.highlight &&
-                  (line.type === "add"
-                    ? "rounded-[2px] bg-emerald-500/25"
-                    : "rounded-[2px] bg-red-500/25")
-              )}
-            >
-              {segment.text}
-            </span>
-          ))
-        ) : (
-          <CodeLine text={line.text} tokens={tokens} />
-        )}
+      <span className={cn(codeClass(wrap), "px-1 text-foreground/90")}>
+        <DiffText line={line} tokens={tokens} />
       </span>
     </div>
   )
 })
 
-/** One file row; changed lines carry the add tint and a `+` marker. */
+/**
+ * One half of a split row. An unwrapped cell scrolls on its own rather than
+ * widening the row — the other column must not be pushed off the panel.
+ */
+function SplitCell({
+  side,
+  entry,
+  tokens,
+  wrap,
+}: {
+  side: "old" | "new"
+  entry?: SplitSide
+  tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
+  wrap: boolean
+}) {
+  const line = entry?.line
+  const lineNo = side === "old" ? line?.oldLine : line?.newLine
+  return (
+    <div
+      data-slot="file-preview-side"
+      data-side={side}
+      data-line-type={line?.type ?? "empty"}
+      className={cn(
+        "flex min-w-0 flex-1 basis-1/2",
+        !line && "bg-muted/40",
+        side === "old" && line?.type === "remove" && "bg-red-500/10",
+        side === "new" && line?.type === "add" && "bg-emerald-500/10"
+      )}
+    >
+      <span data-slot="file-preview-gutter" className={cn(gutter, "w-9")}>
+        {lineNo ?? ""}
+      </span>
+      <span
+        className={cn(
+          "px-1 text-foreground/90",
+          wrap
+            ? "min-w-0 flex-1 break-words whitespace-pre-wrap"
+            : "min-w-0 flex-1 overflow-x-auto whitespace-pre"
+        )}
+      >
+        {line ? <DiffText line={line} tokens={tokens} /> : " "}
+      </span>
+    </div>
+  )
+}
+
+const SplitRow = React.memo(function FilePreviewSplitRow({
+  row,
+  leftTokens,
+  rightTokens,
+  wrap,
+}: {
+  row: SplitPair
+  leftTokens?: React.ComponentProps<typeof CodeLine>["tokens"]
+  rightTokens?: React.ComponentProps<typeof CodeLine>["tokens"]
+  wrap: boolean
+}) {
+  const type =
+    row.left?.line.type === "context"
+      ? "context"
+      : row.left && row.right
+        ? "replace"
+        : row.right
+          ? "add"
+          : "remove"
+  return (
+    <div data-slot="file-preview-line" data-line-type={type} className="flex">
+      <SplitCell side="old" entry={row.left} tokens={leftTokens} wrap={wrap} />
+      <div aria-hidden className="w-px shrink-0 bg-border/60" />
+      <SplitCell side="new" entry={row.right} tokens={rightTokens} wrap={wrap} />
+    </div>
+  )
+})
+
+/** One file row; changed lines carry the add tint, the focused line its own. */
 const FileRow = React.memo(function FilePreviewFileRow({
   text,
   lineNumber,
   changed,
+  focused,
   tokens,
+  wrap,
 }: {
   text: string
   lineNumber: number
   changed: boolean
+  focused: boolean
   tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
+  wrap: boolean
 }) {
   return (
     <div
       data-slot="file-preview-line"
       data-line-type={changed ? "add" : "context"}
       data-line={lineNumber}
-      className={cn("flex", changed && "bg-emerald-500/10")}
+      data-focused={focused || undefined}
+      className={cn(
+        rowClass(wrap),
+        changed && "bg-emerald-500/10",
+        focused && "bg-primary/10"
+      )}
     >
-      <span data-slot="file-preview-gutter" className={gutter}>
+      <span data-slot="file-preview-gutter" className={cn(gutter, "w-11")}>
         {lineNumber}
       </span>
       <span
@@ -289,7 +470,7 @@ const FileRow = React.memo(function FilePreviewFileRow({
       >
         {changed ? "+" : " "}
       </span>
-      <span className="min-w-0 flex-1 break-words whitespace-pre-wrap px-1 text-foreground/90">
+      <span className={cn(codeClass(wrap), "px-1 text-foreground/90")}>
         <CodeLine text={text} tokens={tokens} />
       </span>
     </div>
@@ -315,6 +496,14 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 export function FilePreview({
   file,
   defaultView,
+  diffLayout,
+  defaultDiffLayout = "unified",
+  onDiffLayoutChange,
+  wrap,
+  defaultWrap = true,
+  onWrapChange,
+  actions,
+  onCopyPath,
   onClose,
   className,
   classNames,
@@ -326,20 +515,27 @@ export function FilePreview({
   const model = React.useMemo(() => buildModel(deferredFile), [deferredFile])
   const language = deferredFile.language ?? langFromPath(deferredFile.path)
   const startLine = deferredFile.startLine ?? 1
+  const focusLine = deferredFile.focusLine
 
   const image = deferredFile.imageSrc
   const hasFile = !image && !!model.fileLines
   const hasDiff = !image && model.diffLines.length > 0
   const canToggle = hasFile && hasDiff
-  const preferred: FilePreviewView = defaultView ?? (hasFile ? "file" : "diff")
+  // A focus request is about the file body, so it decides the opening view.
+  const preferred: FilePreviewView =
+    focusLine != null && hasFile
+      ? "file"
+      : (defaultView ?? (hasFile ? "file" : "diff"))
   const [requested, setRequested] = React.useState<FilePreviewView>(preferred)
   const [shownPath, setShownPath] = React.useState(deferredFile.path)
+  const [copied, setCopied] = React.useState(false)
 
   // Adjust while rendering rather than in an effect: a newly opened file never
   // paints one frame in the previous file's view.
   if (shownPath !== deferredFile.path) {
     setShownPath(deferredFile.path)
     setRequested(preferred)
+    setCopied(false)
   }
 
   const view: FilePreviewView = canToggle
@@ -347,6 +543,12 @@ export function FilePreview({
     : hasFile
       ? "file"
       : "diff"
+
+  const [internalLayout, setInternalLayout] =
+    React.useState<FilePreviewDiffLayout>(defaultDiffLayout)
+  const layout = diffLayout ?? internalLayout
+  const [internalWrap, setInternalWrap] = React.useState(defaultWrap)
+  const wrapped = wrap ?? internalWrap
 
   const source = React.useMemo(() => {
     const text =
@@ -357,56 +559,276 @@ export function FilePreview({
   }, [model.diffLines, model.fileLines, view])
   const highlighted = useHighlightedLines(source, language)
 
+  const splitRows = React.useMemo(
+    () =>
+      view === "diff" && layout === "split" && hasDiff
+        ? pairDiffLines(model.diffLines)
+        : null,
+    [hasDiff, layout, model.diffLines, view]
+  )
+
   const { dir, name } = splitPath(deferredFile.path)
-  const firstChanged = React.useMemo(() => {
+
+  /** Row index to centre — the focus request first, else the first change. */
+  const scrollTarget = React.useMemo(() => {
     if (view === "diff") {
+      if (splitRows) {
+        return splitRows.findIndex(
+          (row) =>
+            row.left?.line.type === "remove" || row.right?.line.type === "add"
+        )
+      }
       return model.diffLines.findIndex((line) => line.type !== "context")
     }
+    if (focusLine != null) return focusLine - startLine
     if (model.changed.size === 0) return -1
     // Iterated rather than spread into Math.min: a whole-file write marks
     // every line, and that set can be enormous.
     let first = Number.POSITIVE_INFINITY
     for (const line of model.changed) if (line < first) first = line
     return first - startLine
-  }, [model.changed, model.diffLines, startLine, view])
+  }, [
+    focusLine,
+    model.changed,
+    model.diffLines,
+    splitRows,
+    startLine,
+    view,
+  ])
 
   /**
-   * Centre the first edited line in the panel's own scroller — once per file
-   * and view, so a re-render never yanks the reader back. `scrollIntoView`
+   * Centre the target line in the panel's own scroller — once per file, view
+   * and request, so a re-render never yanks the reader back. `scrollIntoView`
    * would drag the page's other scroll containers along with it.
    */
-  const scrollKey = `${deferredFile.path}\0${startLine}\0${view}\0${firstChanged}`
+  const scrollKey = `${deferredFile.path}\0${startLine}\0${view}\0${layout}\0${focusLine ?? ""}\0${scrollTarget}`
   const scrolledRef = React.useRef("")
   React.useEffect(() => {
     const container = bodyRef.current
-    if (!container || firstChanged < 0) return
+    if (!container || scrollTarget < 0) return
     if (scrolledRef.current === scrollKey) return
     scrolledRef.current = scrollKey
-    const row = container.children[firstChanged]
+    const row = container.children[scrollTarget]
     if (!(row instanceof HTMLElement)) return
     container.scrollTop = Math.max(
       0,
       row.offsetTop - container.clientHeight / 2 + row.offsetHeight / 2
     )
-  }, [firstChanged, scrollKey])
+  }, [scrollKey, scrollTarget])
 
   const close = useStableCallback(onClose)
+  const canClose = !!onClose
   React.useEffect(() => {
-    if (!onClose) return
+    if (!canClose) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) close()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [close, onClose])
+  }, [close, canClose])
+
+  const copyTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  React.useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+    },
+    []
+  )
+
+  const copy = useStableCallback(onCopyPath)
+  const hasCopyHandler = !!onCopyPath
+  const path = deferredFile.path
+  /**
+   * "Copied" is a claim about the clipboard, so it waits for the write to
+   * land: `navigator.clipboard` is undefined outside a secure context, and a
+   * write can still be refused.
+   */
+  const copyPath = React.useCallback(() => {
+    const markCopied = () => {
+      setCopied(true)
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+      copyTimer.current = setTimeout(() => setCopied(false), COPIED_MS)
+    }
+    if (hasCopyHandler) {
+      copy(path)
+      markCopied()
+      return
+    }
+    const written = navigator.clipboard?.writeText(path)
+    if (!written) return
+    void written.then(markCopied, () => {})
+  }, [copy, hasCopyHandler, path])
 
   const showFile = React.useCallback(() => setRequested("file"), [])
   const showDiff = React.useCallback(() => setRequested("diff"), [])
+
+  const layoutChanged = useStableCallback(onDiffLayoutChange)
+  const toggleLayout = React.useCallback(() => {
+    const next: FilePreviewDiffLayout = layout === "split" ? "unified" : "split"
+    setInternalLayout(next)
+    layoutChanged(next)
+  }, [layout, layoutChanged])
+
+  const wrapChanged = useStableCallback(onWrapChange)
+  const toggleWrap = React.useCallback(() => {
+    setInternalWrap(!wrapped)
+    wrapChanged(!wrapped)
+  }, [wrapChanged, wrapped])
+
+  const header = (
+    <div
+      data-slot="file-preview-header"
+      className={cn(
+        "flex h-10 shrink-0 items-center gap-2 border-b px-2.5",
+        classNames?.header
+      )}
+    >
+      <FileIcon path={deferredFile.path} size={14} />
+      <button
+        type="button"
+        data-slot="file-preview-path"
+        data-copied={copied || undefined}
+        title="Copy path"
+        onClick={copyPath}
+        className="flex min-w-0 flex-1 items-baseline gap-1 rounded-md text-left font-mono text-[12px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        {dir ? (
+          <span className="min-w-0 truncate text-muted-foreground">{dir}</span>
+        ) : null}
+        <span className="shrink-0 font-medium text-foreground">{name}</span>
+        {copied ? (
+          <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground">
+            <Check className="size-3" />
+            Copied
+          </span>
+        ) : null}
+      </button>
+      <DiffStats
+        data-slot="file-preview-stats"
+        added={model.added}
+        removed={model.removed}
+      />
+      <div
+        data-slot="file-preview-prefs"
+        role="group"
+        aria-label="View preferences"
+        className="flex shrink-0 items-center"
+      >
+        <button
+          type="button"
+          data-slot="file-preview-wrap-toggle"
+          aria-pressed={wrapped}
+          aria-label="Wrap lines"
+          onClick={toggleWrap}
+          title={wrapped ? "Don't wrap" : "Wrap lines"}
+          className={cn(
+            filePreviewButton,
+            "size-6 aria-pressed:text-foreground"
+          )}
+        >
+          <WrapText />
+        </button>
+        {view === "diff" ? (
+          <button
+            type="button"
+            data-slot="file-preview-layout-toggle"
+            aria-pressed={layout === "split"}
+            aria-label={layout === "split" ? "Unified view" : "Split view"}
+            onClick={toggleLayout}
+            title={layout === "split" ? "Unified view" : "Split view"}
+            className={cn(
+              filePreviewButton,
+              "size-6 aria-pressed:text-foreground"
+            )}
+          >
+            {layout === "split" ? <Rows3 /> : <Columns2 />}
+          </button>
+        ) : null}
+      </div>
+      {canToggle ? (
+        <div
+          data-slot="file-preview-view-toggle"
+          role="group"
+          aria-label="Preview mode"
+          className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5"
+        >
+          <button
+            type="button"
+            data-active={view === "file"}
+            aria-pressed={view === "file"}
+            onClick={showFile}
+            className={cn(
+              filePreviewButton,
+              "h-6 px-2 data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-xs"
+            )}
+          >
+            File
+          </button>
+          <button
+            type="button"
+            data-active={view === "diff"}
+            aria-pressed={view === "diff"}
+            onClick={showDiff}
+            className={cn(
+              filePreviewButton,
+              "h-6 px-2 data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-xs"
+            )}
+          >
+            Diff
+          </button>
+        </div>
+      ) : null}
+      {actions?.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              data-slot="file-preview-actions"
+              aria-label="File actions"
+              className={cn(filePreviewButton, "size-6")}
+            >
+              <MoreHorizontal />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            {actions.map((action) => (
+              <React.Fragment key={action.id}>
+                {action.separatorBefore ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuItem
+                  data-action={action.id}
+                  variant={action.destructive ? "destructive" : "default"}
+                  onSelect={() => action.onSelect(deferredFile.path)}
+                  className="text-[12.5px]"
+                >
+                  {action.icon}
+                  {action.label}
+                </DropdownMenuItem>
+              </React.Fragment>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {onClose ? (
+        <button
+          type="button"
+          data-slot="file-preview-close"
+          onClick={onClose}
+          title="Close (Esc)"
+          aria-label="Close file preview"
+          className={cn(filePreviewButton, "size-6")}
+        >
+          <X />
+        </button>
+      ) : null}
+    </div>
+  )
 
   return (
     <div
       data-slot="file-preview"
       data-view={view}
+      data-layout={layout}
+      data-wrap={wrapped ? "true" : "false"}
       role="dialog"
       aria-label={deferredFile.path}
       className={cn(
@@ -416,75 +838,9 @@ export function FilePreview({
       )}
       {...props}
     >
-      <div
-        data-slot="file-preview-header"
-        className={cn(
-          "flex h-10 shrink-0 items-center gap-2 border-b px-2.5",
-          classNames?.header
-        )}
-      >
-        <FileIcon path={deferredFile.path} size={14} />
-        <span
-          data-slot="file-preview-path"
-          title={deferredFile.path}
-          className="flex min-w-0 flex-1 items-baseline gap-1 font-mono text-[12px]"
-        >
-          {dir ? (
-            <span className="min-w-0 truncate text-muted-foreground">{dir}</span>
-          ) : null}
-          <span className="shrink-0 font-medium text-foreground">{name}</span>
-        </span>
-        <DiffStats
-          data-slot="file-preview-stats"
-          added={model.added}
-          removed={model.removed}
-        />
-        {canToggle ? (
-          <div
-            data-slot="file-preview-view-toggle"
-            role="group"
-            aria-label="Preview mode"
-            className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5"
-          >
-            <button
-              type="button"
-              data-active={view === "file"}
-              aria-pressed={view === "file"}
-              onClick={showFile}
-              className={cn(
-                filePreviewButton,
-                "h-6 px-2 data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-xs"
-              )}
-            >
-              File
-            </button>
-            <button
-              type="button"
-              data-active={view === "diff"}
-              aria-pressed={view === "diff"}
-              onClick={showDiff}
-              className={cn(
-                filePreviewButton,
-                "h-6 px-2 data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-xs"
-              )}
-            >
-              Diff
-            </button>
-          </div>
-        ) : null}
-        {onClose ? (
-          <button
-            type="button"
-            data-slot="file-preview-close"
-            onClick={onClose}
-            title="Close (Esc)"
-            aria-label="Close file preview"
-            className={cn(filePreviewButton, "size-6")}
-          >
-            <X />
-          </button>
-        ) : null}
-      </div>
+      <FileContextMenu path={deferredFile.path} actions={actions}>
+        {header}
+      </FileContextMenu>
 
       <div
         ref={bodyRef}
@@ -515,13 +871,35 @@ export function FilePreview({
                 text={text}
                 lineNumber={startLine + index}
                 changed={model.changed.has(startLine + index)}
+                focused={focusLine === startLine + index}
                 tokens={highlighted?.[index]}
+                wrap={wrapped}
               />
             ))
           : null}
-        {!image && view === "diff" && hasDiff
+        {view === "diff" && splitRows
+          ? splitRows.map((row, index) => (
+              <SplitRow
+                key={index}
+                row={row}
+                leftTokens={
+                  row.left ? highlighted?.[row.left.index] : undefined
+                }
+                rightTokens={
+                  row.right ? highlighted?.[row.right.index] : undefined
+                }
+                wrap={wrapped}
+              />
+            ))
+          : null}
+        {!image && view === "diff" && hasDiff && !splitRows
           ? model.diffLines.map((line, index) => (
-              <DiffRow key={index} line={line} tokens={highlighted?.[index]} />
+              <DiffRow
+                key={index}
+                line={line}
+                tokens={highlighted?.[index]}
+                wrap={wrapped}
+              />
             ))
           : null}
         {!image && view === "diff" && !hasDiff && model.unparsed ? (

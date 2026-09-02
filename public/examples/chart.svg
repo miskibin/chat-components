@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120" viewBox="0 0 320 120" role="img" aria-label="Turn latency over the last five runs">
+  <style>
+    .plot { fill: #f4f4f5 }
+    .bar { fill: #71717a }
+    .bar-peak { fill: #52525b }
+    @media (prefers-color-scheme: dark) {
+      .plot { fill: #27272a }
+      .bar { fill: #a1a1aa }
+      .bar-peak { fill: #d4d4d8 }
+    }
+  </style>
+  <rect class="plot" width="320" height="120" rx="6" />
+  <rect class="bar" x="16" y="70" width="40" height="34" />
+  <rect class="bar" x="72" y="46" width="40" height="58" />
+  <rect class="bar-peak" x="128" y="28" width="40" height="76" />
+  <rect class="bar" x="184" y="58" width="40" height="46" />
+  <rect class="bar-peak" x="240" y="18" width="40" height="86" />
+</svg>
