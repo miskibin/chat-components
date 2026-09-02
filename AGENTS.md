@@ -16,6 +16,13 @@ component improvement — including ones motivated by agent-ui — is: change it
 sync the file(s) into agent-ui. Breaking API changes are acceptable (this registry does not
 promise backward compatibility) but must be propagated to agent-ui in the same effort.
 
+**The copies must never drift, and agent-ui is the one that decides.** That app is the real
+product; this registry exists to serve it. So a behaviour the two disagree about is settled by
+taking agent-ui's, landing it here properly — component, docs entry, example, `registry.json`,
+`registry:build` — and copying back, never by leaving the app patched. After any change that
+touches `components/ui/**` or a shared `lib/` module, run `npm run vendor:check` from an
+agent-ui checkout beside this one; it fails on a single differing byte.
+
 ## Checklist for ANY component change
 
 A component change is not done until all of these are true:
@@ -31,7 +38,8 @@ A component change is not done until all of these are true:
 4. `registry.json` is accurate (dependencies, registryDependencies, description) and
    `npm run registry:build` has regenerated `public/r/*.json`.
 5. `npm run lint`, `npm run typecheck`, `npm run build` pass.
-6. If the public API changed: sync the vendored copies in agent-ui (see its `AGENTS.md`).
+6. The vendored copies in agent-ui are updated — **every** change, not only an API change
+   — and `npm run vendor:check` passes there (see its `AGENTS.md`).
 
 ## Idiom (enforced by review, not optional)
 

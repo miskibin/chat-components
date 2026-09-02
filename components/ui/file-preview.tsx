@@ -102,7 +102,7 @@ const COPIED_MS = 1200
 
 /** Quiet square button shared by every header control. */
 const filePreviewButton =
-  "inline-flex shrink-0 items-center justify-center gap-1 rounded-md text-[12px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:size-3.5"
+  "inline-flex shrink-0 items-center justify-center gap-1 rounded-md text-[12px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:size-3.5"
 
 function splitPath(path: string) {
   const normalized = path.replace(/[\\/]+$/, "")

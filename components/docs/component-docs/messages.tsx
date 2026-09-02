@@ -33,6 +33,7 @@ import { MessageProcessExample } from "@/components/examples/message-process-exa
 import { MessageQuoteExample } from "@/components/examples/message-quote-example"
 import { MessageSenderExample } from "@/components/examples/message-sender-example"
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
+import { MessageToolImageExample } from "@/components/examples/message-tool-image-example"
 import { MessageToolsCollapsedExample } from "@/components/examples/message-tools-collapsed-example"
 import { MessageToolsCommandsExample } from "@/components/examples/message-tools-commands-example"
 import { MessageToolsStatusExample } from "@/components/examples/message-tools-status-example"
@@ -267,6 +268,19 @@ export function Turn() {
                 the host knows how the machine&apos;s files reach the browser,
                 so this is how a tool row shows an image the agent wrote or
                 read instead of its bytes.
+              </>
+            ),
+          },
+          {
+            name: "resolveFileUrl",
+            type: "(path: string) => string | undefined",
+            description: (
+              <>
+                Turns a path a tool names into a URL this page can load. Only
+                the host knows how a file on the machine reaches the browser, so
+                without it an image an agent wrote or read renders as the
+                stand-in line its harness returned. Return{" "}
+                <DocsCode>undefined</DocsCode> for anything you cannot serve.
               </>
             ),
           },
@@ -572,6 +586,19 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             ),
           },
           {
+            name: "resolveFileUrl",
+            type: "(path: string) => string | undefined",
+            description: (
+              <>
+                Turns a path a tool names into a URL this page can load. Only
+                the host knows how a file on the machine reaches the browser, so
+                without it an image an agent wrote or read renders as the
+                stand-in line its harness returned. Return{" "}
+                <DocsCode>undefined</DocsCode> for anything you cannot serve.
+              </>
+            ),
+          },
+          {
             name: "renderActions",
             type: "(message: ChatMessageData) => React.ReactNode",
             description:
@@ -597,6 +624,12 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             name: "scrollRef",
             type: "RefObject<HTMLDivElement>",
             description: "Attach to your own scroll container.",
+          },
+          {
+            name: "contentRef",
+            type: "RefObject<HTMLDivElement>",
+            description:
+              "Attach to the box inside it that actually holds the messages. Height that arrives after the last message — a mermaid diagram mounting, Shiki replacing a plain block, an image loading — re-pins a reader who is still following, which a message-keyed effect alone cannot see.",
           },
           {
             name: "handleMessageScroll",
@@ -888,9 +921,11 @@ export function Answer() {
             type: "(path: string) => string | undefined",
             description: (
               <>
-                Turns a path the tool names into a URL this page can load.
-                Where it answers for an image, the row shows the picture instead
-                of the bytes.
+                Turns a path a tool names into a URL this page can load. Only
+                the host knows how a file on the machine reaches the browser, so
+                without it an image an agent wrote or read renders as the
+                stand-in line its harness returned. Return{" "}
+                <DocsCode>undefined</DocsCode> for anything you cannot serve.
               </>
             ),
           },
@@ -996,6 +1031,28 @@ export function Answer() {
           { name: "className", type: "string", description: "Merged last." },
         ],
       },
+      {
+        caption: "Image helpers",
+        rows: [
+          {
+            name: "isImagePath(path)",
+            type: "(path?: string) => boolean",
+            description:
+              "True for the extensions a browser can paint — png, jpg, jpeg, gif, webp, avif, bmp, ico, svg. It is what a tool row and a file panel agree on, so both decide the same way about the same file.",
+          },
+          {
+            name: "imageDimensions(output)",
+            type: "(output?: string) => string | null",
+            description: (
+              <>
+                Pulls <DocsCode>1531x889 px</DocsCode> out of the stand-in text
+                a Read of an image returns, as{" "}
+                <DocsCode>1531×889</DocsCode>, for the row&apos;s meta line.
+              </>
+            ),
+          },
+        ],
+      },
     ],
     dataSlots: [
       "message-process",
@@ -1020,6 +1077,7 @@ export function Answer() {
       "message-tool-file",
       "message-tool-file-line",
       "message-tool-image",
+      "message-tool-image-error",
       "message-tool-show-all",
       "message-code",
       "message-code-header",
@@ -1044,6 +1102,28 @@ export function Answer() {
         example: {
           name: "message-tools-commands-example",
           node: <MessageToolsCommandsExample />,
+        },
+      },
+      {
+        title: "An image the agent touched",
+        description: (
+          <>
+            A harness hands back a line about the bytes when it reads a picture
+            — <DocsCode>image/png image, 420x180 px</DocsCode> — which is all
+            the row can show on its own. Give it{" "}
+            <DocsCode>resolveFileUrl</DocsCode> and it shows the picture
+            instead, with those dimensions moved up to the meta line;{" "}
+            <DocsCode>FilePreview</DocsCode> does the same from{" "}
+            <DocsCode>imageSrc</DocsCode>. Both are URLs rather than paths on
+            purpose: how a file on the machine reaches the browser is the one
+            thing only your app knows. A URL that fails to load falls back to a
+            line of text, never a broken frame.
+          </>
+        ),
+        example: {
+          name: "message-tool-image-example",
+          node: <MessageToolImageExample />,
+          align: "stretch" as const,
         },
       },
       {
@@ -1981,6 +2061,20 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
             name: "added / removed",
             type: "number",
             description: "Stat overrides; otherwise counted off the diff.",
+          },
+          {
+            name: "imageSrc",
+            type: "string",
+            description: (
+              <>
+                A URL this page can load the file&apos;s picture from. Set it
+                and the panel shows the image instead of a text body — the
+                bytes of a <DocsCode>.png</DocsCode> have nothing to show in a
+                line-numbered view. Only the host knows how a path on the
+                machine reaches the browser, which is why this is a URL and not
+                a path.
+              </>
+            ),
           },
           {
             name: "language",

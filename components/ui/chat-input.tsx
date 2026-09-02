@@ -796,8 +796,19 @@ export function ChatInput({
           className={cn(
             /* A hairline card, not a pill: the focus state is a border-color
                shift rather than a ring, so a 700px-wide surface never lights
-               up like a text field. */
-            "rounded-2xl border bg-background px-3 pt-2.5 pb-2 shadow-xs transition-colors has-[textarea:focus]:border-ring sm:px-3.5",
+               up like a text field.
+
+               It carries the theme's own `shadow-lg` because the composer is
+               the one surface that floats: hosts that let the transcript run to
+               the bottom of the window have it sitting *over* the conversation,
+               and a hairline alone does not say "on top of". Opaque, for the
+               same reason — text passing underneath must not show through.
+
+               A shadow is black, though, which is most of nothing on a dark
+               page. So dark mode gets a rim of the foreground instead — the
+               same lift, built from the light in the theme rather than from
+               its absence. */
+            "rounded-2xl border bg-background px-3 pt-2.5 pb-2 shadow-lg transition-colors has-[textarea:focus]:border-ring dark:ring-1 dark:ring-foreground/10 sm:px-3.5",
             dragOver && "border-primary ring-1 ring-primary/20"
           )}
           onDragOver={(e) => {

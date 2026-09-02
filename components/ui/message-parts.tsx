@@ -1792,8 +1792,10 @@ export const MessageArtifact = React.memo(function MessageArtifact({
         onClick={artifact.onOpen}
         disabled={!interactive}
         className={cn(
-          "flex w-full items-center gap-2.5 bg-muted px-3.5 py-2 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
-          interactive ? "cursor-pointer hover:bg-accent" : "cursor-default",
+          "group/artifact flex w-full items-center gap-2.5 bg-muted px-3.5 py-2 text-left text-foreground outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
+          interactive
+            ? "cursor-pointer hover:bg-accent hover:text-accent-foreground"
+            : "cursor-default",
           artifact.content && "border-b"
         )}
       >
@@ -1801,11 +1803,11 @@ export const MessageArtifact = React.memo(function MessageArtifact({
           <ArtifactIcon kind={artifact.kind} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium text-foreground">
+          <span className="block truncate text-[13px] font-medium">
             {artifact.title}
           </span>
           {meta ? (
-            <span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground">
+            <span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground group-hover/artifact:text-current/75">
               {meta}
             </span>
           ) : null}

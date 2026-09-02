@@ -139,6 +139,7 @@ function useStableFileActions(actions?: FileActionItem[]) {
 
 export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
   const scrollRef = React.useRef<HTMLDivElement>(null)
+  const contentRef = React.useRef<HTMLDivElement>(null)
   const autoScrollRef = React.useRef(true)
   const programmaticScrollUntilRef = React.useRef(0)
   const prevMessageCountRef = React.useRef(0)
@@ -234,6 +235,34 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
     })
   }, [measureAtBottom, messages])
 
+  /**
+   * The effect above fires on new *messages*. Plenty of height arrives after
+   * the last one: a mermaid diagram mounting, Shiki replacing a plain block, an
+   * image loading, a font swapping in. Each of those leaves a follower parked a
+   * screenful short of the bottom — visibly so under a floating composer, where
+   * the shortfall reads as the last turn hiding behind it.
+   *
+   * So the content box is watched too, and while the reader is still following
+   * the run, a growth spurt re-pins them. Instantly, never smoothly: this is a
+   * layout correction, not a navigation, and animating it would outlast the
+   * window below that tells a programmatic scroll from the reader's own.
+   */
+  React.useEffect(() => {
+    const content = contentRef.current
+    if (!content || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => {
+      if (!autoScrollRef.current) return
+      const node = scrollRef.current
+      if (!node) return
+      const distance = node.scrollHeight - node.scrollTop - node.clientHeight
+      if (distance <= 1) return
+      programmaticScrollUntilRef.current = Date.now() + 500
+      node.scrollTo({ top: node.scrollHeight, behavior: "auto" })
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [])
+
   React.useEffect(
     () => () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current)
@@ -242,7 +271,7 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
     []
   )
 
-  return { scrollRef, handleMessageScroll, atBottom, scrollToBottom }
+  return { scrollRef, contentRef, handleMessageScroll, atBottom, scrollToBottom }
 }
 
 function hasAskTool(
@@ -474,7 +503,7 @@ export function MessageList({
   onScroll,
   ...props
 }: MessageListProps) {
-  const { scrollRef, handleMessageScroll, atBottom, scrollToBottom } =
+  const { scrollRef, contentRef, handleMessageScroll, atBottom, scrollToBottom } =
     useChatAutoScroll(messages)
   const lastIndex = messages.length - 1
 
@@ -505,7 +534,10 @@ export function MessageList({
       )}
       {...props}
     >
-      <div className="mx-auto flex min-h-full w-full max-w-3xl min-w-0 flex-col">
+      <div
+        ref={contentRef}
+        className="mx-auto flex min-h-full w-full max-w-3xl min-w-0 flex-col"
+      >
         {messages.length === 0
           ? (emptyState ?? <div className="flex flex-1 items-center justify-center" />)
           : messages.map((message, index) => {

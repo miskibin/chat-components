@@ -258,6 +258,16 @@ function isMultiline(item: ChatSidebarItemData) {
   return item.subtitle != null
 }
 
+/**
+ * Second-line ink. Muted while the row is at rest, and a translucent
+ * *currentColor* the moment the row paints itself with `sidebar-accent` —
+ * hover, active or range-selected. A fixed `--muted-foreground` there is how a
+ * theme whose accent is near-white in dark mode (or near-black in light) ends
+ * up drawing grey on grey; inheriting keeps the pair legible in every theme.
+ */
+const SUB_INK =
+  "text-muted-foreground group-hover/row:text-current/75 group-data-[active=true]/row:text-current/75 group-data-[selected=true]/row:text-current/75"
+
 function SidebarItemBody({
   item,
   active = false,
@@ -295,7 +305,7 @@ function SidebarItemBody({
             {item.meta != null ? (
               <span
                 data-slot="sidebar-item-meta"
-                className="shrink-0 text-[11px] font-normal text-muted-foreground"
+                className={cn("shrink-0 text-[11px] font-normal", SUB_INK)}
               >
                 {item.meta}
               </span>
@@ -304,7 +314,10 @@ function SidebarItemBody({
           {item.subtitle != null ? (
             <span
               data-slot="sidebar-item-subtitle"
-              className="block min-w-0 truncate text-[11px] leading-4 font-normal text-muted-foreground"
+              className={cn(
+                "block min-w-0 truncate text-[11px] leading-4 font-normal",
+                SUB_INK
+              )}
             >
               {item.subtitle}
             </span>
@@ -497,7 +510,7 @@ function SidebarItemRow({
           {...(drag?.listeners ?? {})}
           onPointerDown={onPointerDown}
           className={cn(
-            "flex w-full select-none gap-2 rounded-md px-2 text-left text-[13px] leading-5",
+            "group/row flex w-full select-none gap-2 rounded-md px-2 text-left text-[13px] leading-5",
             multiline ? "items-start py-2" : "items-center py-1.5",
             "text-sidebar-foreground outline-none transition-colors touch-manipulation",
             "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",

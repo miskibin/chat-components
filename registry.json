@@ -262,7 +262,7 @@
       "name": "file-preview",
       "type": "registry:ui",
       "title": "File Preview",
-      "description": "Side panel that shows an edited file: the agent's diff (unified or split), or the whole file with the edited lines marked and scrolled into view, with copy-path, wrap and a file actions menu.",
+      "description": "Side panel that shows a file an agent touched: its diff (unified or split), the whole file with the edited lines marked and scrolled into view, or the picture when it is an image — with copy-path, line wrapping and a file actions menu.",
       "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
       "registryDependencies": [
         "dropdown-menu",

@@ -36,7 +36,7 @@ export function SidebarStyledExample() {
         className="border-r-0"
         classNames={{
           panel: "bg-muted/40",
-          header: "border-b-0 pt-4",
+          header: "pt-4",
           content: "px-3",
           footer: "bg-muted/60",
         }}
