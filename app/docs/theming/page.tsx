@@ -175,7 +175,7 @@ export default function ThemingPage() {
             lang="tsx"
             code={`<ChatInput className="max-w-2xl" />
 <Message sender="user" content={text} contentClassName="bg-primary/10" />
-<ChatSidebar classNames={{ header: "border-b-0 pt-4", content: "px-3" }} />`}
+<ChatSidebar classNames={{ header: "pt-4", content: "px-3" }} />`}
           />
         </div>
 

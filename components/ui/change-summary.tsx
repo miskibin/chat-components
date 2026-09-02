@@ -114,17 +114,18 @@ function FileRow({
         path={file.path}
         size={14}
       />
-      <span
-        className="min-w-0 flex-1 truncate text-left text-foreground"
-        title={file.path}
-      >
+      <span className="min-w-0 flex-1 truncate text-left" title={file.path}>
         {fileName(file.path)}
       </span>
       <DiffStats additions={file.additions} deletions={file.deletions} />
     </>
   )
+  // `text-foreground` sits on the row, not on the name: the interactive row
+  // repaints itself `text-accent-foreground` on hover, and a child that pins
+  // its own colour is exactly how a theme whose accent is near-white in dark
+  // mode ends up drawing white on white.
   const shared =
-    "flex min-w-0 items-center gap-2 py-[3px] text-[13px] leading-snug"
+    "flex min-w-0 items-center gap-2 py-[3px] text-[13px] leading-snug text-foreground"
 
   // Without a handler the row stays the plain, non-interactive line it was.
   if (!onSelect) {

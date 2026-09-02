@@ -1,5 +1,6 @@
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
+import { SidebarDividersExample } from "@/components/examples/sidebar-dividers-example"
 import { SidebarExample } from "@/components/examples/sidebar-example"
 import { SidebarItemExample } from "@/components/examples/sidebar-item-example"
 import { SidebarItemMenuExample } from "@/components/examples/sidebar-item-menu-example"
@@ -118,6 +119,13 @@ export function Nav() {
                 <DocsCode>ChatSidebarDnd</DocsCode> while a drag is in progress.
               </>
             ),
+          },
+          {
+            name: "dividers",
+            type: "boolean",
+            default: "false",
+            description:
+              "Rules under the header and above the footer. Off by default — the panel already reads as one column, and a line every few rows is what makes a chat sidebar look busy.",
           },
           {
             name: "widthExpanded",
@@ -250,6 +258,23 @@ export function Nav() {
   type SidebarDndDrop,
   type SidebarDropZoneDef,
 } from "@/components/ui/chat-sidebar"`,
+        },
+      },
+      {
+        title: "Dividers are opt-in",
+        description: (
+          <>
+            The panel paints no rules by default — one column of rows reads as
+            one column without them, and a line every few rows is what makes a
+            chat sidebar look busy. <DocsCode>dividers</DocsCode> puts them back
+            under the header and above the footer when the footer carries enough
+            weight to want separating.
+          </>
+        ),
+        example: {
+          name: "sidebar-dividers-example",
+          node: <SidebarDividersExample />,
+          align: "stretch" as const,
         },
       },
       {

@@ -202,7 +202,7 @@ export function FolderPicker({
             disabled={!onOpenFolder || openingFolder}
             onClick={openNativeFolderPicker}
             className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-[13px] outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0 [&_svg]:text-muted-foreground",
+              "flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-[13px] outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0 [&_svg]:text-muted-foreground hover:[&_svg]:text-current",
               classNames?.action
             )}
           >
