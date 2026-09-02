@@ -617,14 +617,15 @@ export function FilePreview({
   }, [scrollKey, scrollTarget])
 
   const close = useStableCallback(onClose)
+  const canClose = !!onClose
   React.useEffect(() => {
-    if (!onClose) return
+    if (!canClose) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) close()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [close, onClose])
+  }, [close, canClose])
 
   const copyTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   React.useEffect(
@@ -637,12 +638,25 @@ export function FilePreview({
   const copy = useStableCallback(onCopyPath)
   const hasCopyHandler = !!onCopyPath
   const path = deferredFile.path
+  /**
+   * "Copied" is a claim about the clipboard, so it waits for the write to
+   * land: `navigator.clipboard` is undefined outside a secure context, and a
+   * write can still be refused.
+   */
   const copyPath = React.useCallback(() => {
-    if (hasCopyHandler) copy(path)
-    else void navigator.clipboard?.writeText(path).catch(() => {})
-    setCopied(true)
-    if (copyTimer.current) clearTimeout(copyTimer.current)
-    copyTimer.current = setTimeout(() => setCopied(false), COPIED_MS)
+    const markCopied = () => {
+      setCopied(true)
+      if (copyTimer.current) clearTimeout(copyTimer.current)
+      copyTimer.current = setTimeout(() => setCopied(false), COPIED_MS)
+    }
+    if (hasCopyHandler) {
+      copy(path)
+      markCopied()
+      return
+    }
+    const written = navigator.clipboard?.writeText(path)
+    if (!written) return
+    void written.then(markCopied, () => {})
   }, [copy, hasCopyHandler, path])
 
   const showFile = React.useCallback(() => setRequested("file"), [])
@@ -704,6 +718,7 @@ export function FilePreview({
           type="button"
           data-slot="file-preview-wrap-toggle"
           aria-pressed={wrapped}
+          aria-label="Wrap lines"
           onClick={toggleWrap}
           title={wrapped ? "Don't wrap" : "Wrap lines"}
           className={cn(
@@ -718,6 +733,7 @@ export function FilePreview({
             type="button"
             data-slot="file-preview-layout-toggle"
             aria-pressed={layout === "split"}
+            aria-label={layout === "split" ? "Unified view" : "Split view"}
             onClick={toggleLayout}
             title={layout === "split" ? "Unified view" : "Split view"}
             className={cn(

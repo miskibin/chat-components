@@ -107,6 +107,36 @@ function useStableCallback<A extends unknown[], R>(
   return React.useCallback((...args: A) => ref.current?.(...args), [])
 }
 
+/**
+ * `fileActions` is data, not a callback, so `useStableCallback` cannot hold it:
+ * a host that spells the array inline would re-render every memoized row on
+ * every streamed token. Identity is rebuilt only when an entry actually
+ * changes — the icon is left out on purpose, it travels with its `id`.
+ */
+function sameFileActions(a?: FileActionItem[], b?: FileActionItem[]) {
+  if (a === b) return true
+  if (!a || !b || a.length !== b.length) return false
+  return a.every((item, i) => {
+    const other = b[i]
+    return (
+      item.id === other.id &&
+      item.label === other.label &&
+      item.onSelect === other.onSelect &&
+      item.destructive === other.destructive &&
+      item.separatorBefore === other.separatorBefore
+    )
+  })
+}
+
+function useStableFileActions(actions?: FileActionItem[]) {
+  // Adjusted during render rather than in an effect: the rows must never see
+  // the throwaway identity, and a re-render only happens when the menu really
+  // changed — typically once, when the host first has its actions.
+  const [held, setHeld] = React.useState(actions)
+  if (!sameFileActions(held, actions)) setHeld(actions)
+  return sameFileActions(held, actions) ? held : actions
+}
+
 export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const autoScrollRef = React.useRef(true)
@@ -117,19 +147,9 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
   const atBottomRef = React.useRef(true)
   const [atBottom, setAtBottom] = React.useState(true)
 
-  const handleMessageScroll = React.useCallback(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const nearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight <=
-      BOTTOM_SCROLL_THRESHOLD_PX
-    if (nearBottom) {
-      autoScrollRef.current = true
-    } else if (Date.now() > programmaticScrollUntilRef.current) {
-      autoScrollRef.current = false
-    }
-    /* A scroll fires far more often than the answer changes: the flag is read
-       again one frame later and only committed when it actually flipped. */
+  /* A scroll fires far more often than the answer changes: the flag is read
+     again one frame later and only committed when it actually flipped. */
+  const measureAtBottom = React.useCallback(() => {
     if (bottomFrameRef.current) return
     bottomFrameRef.current = requestAnimationFrame(() => {
       bottomFrameRef.current = 0
@@ -143,6 +163,34 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
       setAtBottom(near)
     })
   }, [])
+
+  const handleMessageScroll = React.useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight <=
+      BOTTOM_SCROLL_THRESHOLD_PX
+    if (nearBottom) {
+      autoScrollRef.current = true
+    } else if (Date.now() > programmaticScrollUntilRef.current) {
+      autoScrollRef.current = false
+    }
+    measureAtBottom()
+  }, [measureAtBottom])
+
+  /**
+   * The distance to the bottom also changes without a scroll — the panel beside
+   * the conversation opening, the composer growing, the window resizing. Left
+   * to the scroll handler alone the jump button would stay stuck in whichever
+   * state the last scroll left it in.
+   */
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => measureAtBottom())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [measureAtBottom])
 
   /** Jump to the newest line and start following the turn again. */
   const scrollToBottom = React.useCallback(() => {
@@ -161,6 +209,7 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
   React.useEffect(() => {
     const el = scrollRef.current
     if (!el) return
+    measureAtBottom()
     const prev = prevMessageCountRef.current
     const curr = messages.length
     prevMessageCountRef.current = curr
@@ -183,7 +232,7 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
         behavior: isInitialOrJump || curr === prev ? "auto" : "smooth",
       })
     })
-  }, [messages])
+  }, [measureAtBottom, messages])
 
   React.useEffect(
     () => () => {
@@ -440,6 +489,7 @@ export function MessageList({
   // Rows are memoized: a host that builds this resolver inline would otherwise
   // re-render every row on every streamed token.
   const stableResolveFileUrl = useStableCallback(resolveFileUrl)
+  const stableFileActions = useStableFileActions(fileActions)
 
   return (
     <div
@@ -499,7 +549,7 @@ export function MessageList({
                   onFileReferenceClick={
                     onFileReferenceClick ? stableFileReferenceClick : undefined
                   }
-                  fileActions={fileActions}
+                  fileActions={stableFileActions}
                   onQuote={onQuote ? stableQuote : undefined}
                   resolveFileUrl={resolveFileUrl ? stableResolveFileUrl : undefined}
                   renderActions={renderActions ? stableRenderActions : undefined}

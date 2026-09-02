@@ -217,7 +217,18 @@ function FileRow({
       {content}
     </button>
   ) : (
-    <div data-slot="change-summary-file" data-kind={kind} className={shared}>
+    /* Not a control, but with a menu attached it still has to be reachable:
+       focused, Shift+F10 and the Menu key open it. */
+    <div
+      data-slot="change-summary-file"
+      data-kind={kind}
+      tabIndex={actions?.length ? 0 : undefined}
+      className={cn(
+        shared,
+        actions?.length &&
+          "-mx-1 w-[calc(100%+0.5rem)] rounded-sm px-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      )}
+    >
       {content}
     </div>
   )

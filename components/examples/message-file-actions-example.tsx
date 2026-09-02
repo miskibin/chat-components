@@ -10,23 +10,22 @@ import type {
   FileActionItem,
 } from "@/components/ui/change-summary"
 
-const CHART = `data:image/svg+xml;utf8,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120">
-    <rect width="320" height="120" fill="#f4f4f5" />
-    <rect x="16" y="70" width="40" height="34" fill="#71717a" />
-    <rect x="72" y="46" width="40" height="58" fill="#71717a" />
-    <rect x="128" y="28" width="40" height="76" fill="#52525b" />
-    <rect x="184" y="58" width="40" height="46" fill="#71717a" />
-    <rect x="240" y="18" width="40" height="86" fill="#52525b" />
-  </svg>`
-)}`
+/**
+ * Served from the app's own origin, the way a host serves a file the agent
+ * wrote (`/api/files?path=…`). A `data:` image is its own bytes rather than a
+ * file on the machine, and deliberately gets no menu — so an inline one would
+ * not demonstrate this at all.
+ */
+const CHART = "/examples/chart.svg"
 
 const ANSWER = `The quote pill lives in \`components/ui/message.tsx:42\`, and the list wires it
 through \`components/ui/message-list.tsx\`. Turn latency over the last five runs:
 
 ![Turn latency](${CHART})
 
-Right-click either chip — or the chart — for the same menu the change card shows.`
+Right-click either chip — or the chart — for the same menu the change card
+shows. The image is a real file behind a URL, so it carries the menu too; an
+inline \`data:\` image would not.`
 
 const CHANGES: ChangeSummaryFile[] = [
   { path: "components/ui/message.tsx", additions: 48, deletions: 3 },

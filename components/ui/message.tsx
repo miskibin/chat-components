@@ -304,10 +304,18 @@ export const Message = React.memo(function Message({
       setQuotePos(null)
       return
     }
-    const rect = selection.getRangeAt(0).getBoundingClientRect()
+    /**
+     * The first client rect is the line the selection starts on. Its union box
+     * is not: over several lines that box is centred between them, which puts
+     * the pill in the middle of the text it is about to quote.
+     */
+    const range = selection.getRangeAt(0)
+    const rect = range.getClientRects()[0] ?? range.getBoundingClientRect()
     const box = host.getBoundingClientRect()
     setQuotePos({
-      top: rect.top - box.top - 6,
+      // The pill sits fully above `top`, so a selection on the answer's first
+      // line has to be held down far enough to keep it inside the box.
+      top: Math.max(rect.top - box.top - 6, 20),
       left: rect.left - box.left + rect.width / 2,
     })
   }, [])
@@ -331,20 +339,25 @@ export const Message = React.memo(function Message({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setQuotePos(null)
     }
-    const onPointerDown = (event: MouseEvent) => {
+    // A selection still being extended with shift + arrows ends each step on a
+    // key release; the pill follows it to the line it now starts on.
+    const onKeyUp = () => readSelection()
+    const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null
       if (target && pillRef.current?.contains(target)) return
       setQuotePos(null)
     }
     document.addEventListener("selectionchange", onSelectionChange)
     document.addEventListener("keydown", onKeyDown)
-    document.addEventListener("mousedown", onPointerDown)
+    document.addEventListener("keyup", onKeyUp)
+    document.addEventListener("pointerdown", onPointerDown)
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange)
       document.removeEventListener("keydown", onKeyDown)
-      document.removeEventListener("mousedown", onPointerDown)
+      document.removeEventListener("keyup", onKeyUp)
+      document.removeEventListener("pointerdown", onPointerDown)
     }
-  }, [quotePos])
+  }, [quotePos, readSelection])
 
   if (sender === "user") {
     if (isEditing) {
@@ -553,7 +566,9 @@ export const Message = React.memo(function Message({
         ref={contentRef}
         data-slot="message-content"
         onMouseUp={quotable ? readSelection : undefined}
-        // Keyboard selections (shift + arrows) end on a key release, not a click.
+        // Only fires while something inside the answer has focus; a keyboard
+        // selection is otherwise picked up by the document listener the pill
+        // installs while it is up.
         onKeyUp={quotable ? readSelection : undefined}
         className={cn(
           "min-w-0 max-w-full text-[15px] leading-[1.65] text-foreground",

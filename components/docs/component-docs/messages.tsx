@@ -1404,7 +1404,7 @@ export function Clarify() {
     description:
       "Streamdown renderer tuned for streaming answers: GFM, Shiki code, Mermaid diagrams, and KaTeX math, with incomplete markdown parsed safely.",
     registry: "message-markdown",
-    registryDependencies: ["file-icon"],
+    registryDependencies: ["file-icon", "change-summary"],
     preview: {
       name: "message-markdown-example",
       node: <MessageMarkdownExample />,

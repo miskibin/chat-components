@@ -158,15 +158,22 @@ function parseSlashQuery(text: string): string | null {
 
 /** The `@token` the caret sits in, if any. */
 function findMentionToken(text: string, caret: number) {
-  const before = text.slice(0, Math.max(0, Math.min(caret, text.length)))
+  const position = Math.max(0, Math.min(caret, text.length))
+  const before = text.slice(0, position)
   const match = /(^|\s)@([^\s@]*)$/.exec(before)
   if (!match) return null
   const start = match.index + match[1].length
-  return { query: match[2], start, end: before.length }
+  // The token ends where the run of non-space characters does, not at the
+  // caret: picking inside `@src|c` has to replace the `c` too. The query
+  // stays caret-scoped, so the menu keeps filtering on what was typed.
+  const tail = /^[^\s@]*/.exec(text.slice(position))?.[0] ?? ""
+  return { query: match[2], start, end: position + tail.length }
 }
 
-function pasteTokenFor(n: number, lines: number) {
-  return `[Pasted text #${n} +${lines} lines]`
+function pasteTokenFor(n: number, lines: number, chars: number) {
+  // One long line has nothing to count in lines — `+1 lines` says nothing.
+  const size = lines === 1 ? `+${chars} chars` : `+${lines} lines`
+  return `[Pasted text #${n} ${size}]`
 }
 
 /** Puts every still-present placeholder back to the block it stands for. */
@@ -229,6 +236,21 @@ export function ChatInput({
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const pasteIdRef = React.useRef(0)
   const mentionSeqRef = React.useRef(0)
+  const uid = React.useId()
+  const slashMenuId = `${uid}-slash`
+  const mentionMenuId = `${uid}-mention`
+
+  /**
+   * What the handle reads, and what the mutators keep current. Each one
+   * writes its ref *synchronously* before setting state, so two calls in the
+   * same tick compose (`insertText("a"); insertText("b")`) and `getDraft()`
+   * is right before React has flushed anything — a passive-effect mirror was
+   * one commit behind both, and started empty under a `defaultValue`.
+   */
+  const textRef = React.useRef(defaultValue)
+  const pastesRef = React.useRef<PasteEntry[]>(EMPTY_PASTES)
+  const pendingRef = React.useRef<File[]>(EMPTY_FILES)
+  const skillsRef = React.useRef<string[]>(EMPTY_STRINGS)
 
   /**
    * Read through a ref so `changeText` — and the callbacks that close over it
@@ -246,9 +268,56 @@ export function ChatInput({
   }, [mentions])
 
   const changeText = React.useCallback((value: string) => {
+    textRef.current = value
     setText(value)
     notifyText.current?.(value)
   }, [])
+
+  const updatePastes = React.useCallback(
+    (next: PasteEntry[] | ((prev: PasteEntry[]) => PasteEntry[])) => {
+      const value = typeof next === "function" ? next(pastesRef.current) : next
+      if (value === pastesRef.current) return
+      pastesRef.current = value
+      setPastes(value)
+    },
+    []
+  )
+
+  const updatePending = React.useCallback(
+    (next: File[] | ((prev: File[]) => File[])) => {
+      const value = typeof next === "function" ? next(pendingRef.current) : next
+      if (value === pendingRef.current) return
+      pendingRef.current = value
+      setPending(value)
+    },
+    []
+  )
+
+  const updateSkills = React.useCallback(
+    (next: string[] | ((prev: string[]) => string[])) => {
+      const value = typeof next === "function" ? next(skillsRef.current) : next
+      if (value === skillsRef.current) return
+      skillsRef.current = value
+      setForcedSkills(value)
+    },
+    []
+  )
+
+  /**
+   * A placeholder the user edited away — backspaced into, typed or pasted
+   * over — takes its entry with it. Left behind, the chip lingers and
+   * `expandPastes` quietly drops the block the token stood for on send.
+   */
+  const prunePastes = React.useCallback(
+    (value: string) => {
+      updatePastes((prev) => {
+        if (prev.length === 0) return prev
+        const kept = prev.filter((p) => value.includes(p.token))
+        return kept.length === prev.length ? prev : kept
+      })
+    },
+    [updatePastes]
+  )
 
   /** Focus after a menu pick or an insert, once React has written the value. */
   const focusCaret = React.useCallback((position: number) => {
@@ -291,6 +360,12 @@ export function ChatInput({
   }, [skills, slashCommands, slashQuery, slashVisible])
 
   const slashOpen = slashVisible && slashMatches.length > 0
+  // The index outlives the query that shrinks the list under it, so clamp on
+  // read — the same shape `mentionIndex` uses.
+  const slashSelected = Math.min(
+    slashIndex,
+    Math.max(0, slashMatches.length - 1)
+  )
 
   const mentionsEnabled = !!mentions
   const mentionToken = React.useMemo(
@@ -363,16 +438,16 @@ export function ChatInput({
     if (!files) return
     const list = Array.from(files)
     if (list.length === 0) return
-    setPending((prev) => [...prev, ...list])
-  }, [])
+    updatePending((prev) => [...prev, ...list])
+  }, [updatePending])
 
   const clearDraft = React.useCallback(() => {
     changeText("")
-    setPending(EMPTY_FILES)
-    setForcedSkills(EMPTY_STRINGS)
-    setPastes(EMPTY_PASTES)
+    updatePending(EMPTY_FILES)
+    updateSkills(EMPTY_STRINGS)
+    updatePastes(EMPTY_PASTES)
     setCaret(0)
-  }, [changeText])
+  }, [changeText, updatePastes, updatePending, updateSkills])
 
   /** Queueing is on only when the host said what to do with a queued message. */
   const queueing = isGenerating && !!onQueue
@@ -413,26 +488,9 @@ export function ChatInput({
     clearDraft()
   }, [clearDraft, disabled, forcedSkills, onStash, pastes, pending, text])
 
-  /**
-   * What the handle reads. Mirrored into a ref so the handle keeps one
-   * identity for the composer's lifetime: a host holds it across renders — an
-   * effect cleanup that parks the draft when the chat changes, say — and a
-   * handle rebuilt per keystroke would hand that cleanup the text the
-   * composer had when the reference was taken.
-   */
-  const draftRef = React.useRef({
-    text: "",
-    pastes: EMPTY_PASTES,
-    files: EMPTY_FILES,
-    skills: EMPTY_STRINGS,
-  })
-  React.useEffect(() => {
-    draftRef.current = { text, pastes, files: pending, skills: forcedSkills }
-  })
-
   const insertAtCaret = React.useCallback(
     (value: string) => {
-      const current = draftRef.current.text
+      const current = textRef.current
       const ta = taRef.current
       const start = ta ? ta.selectionStart : current.length
       const end = ta ? ta.selectionEnd : start
@@ -445,27 +503,34 @@ export function ChatInput({
     [changeText, focusCaret]
   )
 
+  /**
+   * The handle keeps one identity for the composer's lifetime: a host holds
+   * it across renders — an effect cleanup that parks the draft when the chat
+   * changes, say — and a handle rebuilt per keystroke would hand that cleanup
+   * the text the composer had when the reference was taken.
+   */
   React.useImperativeHandle(
     ref,
     () => ({
       focus: () => taRef.current?.focus(),
-      getDraft: () => {
-        const { text: raw, pastes: held, files, skills } = draftRef.current
-        return { text: expandPastes(raw, held), files, skills }
-      },
+      getDraft: () => ({
+        text: expandPastes(textRef.current, pastesRef.current),
+        files: pendingRef.current,
+        skills: skillsRef.current,
+      }),
       setDraft: (draft) => {
         if (draft.text !== undefined) {
           // The text arrives expanded, so the chips it may have carried are gone.
           changeText(draft.text)
-          setPastes(EMPTY_PASTES)
+          updatePastes(EMPTY_PASTES)
           setCaret(draft.text.length)
         }
-        if (draft.files !== undefined) setPending(draft.files)
-        if (draft.skills !== undefined) setForcedSkills(draft.skills)
+        if (draft.files !== undefined) updatePending(draft.files)
+        if (draft.skills !== undefined) updateSkills(draft.skills)
       },
       insertText: insertAtCaret,
     }),
-    [changeText, insertAtCaret]
+    [changeText, insertAtCaret, updatePastes, updatePending, updateSkills]
   )
 
   const selectSlashItem = React.useCallback(
@@ -474,7 +539,7 @@ export function ChatInput({
         changeText(`/${item.name} `)
         setCaret(item.name.length + 2)
       } else {
-        setForcedSkills((prev) =>
+        updateSkills((prev) =>
           prev.includes(item.name) || prev.length >= MAX_FORCED_SKILLS
             ? prev
             : [...prev, item.name]
@@ -486,7 +551,7 @@ export function ChatInput({
       setSlashDismissedText(null)
       requestAnimationFrame(() => taRef.current?.focus())
     },
-    [changeText]
+    [changeText, updateSkills]
   )
 
   const selectMentionItem = React.useCallback(
@@ -507,11 +572,11 @@ export function ChatInput({
 
   const removePaste = React.useCallback(
     (paste: PasteEntry) => {
-      setPastes((prev) => prev.filter((p) => p.id !== paste.id))
+      updatePastes((prev) => prev.filter((p) => p.id !== paste.id))
       // The placeholder must go with the chip, or a send would keep the token.
       changeText(text.split(paste.token).join(""))
     },
-    [changeText, text]
+    [changeText, text, updatePastes]
   )
 
   const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -531,11 +596,14 @@ export function ChatInput({
     const ta = event.currentTarget
     const start = ta.selectionStart
     const end = ta.selectionEnd
+    // What the paste leaves standing, before the new placeholder goes in: a
+    // token the selection swallowed loses its entry here.
+    prunePastes(text.slice(0, start) + text.slice(end))
     // Numbers are reused once a chip is gone, so two live tokens never collide.
-    const n = pastes.reduce((max, p) => Math.max(max, p.n), 0) + 1
-    const token = pasteTokenFor(n, lines)
+    const n = pastesRef.current.reduce((max, p) => Math.max(max, p.n), 0) + 1
+    const token = pasteTokenFor(n, lines, raw.length)
     pasteIdRef.current += 1
-    setPastes((prev) => [
+    updatePastes((prev) => [
       ...prev,
       { id: `paste-${pasteIdRef.current}`, n, token, text: raw },
     ])
@@ -549,7 +617,11 @@ export function ChatInput({
     // Never steal keys from an IME candidate window.
     if (event.nativeEvent.isComposing) return
 
-    if (onStash && (event.metaKey || event.ctrlKey) && event.key === "s") {
+    if (
+      onStash &&
+      (event.metaKey || event.ctrlKey) &&
+      event.key.toLowerCase() === "s"
+    ) {
       // Always swallow it: a composer must never open the browser's save dialog.
       event.preventDefault()
       stash()
@@ -559,19 +631,19 @@ export function ChatInput({
     if (slashOpen) {
       if (event.key === "ArrowDown") {
         event.preventDefault()
-        setSlashIndex((i) => (i + 1) % slashMatches.length)
+        setSlashIndex((slashSelected + 1) % slashMatches.length)
         return
       }
       if (event.key === "ArrowUp") {
         event.preventDefault()
         setSlashIndex(
-          (i) => (i - 1 + slashMatches.length) % slashMatches.length
+          (slashSelected - 1 + slashMatches.length) % slashMatches.length
         )
         return
       }
       if (event.key === "Tab") {
         event.preventDefault()
-        const item = slashMatches[slashIndex]
+        const item = slashMatches[slashSelected]
         if (item) selectSlashItem(item)
         return
       }
@@ -582,7 +654,7 @@ export function ChatInput({
         return
       }
       if (event.key === "Enter" && !event.shiftKey) {
-        const item = slashMatches[slashIndex]
+        const item = slashMatches[slashSelected]
         if (item && text.trim() === `/${slashQuery ?? ""}`) {
           event.preventDefault()
           selectSlashItem(item)
@@ -648,14 +720,16 @@ export function ChatInput({
       <div className="relative">
         {slashOpen ? (
           <SlashMenu
+            menuId={slashMenuId}
             matches={slashMatches}
-            selectedIndex={slashIndex}
+            selectedIndex={slashSelected}
             onHover={setSlashIndex}
             onSelect={selectSlashItem}
           />
         ) : null}
         {mentionOpen ? (
           <MentionMenu
+            menuId={mentionMenuId}
             items={mentionMatches}
             selectedIndex={mentionIndex}
             onHover={(index) =>
@@ -682,6 +756,7 @@ export function ChatInput({
                   <button
                     type="button"
                     title="Edit this message"
+                    aria-label={`Edit queued message: ${item.text}`}
                     onClick={() => onQueueEdit(item.id)}
                     className="min-w-0 flex-1 truncate rounded-sm text-left text-foreground outline-none transition-colors hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
@@ -751,7 +826,7 @@ export function ChatInput({
                   label={name}
                   accent
                   onRemove={() =>
-                    setForcedSkills((prev) => prev.filter((s) => s !== name))
+                    updateSkills((prev) => prev.filter((s) => s !== name))
                   }
                 />
               ))}
@@ -776,7 +851,7 @@ export function ChatInput({
                   }
                   label={file.name}
                   onRemove={() =>
-                    setPending((prev) => prev.filter((_, idx) => idx !== i))
+                    updatePending((prev) => prev.filter((_, idx) => idx !== i))
                   }
                 />
               ))}
@@ -789,7 +864,9 @@ export function ChatInput({
             rows={1}
             value={text}
             onChange={(e) => {
-              changeText(e.target.value)
+              const value = e.target.value
+              changeText(value)
+              prunePastes(value)
               setCaret(e.target.selectionStart)
             }}
             onKeyDown={onKeyDown}
@@ -798,6 +875,19 @@ export function ChatInput({
             onPaste={onPaste}
             placeholder={resolvedPlaceholder}
             aria-label="Message"
+            role="combobox"
+            aria-expanded={slashOpen || mentionOpen}
+            aria-autocomplete="list"
+            aria-controls={
+              slashOpen ? slashMenuId : mentionOpen ? mentionMenuId : undefined
+            }
+            aria-activedescendant={
+              slashOpen
+                ? `${slashMenuId}-opt-${slashSelected}`
+                : mentionOpen
+                  ? `${mentionMenuId}-opt-${mentionIndex}`
+                  : undefined
+            }
             disabled={inputLocked}
             /* text-base on mobile keeps iOS from zooming the viewport on focus. */
             className="min-h-6 w-full resize-none border-0 bg-transparent py-1.5 text-base leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60 sm:text-[15px]"
@@ -911,11 +1001,13 @@ function Chip({
 }
 
 function SlashMenu({
+  menuId,
   matches,
   selectedIndex,
   onHover,
   onSelect,
 }: {
+  menuId: string
   matches: SlashMenuItem[]
   selectedIndex: number
   onHover: (index: number) => void
@@ -933,6 +1025,7 @@ function SlashMenu({
 
   return (
     <div
+      id={menuId}
       data-slot="chat-input-slash-menu"
       className={menuSurfaceClass}
       role="listbox"
@@ -940,6 +1033,7 @@ function SlashMenu({
     >
       <div ref={listRef} className={menuListClass}>
         <SlashGroup
+          menuId={menuId}
           title="Skills"
           icon={<Sparkles className="size-3" />}
           items={skills}
@@ -949,6 +1043,7 @@ function SlashMenu({
           onSelect={onSelect}
         />
         <SlashGroup
+          menuId={menuId}
           title="Commands"
           icon={<Terminal className="size-3" />}
           items={commands}
@@ -963,6 +1058,7 @@ function SlashMenu({
 }
 
 function SlashGroup({
+  menuId,
   title,
   icon,
   items,
@@ -971,6 +1067,7 @@ function SlashGroup({
   onHover,
   onSelect,
 }: {
+  menuId: string
   title: string
   icon: React.ReactNode
   items: SlashMenuItem[]
@@ -994,6 +1091,7 @@ function SlashGroup({
           return (
             <button
               key={`${item.kind}:${item.name}`}
+              id={`${menuId}-opt-${index}`}
               type="button"
               role="option"
               aria-selected={selected}
@@ -1034,11 +1132,13 @@ function SlashGroup({
 }
 
 function MentionMenu({
+  menuId,
   items,
   selectedIndex,
   onHover,
   onSelect,
 }: {
+  menuId: string
   items: ChatInputMentionItem[]
   selectedIndex: number
   onHover: (index: number) => void
@@ -1054,6 +1154,7 @@ function MentionMenu({
 
   return (
     <div
+      id={menuId}
       data-slot="chat-input-mention-menu"
       className={menuSurfaceClass}
       role="listbox"
@@ -1066,6 +1167,7 @@ function MentionMenu({
             return (
               <button
                 key={item.id}
+                id={`${menuId}-opt-${index}`}
                 type="button"
                 role="option"
                 aria-selected={selected}

@@ -180,9 +180,13 @@ function clip(text: string, max = 48) {
  * `/bin/zsh -lc '…'`, `cmd /c …`, `powershell -Command …` — the harness's own
  * wrapper around the command the user actually asked for. The capture is
  * everything after the flag that says “the rest is the command”.
+ *
+ * The name must be a shell *exactly*, or the last segment of a path — a bare
+ * `deploy.sh -c prod` is a project's own script, and unwrapping it would throw
+ * away everything but `prod`.
  */
 const SHELL_WRAPPER_RE =
-  /^(?:\S*\benv(?:\.exe)?\s+(?:(?:-\S+|[A-Za-z_]\w*=\S*)\s+)*)?\S*\b(?:sh|bash|zsh|ksh|dash|fish|ash|cmd|powershell|pwsh)(?:\.exe)?\s+(?:-{1,2}[a-z]+\s+)*(?:-{1,2}[a-z]*c(?:ommand)?|\/c)\s+([\s\S]+)$/i
+  /^(?:(?:\S*[\\/])?env(?:\.exe)?\s+(?:(?:-\S+|[A-Za-z_]\w*=\S*)\s+)*)?(?:\S*[\\/])?(?:sh|bash|zsh|ksh|dash|fish|ash|cmd|powershell|pwsh)(?:\.exe)?\s+(?:-{1,2}[a-z]+\s+)*(?:-{1,2}[a-z]*c(?:ommand)?|\/c)\s+([\s\S]+)$/i
 /** `cd packages/web && …` is where the command ran, not what it did. */
 const CD_PREFIX_RE = /^cd\s+(?:'[^']*'|"[^"]*"|[^\s;&|]+)\s*(?:&&|;)\s*/
 
@@ -1062,10 +1066,15 @@ const ToolImageView = React.memo(function ToolImageView({
   src: string
   alt: string
 }) {
-  const [failed, setFailed] = React.useState(false)
-  const fail = React.useCallback(() => setFailed(true), [])
+  /**
+   * Tied to the source that failed: a row that swaps in another image (a
+   * re-run writing the same chart to a new path) must get a fresh try rather
+   * than inherit the last one's error.
+   */
+  const [failedSrc, setFailedSrc] = React.useState<string | null>(null)
+  const fail = React.useCallback(() => setFailedSrc(src), [src])
 
-  if (failed) {
+  if (failedSrc === src) {
     return (
       <p
         data-slot="message-tool-image-error"
@@ -1191,12 +1200,6 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     !askResult &&
     (running || (!!onAskAnswer && isOpenAskTool(tool)))
   const showAskSummary = !!ask && !!resolvedAsk && !askOpen && !running
-  const hasBody =
-    showDiff ||
-    showFile ||
-    showTodos ||
-    showAskSummary ||
-    !!(displayTool.input || displayTool.output)
   const headline = toolHeadline(displayTool)
   const args = React.useMemo(
     () => parseToolArgs(displayTool.input),
@@ -1242,11 +1245,19 @@ export const MessageToolCall = React.memo(function MessageToolCall({
    * stand-in line like `image/png image, 1531x889 px`. Given a URL for it, the
    * row shows the picture in place of that.
    */
+  const imagePath = path && isImagePath(path) ? path : undefined
   const imageSrc =
-    !errored && !running && isImagePath(path)
-      ? resolveFileUrl?.(path as string)
+    imagePath && !errored && !running
+      ? resolveFileUrl?.(imagePath)
       : undefined
   const showImage = !!imageSrc
+  const hasBody =
+    showDiff ||
+    showFile ||
+    showTodos ||
+    showImage ||
+    showAskSummary ||
+    !!(displayTool.input || displayTool.output)
   const stats = showDiff ? formatDiffStats(diff) : null
   const readMeta = showImage
     ? imageDimensions(displayTool.output)
@@ -1276,6 +1287,12 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     !!onOpenFile &&
     !!path &&
     (isFileMutationTool(displayTool.name) || isReadTool(displayTool.name))
+
+  /**
+   * A row that names a file answers a right-click whether or not the host can
+   * open it — a Grep or Shell row carries the same menu as an Edit.
+   */
+  const menuPath = path && fileActions?.length ? path : undefined
 
   const chevron = hasBody ? (
     <ChevronDown
@@ -1328,6 +1345,64 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     </>
   )
 
+  /**
+   * One node either way, so the context menu wraps it once: an openable row is
+   * a headline button plus its own chevron, everything else is the plain
+   * disclosure it has always been.
+   */
+  const header = openable ? (
+    <div
+      data-slot="message-tool-call-header"
+      className="flex min-w-0 items-center gap-1"
+    >
+      <button
+        type="button"
+        data-slot="message-tool-call-trigger"
+        data-action="open-file"
+        onClick={openFile}
+        title={path}
+        className={cn(disclosureTrigger, "min-w-0 cursor-pointer py-[3px]")}
+      >
+        {headlineContent}
+      </button>
+      {hasBody ? (
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            data-slot="message-tool-call-chevron"
+            aria-label={open ? "Hide tool details" : "Show tool details"}
+            className={cn(
+              disclosureTrigger,
+              "cursor-pointer px-0.5 py-[3px]",
+              // The glyph is hover-revealed; keyboard focus has to show it too.
+              "focus-visible:[&_svg]:opacity-60"
+            )}
+          >
+            {chevron}
+          </button>
+        </CollapsibleTrigger>
+      ) : null}
+    </div>
+  ) : (
+    <CollapsibleTrigger asChild>
+      <button
+        type="button"
+        data-slot="message-tool-call-trigger"
+        disabled={!hasBody}
+        className={cn(
+          disclosureTrigger,
+          "py-[3px]",
+          hasBody
+            ? "cursor-pointer"
+            : "cursor-default hover:text-muted-foreground"
+        )}
+      >
+        {headlineContent}
+        {chevron}
+      </button>
+    </CollapsibleTrigger>
+  )
+
   return (
     <Collapsible
       open={open}
@@ -1337,62 +1412,12 @@ export const MessageToolCall = React.memo(function MessageToolCall({
       data-tool-id={tool.id}
       className={cn("group animate-in fade-in duration-150", className)}
     >
-      {openable ? (
-        <FileContextMenu path={path ?? ""} actions={fileActions}>
-          <div
-            data-slot="message-tool-call-header"
-            className="flex min-w-0 items-center gap-1"
-          >
-            <button
-              type="button"
-              data-slot="message-tool-call-trigger"
-              data-action="open-file"
-              onClick={openFile}
-              title={path}
-              className={cn(
-                disclosureTrigger,
-                "min-w-0 cursor-pointer py-[3px]"
-              )}
-            >
-              {headlineContent}
-            </button>
-            {hasBody ? (
-              <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  data-slot="message-tool-call-chevron"
-                  aria-label={open ? "Hide tool details" : "Show tool details"}
-                  className={cn(
-                    disclosureTrigger,
-                    "cursor-pointer px-0.5 py-[3px]",
-                    // The glyph is hover-revealed; keyboard focus has to show it too.
-                    "focus-visible:[&_svg]:opacity-60"
-                  )}
-                >
-                  {chevron}
-                </button>
-              </CollapsibleTrigger>
-            ) : null}
-          </div>
+      {menuPath ? (
+        <FileContextMenu path={menuPath} actions={fileActions}>
+          {header}
         </FileContextMenu>
       ) : (
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            data-slot="message-tool-call-trigger"
-            disabled={!hasBody}
-            className={cn(
-              disclosureTrigger,
-              "py-[3px]",
-              hasBody
-                ? "cursor-pointer"
-                : "cursor-default hover:text-muted-foreground"
-            )}
-          >
-            {headlineContent}
-            {chevron}
-          </button>
-        </CollapsibleTrigger>
+        header
       )}
       {hasBody ? (
         <CollapsibleContent>

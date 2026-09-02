@@ -199,12 +199,20 @@ function InlineCode({
     </>
   )
 
-  // A chip is only a control where the host can act on the click.
+  /* A chip with no click handler is still a right-click target, so it has to
+     be reachable: focused, Shift+F10 and the Menu key open the same menu. */
+  const menuOnly = !!fileActions?.length
   const chip = !onFileClick ? (
     <span
       data-slot="message-file-ref"
       data-path={path}
-      className={cn(fileRefChip, className)}
+      tabIndex={menuOnly ? 0 : undefined}
+      className={cn(
+        fileRefChip,
+        menuOnly &&
+          "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        className
+      )}
       {...props}
     >
       {label}
@@ -253,6 +261,9 @@ function MarkdownImage({
   void node
   const { fileActions } = React.useContext(FileRefContext)
   const path = typeof src === "string" && !src.startsWith("data:") ? src : null
+  // Same as the chip: an image that carries a menu is focusable, so the
+  // keyboard can open it.
+  const menuable = !!path && !!fileActions?.length
   const image = (
     // eslint-disable-next-line @next/next/no-img-element -- data: URLs and arbitrary remote hosts, not a next/image-friendly asset
     <img
@@ -260,7 +271,13 @@ function MarkdownImage({
       data-streamdown="image"
       src={src}
       alt={alt ?? ""}
-      className={cn("max-w-full rounded-lg", className)}
+      tabIndex={menuable ? 0 : undefined}
+      className={cn(
+        "max-w-full rounded-lg",
+        menuable &&
+          "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        className
+      )}
       {...props}
     />
   )

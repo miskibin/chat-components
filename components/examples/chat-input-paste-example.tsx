@@ -13,9 +13,10 @@ const LOG = Array.from(
 
 /**
  * A paste over 800 characters or 3 lines collapses to a chip and leaves a
- * `[Pasted text #1 +40 lines]` placeholder behind, so the composer stays one
- * line tall. On send the placeholder is swapped back for the full block —
- * delete it, and that paste never leaves.
+ * `[Pasted text #1 +40 lines]` placeholder behind (a one-line paste counts
+ * characters instead), so the composer stays one line tall. On send the
+ * placeholder is swapped back for the full block — edit or delete the
+ * placeholder and that paste drops, chip and all.
  */
 export function ChatInputPasteExample() {
   return (

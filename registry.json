@@ -203,7 +203,10 @@
         "shiki",
         "next-themes"
       ],
-      "registryDependencies": ["miskibin/chat-components/file-icon"],
+      "registryDependencies": [
+        "miskibin/chat-components/file-icon",
+        "miskibin/chat-components/change-summary"
+      ],
       "files": [
         {
           "path": "components/ui/message-markdown.tsx",
