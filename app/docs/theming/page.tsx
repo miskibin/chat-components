@@ -234,6 +234,54 @@ export default function ThemingPage() {
       </section>
 
       <section className="flex flex-col gap-4">
+        <DocsH2>Scaling the whole UI</DocsH2>
+        <DocsP>
+          An app that offers a zoom control cannot simply put{" "}
+          <DocsCode>zoom</DocsCode> on <DocsCode>&lt;html&gt;</DocsCode>. Radix
+          portals render into <DocsCode>&lt;body&gt;</DocsCode>, so a menu, a
+          popover or a context menu would land <em>inside</em> the scaled
+          subtree, where Floating UI measures rects in visual pixels and writes
+          the result into a layout-unit box — every menu drifts off screen by
+          the scale factor.
+        </DocsP>
+        <DocsP>
+          So the scale is published as a variable and applied to a wrapper{" "}
+          <em>inside</em> the body instead, and each portalled surface scales
+          itself. Anchor, content and viewport then stay in one coordinate
+          space, and the menu comes out the right size in the right place. Two
+          edits do it, both in your own copies of the shadcn primitives —{" "}
+          <DocsCode>PopoverContent</DocsCode>,{" "}
+          <DocsCode>DropdownMenuContent</DocsCode> and{" "}
+          <DocsCode>ContextMenuContent</DocsCode>, which this registry lists as
+          dependencies rather than ships. Sub-content is not portalled, so it
+          deliberately does <em>not</em> repeat the scale: it inherits its
+          parent&apos;s.
+        </DocsP>
+        <DocsP>
+          The widths are the part that catches people out:{" "}
+          <DocsCode>vw</DocsCode> is not scaled by <DocsCode>zoom</DocsCode>, so
+          a clamp against the viewport has to divide it back out. Every picker
+          in this registry already does — <DocsCode>ModelPicker</DocsCode>,{" "}
+          <DocsCode>ModePicker</DocsCode>, <DocsCode>FolderPicker</DocsCode>.
+        </DocsP>
+        <CodeBlock
+          lang="tsx"
+          code={`/* On the app wrapper, not on <html> — portals must stay outside it. */
+<div style={{ zoom: "var(--ui-scale, 1)" }}>{children}</div>
+
+/* In PopoverContent / DropdownMenuContent / ContextMenuContent */
+className={cn("[zoom:var(--ui-scale,1)]", …)}
+
+/* A viewport-clamped width inside a portal: vw is not scaled by zoom */
+className="w-[min(17rem,calc((100vw-1.5rem)/var(--ui-scale,1)))]"`}
+        />
+        <DocsP>
+          Set nothing and every one of these is a no-op —{" "}
+          <DocsCode>var(--ui-scale, 1)</DocsCode> falls back to 1.
+        </DocsP>
+      </section>
+
+      <section className="flex flex-col gap-4">
         <DocsH2>House rules</DocsH2>
         <DocsList>
           <li>

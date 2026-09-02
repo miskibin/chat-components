@@ -11,6 +11,7 @@ import {
   extractReadFile,
   extractToolDiff,
   isFileMutationTool,
+  isImagePath,
   langFromPath,
   parseToolArgs,
   parseUnifiedPatch,
@@ -38,6 +39,12 @@ export type FilePreviewFile = {
   removed?: number
   /** First line number of `content` when it is a partial read. */
   startLine?: number
+  /**
+   * A URL the page can load this file's picture from. Set it for an image and
+   * the panel shows the picture instead of a text body — only the host knows
+   * how a path on the machine reaches the browser.
+   */
+  imageSrc?: string
 }
 
 export type FilePreviewView = "file" | "diff"
@@ -320,8 +327,9 @@ export function FilePreview({
   const language = deferredFile.language ?? langFromPath(deferredFile.path)
   const startLine = deferredFile.startLine ?? 1
 
-  const hasFile = !!model.fileLines
-  const hasDiff = model.diffLines.length > 0
+  const image = deferredFile.imageSrc
+  const hasFile = !image && !!model.fileLines
+  const hasDiff = !image && model.diffLines.length > 0
   const canToggle = hasFile && hasDiff
   const preferred: FilePreviewView = defaultView ?? (hasFile ? "file" : "diff")
   const [requested, setRequested] = React.useState<FilePreviewView>(preferred)
@@ -486,7 +494,21 @@ export function FilePreview({
           classNames?.body
         )}
       >
-        {view === "file" && model.fileLines
+        {image ? (
+          <div
+            data-slot="file-preview-image"
+            className="flex min-h-full items-center justify-center p-3"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- a local file served by the host, not an optimizable asset */}
+            <img
+              src={image}
+              alt={name}
+              decoding="async"
+              className="max-h-full max-w-full object-contain"
+            />
+          </div>
+        ) : null}
+        {!image && view === "file" && model.fileLines
           ? model.fileLines.map((text, index) => (
               <FileRow
                 key={index}
@@ -497,20 +519,20 @@ export function FilePreview({
               />
             ))
           : null}
-        {view === "diff" && hasDiff
+        {!image && view === "diff" && hasDiff
           ? model.diffLines.map((line, index) => (
               <DiffRow key={index} line={line} tokens={highlighted?.[index]} />
             ))
           : null}
-        {view === "diff" && !hasDiff && model.unparsed ? (
+        {!image && view === "diff" && !hasDiff && model.unparsed ? (
           <EmptyNote>
             This diff could not be parsed — it may have been truncated.
           </EmptyNote>
         ) : null}
-        {!hasFile && !hasDiff && !model.unparsed ? (
+        {!image && !hasFile && !hasDiff && !model.unparsed ? (
           <EmptyNote>No preview available for this file.</EmptyNote>
         ) : null}
-        {view === "diff" && hasDiff && model.unparsed ? (
+        {!image && view === "diff" && hasDiff && model.unparsed ? (
           <EmptyNote>Part of this diff could not be parsed.</EmptyNote>
         ) : null}
       </div>
@@ -547,6 +569,10 @@ export function filePreviewFromTool(
 
   const diffLines = extractToolDiff(tool)
   if (diffLines?.length) preview.diffLines = diffLines
+
+  // An image's "content" is a stand-in line about the bytes; the host supplies
+  // an `imageSrc` for it instead, and the panel shows the picture.
+  if (isImagePath(path)) return preview
 
   const read = extractReadFile(tool)
   if (read) {

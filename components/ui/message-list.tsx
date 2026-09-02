@@ -69,6 +69,11 @@ export type MessageListProps = React.ComponentProps<"div"> & {
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
   /** Clicking a file reference inside an answer's markdown. */
   onFileReferenceClick?: (messageId: string, path: string) => void
+  /**
+   * Turns a path a tool names into a URL the page can load — forwarded to
+   * every row so an image the agent wrote or read renders as a picture.
+   */
+  resolveFileUrl?: (path: string) => string | undefined
   renderActions?: (message: ChatMessageData) => React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -179,6 +184,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onOpenFile,
   onChangeFileClick,
   onFileReferenceClick,
+  resolveFileUrl,
 }: {
   message: ChatMessageData
   isStreaming: boolean
@@ -194,6 +200,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
   onFileReferenceClick?: (messageId: string, path: string) => void
+  resolveFileUrl?: (path: string) => string | undefined
 }) {
   const isUser = message.sender === "user"
 
@@ -250,6 +257,7 @@ const MessageListRow = React.memo(function MessageListRow({
       onFileReferenceClick={
         onFileReferenceClick ? handleFileReferenceClick : undefined
       }
+      resolveFileUrl={resolveFileUrl}
     />
   )
 })
@@ -273,6 +281,7 @@ const MessageListItem = React.memo(function MessageListItem({
   onOpenFile,
   onChangeFileClick,
   onFileReferenceClick,
+  resolveFileUrl,
   renderActions,
 }: {
   message: ChatMessageData
@@ -292,6 +301,7 @@ const MessageListItem = React.memo(function MessageListItem({
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
   onFileReferenceClick?: (messageId: string, path: string) => void
+  resolveFileUrl?: (path: string) => string | undefined
   renderActions?: (message: ChatMessageData) => React.ReactNode
 }) {
   return (
@@ -312,6 +322,7 @@ const MessageListItem = React.memo(function MessageListItem({
         onOpenFile={onOpenFile}
         onChangeFileClick={onChangeFileClick}
         onFileReferenceClick={onFileReferenceClick}
+        resolveFileUrl={resolveFileUrl}
       />
       {waiting ? (
         <div className="mb-4">
@@ -340,6 +351,7 @@ export function MessageList({
   onOpenFile,
   onChangeFileClick,
   onFileReferenceClick,
+  resolveFileUrl,
   renderActions,
   emptyState,
   className,
@@ -357,6 +369,9 @@ export function MessageList({
   const stableOpenFile = useStableCallback(onOpenFile)
   const stableChangeFileClick = useStableCallback(onChangeFileClick)
   const stableFileReferenceClick = useStableCallback(onFileReferenceClick)
+  // Rows are memoized: a host that builds this resolver inline would otherwise
+  // re-render every row on every streamed token.
+  const stableResolveFileUrl = useStableCallback(resolveFileUrl)
 
   return (
     <div
@@ -416,6 +431,7 @@ export function MessageList({
                   onFileReferenceClick={
                     onFileReferenceClick ? stableFileReferenceClick : undefined
                   }
+                  resolveFileUrl={resolveFileUrl ? stableResolveFileUrl : undefined}
                   renderActions={renderActions ? stableRenderActions : undefined}
                 />
               )

@@ -141,7 +141,7 @@ export function FolderPicker({
         sideOffset={8}
         collisionPadding={12}
         className={cn(
-          "w-[min(26rem,calc(100vw-1.5rem))] overflow-hidden p-0",
+          "w-[min(26rem,calc((100vw-1.5rem)/var(--ui-scale,1)))] overflow-hidden p-0",
           classNames?.content
         )}
       >

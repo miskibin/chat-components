@@ -89,6 +89,12 @@ export type MessageProps = {
   /** Makes each row of the change-summary card clickable. */
   onChangeFileClick?: (file: ChangeSummaryFile) => void
   /**
+   * Turns a path a tool names into a URL this page can load. Only the host
+   * knows how the machine's files reach the browser, so this is how a tool row
+   * gets to show an image the agent wrote or read instead of its bytes.
+   */
+  resolveFileUrl?: (path: string) => string | undefined
+  /**
    * Makes the file references inside the answer's markdown clickable — the
    * path arrives without its `:line` suffix. Keep it stable: an unstable
    * handler re-renders every markdown block on every streamed token.
@@ -150,6 +156,7 @@ export const Message = React.memo(function Message({
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
+  resolveFileUrl,
   onFileReferenceClick,
 }: MessageProps) {
   const [isEditing, setIsEditing] = React.useState(false)
@@ -384,6 +391,7 @@ export const Message = React.memo(function Message({
           tool={part.tool}
           onAskAnswer={onAskAnswer}
           onOpenFile={onOpenFile}
+          resolveFileUrl={resolveFileUrl}
         />
       )
     }
@@ -425,6 +433,7 @@ export const Message = React.memo(function Message({
             defaultOpen
             onAskAnswer={onAskAnswer}
             onOpenFile={onOpenFile}
+            resolveFileUrl={resolveFileUrl}
           />,
         ]
       : []
