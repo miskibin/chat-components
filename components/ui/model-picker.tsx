@@ -200,14 +200,14 @@ export function ModelPicker({
           align="start"
           sideOffset={8}
           collisionPadding={12}
-          className="w-[min(15rem,calc(100vw-1.5rem))]"
+          className="w-[min(15rem,calc((100vw-1.5rem)/var(--ui-scale,1)))]"
         >
           <DropdownMenuSub>
             <SectionTrigger label={label} value={current?.name ?? placeholder} />
             <DropdownMenuSubContent
               data-slot="model-picker-list"
               collisionPadding={12}
-              className="w-[min(17rem,calc(100vw-1.5rem))] p-0"
+              className="w-[min(17rem,calc((100vw-1.5rem)/var(--ui-scale,1)))] p-0"
             >
               {modelList}
             </DropdownMenuSubContent>
@@ -221,7 +221,7 @@ export function ModelPicker({
             <DropdownMenuSubContent
               data-slot="model-picker-effort"
               collisionPadding={12}
-              className="w-[min(13rem,calc(100vw-1.5rem))]"
+              className="w-[min(13rem,calc((100vw-1.5rem)/var(--ui-scale,1)))]"
             >
               {effortOptions?.map((option) => (
                 <DropdownMenuItem
@@ -249,7 +249,7 @@ export function ModelPicker({
           align="start"
           sideOffset={8}
           collisionPadding={12}
-          className="w-[min(17rem,calc(100vw-1.5rem))] p-0"
+          className="w-[min(17rem,calc((100vw-1.5rem)/var(--ui-scale,1)))] p-0"
         >
           <div data-slot="model-picker-list">{modelList}</div>
         </DropdownMenuContent>

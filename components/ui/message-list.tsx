@@ -69,6 +69,11 @@ export type MessageListProps = React.ComponentProps<"div"> & {
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
   /** Clicking a file reference inside an answer's markdown. */
   onFileReferenceClick?: (messageId: string, path: string) => void
+  /**
+   * Turns a path a tool names into a URL the page can load — forwarded to
+   * every row so an image the agent wrote or read renders as a picture.
+   */
+  resolveFileUrl?: (path: string) => string | undefined
   renderActions?: (message: ChatMessageData) => React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -90,6 +95,7 @@ function useStableCallback<A extends unknown[], R>(
 
 export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
   const scrollRef = React.useRef<HTMLDivElement>(null)
+  const contentRef = React.useRef<HTMLDivElement>(null)
   const autoScrollRef = React.useRef(true)
   const programmaticScrollUntilRef = React.useRef(0)
   const prevMessageCountRef = React.useRef(0)
@@ -142,6 +148,34 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
     })
   }, [messages])
 
+  /**
+   * The effect above fires on new *messages*. Plenty of height arrives after
+   * the last one: a mermaid diagram mounting, Shiki replacing a plain block, an
+   * image loading, a font swapping in. Each of those leaves a follower parked a
+   * screenful short of the bottom — visibly so under a floating composer, where
+   * the shortfall reads as the last turn hiding behind it.
+   *
+   * So the content box is watched too, and while the reader is still following
+   * the run, a growth spurt re-pins them. Instantly, never smoothly: this is a
+   * layout correction, not a navigation, and animating it would outlast the
+   * window below that tells a programmatic scroll from the reader's own.
+   */
+  React.useEffect(() => {
+    const content = contentRef.current
+    if (!content || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => {
+      if (!autoScrollRef.current) return
+      const node = scrollRef.current
+      if (!node) return
+      const distance = node.scrollHeight - node.scrollTop - node.clientHeight
+      if (distance <= 1) return
+      programmaticScrollUntilRef.current = Date.now() + 500
+      node.scrollTo({ top: node.scrollHeight, behavior: "auto" })
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [])
+
   React.useEffect(
     () => () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current)
@@ -149,7 +183,7 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
     []
   )
 
-  return { scrollRef, handleMessageScroll }
+  return { scrollRef, contentRef, handleMessageScroll }
 }
 
 function hasAskTool(
@@ -179,6 +213,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onOpenFile,
   onChangeFileClick,
   onFileReferenceClick,
+  resolveFileUrl,
 }: {
   message: ChatMessageData
   isStreaming: boolean
@@ -194,6 +229,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
   onFileReferenceClick?: (messageId: string, path: string) => void
+  resolveFileUrl?: (path: string) => string | undefined
 }) {
   const isUser = message.sender === "user"
 
@@ -250,6 +286,7 @@ const MessageListRow = React.memo(function MessageListRow({
       onFileReferenceClick={
         onFileReferenceClick ? handleFileReferenceClick : undefined
       }
+      resolveFileUrl={resolveFileUrl}
     />
   )
 })
@@ -273,6 +310,7 @@ const MessageListItem = React.memo(function MessageListItem({
   onOpenFile,
   onChangeFileClick,
   onFileReferenceClick,
+  resolveFileUrl,
   renderActions,
 }: {
   message: ChatMessageData
@@ -292,6 +330,7 @@ const MessageListItem = React.memo(function MessageListItem({
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
   onFileReferenceClick?: (messageId: string, path: string) => void
+  resolveFileUrl?: (path: string) => string | undefined
   renderActions?: (message: ChatMessageData) => React.ReactNode
 }) {
   return (
@@ -312,6 +351,7 @@ const MessageListItem = React.memo(function MessageListItem({
         onOpenFile={onOpenFile}
         onChangeFileClick={onChangeFileClick}
         onFileReferenceClick={onFileReferenceClick}
+        resolveFileUrl={resolveFileUrl}
       />
       {waiting ? (
         <div className="mb-4">
@@ -340,6 +380,7 @@ export function MessageList({
   onOpenFile,
   onChangeFileClick,
   onFileReferenceClick,
+  resolveFileUrl,
   renderActions,
   emptyState,
   className,
@@ -347,7 +388,7 @@ export function MessageList({
   onScroll,
   ...props
 }: MessageListProps) {
-  const { scrollRef, handleMessageScroll } = useChatAutoScroll(messages)
+  const { scrollRef, contentRef, handleMessageScroll } = useChatAutoScroll(messages)
   const lastIndex = messages.length - 1
 
   const stableEdit = useStableCallback(onEditMessage)
@@ -357,6 +398,9 @@ export function MessageList({
   const stableOpenFile = useStableCallback(onOpenFile)
   const stableChangeFileClick = useStableCallback(onChangeFileClick)
   const stableFileReferenceClick = useStableCallback(onFileReferenceClick)
+  // Rows are memoized: a host that builds this resolver inline would otherwise
+  // re-render every row on every streamed token.
+  const stableResolveFileUrl = useStableCallback(resolveFileUrl)
 
   return (
     <div
@@ -372,7 +416,10 @@ export function MessageList({
       )}
       {...props}
     >
-      <div className="mx-auto flex min-h-full w-full max-w-3xl min-w-0 flex-col">
+      <div
+        ref={contentRef}
+        className="mx-auto flex min-h-full w-full max-w-3xl min-w-0 flex-col"
+      >
         {messages.length === 0
           ? (emptyState ?? <div className="flex flex-1 items-center justify-center" />)
           : messages.map((message, index) => {
@@ -416,6 +463,7 @@ export function MessageList({
                   onFileReferenceClick={
                     onFileReferenceClick ? stableFileReferenceClick : undefined
                   }
+                  resolveFileUrl={resolveFileUrl ? stableResolveFileUrl : undefined}
                   renderActions={renderActions ? stableRenderActions : undefined}
                 />
               )

@@ -96,7 +96,7 @@ export function ModePicker({
         align="start"
         sideOffset={8}
         collisionPadding={12}
-        className="w-[min(16rem,calc(100vw-1.5rem))]"
+        className="w-[min(16rem,calc((100vw-1.5rem)/var(--ui-scale,1)))]"
       >
         <DropdownMenuLabel className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           Mode

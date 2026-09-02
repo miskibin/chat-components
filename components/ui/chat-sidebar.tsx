@@ -33,7 +33,7 @@ export function SideRow({
       type="button"
       data-slot="sidebar-row"
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] leading-5",
+        "group/side-row flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] leading-5",
         "text-sidebar-foreground outline-none transition-colors",
         "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
@@ -43,13 +43,13 @@ export function SideRow({
       {...props}
     >
       {icon ? (
-        <span className="inline-flex shrink-0 text-muted-foreground">
+        <span className="inline-flex shrink-0 text-muted-foreground transition-colors group-hover/side-row:text-current">
           {icon}
         </span>
       ) : null}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {hint ? (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
+        <span className="shrink-0 text-[11px] text-muted-foreground transition-colors group-hover/side-row:text-current/75">
           {hint}
         </span>
       ) : null}
@@ -198,6 +198,13 @@ export type ChatSidebarProps = {
    * while a drag is in progress.
    */
   edgeZones?: boolean
+  /**
+   * Rules under the header and above the footer. Off by default: the panel
+   * already reads as one column, and a line every few rows is the thing that
+   * makes a chat sidebar look busy. Turn it on when the footer carries enough
+   * weight to want separating.
+   */
+  dividers?: boolean
   widthExpanded?: number
   widthCollapsed?: number
   className?: string
@@ -223,6 +230,7 @@ export function ChatSidebar({
   footer,
   overlays,
   edgeZones = false,
+  dividers = false,
   widthExpanded = SIDEBAR_WIDTH_EXPANDED,
   widthCollapsed = SIDEBAR_WIDTH_COLLAPSED,
   className,
@@ -237,6 +245,7 @@ export function ChatSidebar({
     <div
       data-slot="chat-sidebar"
       data-collapsed={collapsed}
+      data-dividers={dividers}
       style={{ width: collapsed ? widthCollapsed : widthExpanded }}
       className={cn(
         "relative flex h-full max-w-full min-h-0 min-w-0 shrink-0 overflow-hidden",
@@ -274,7 +283,8 @@ export function ChatSidebar({
         <div
           data-slot="chat-sidebar-header"
           className={cn(
-            "flex items-center justify-between gap-2 border-b border-sidebar-border px-2.5 pt-3 pb-2",
+            "flex items-center justify-between gap-2 px-2 pt-2 pb-1",
+            dividers && "border-b border-sidebar-border",
             classNames?.header
           )}
         >
@@ -290,7 +300,7 @@ export function ChatSidebar({
         {nav ? (
           <div
             data-slot="chat-sidebar-nav"
-            className={cn("flex flex-col gap-px px-2 pt-2 pb-0.5", classNames?.nav)}
+            className={cn("flex flex-col gap-px px-2 pt-1 pb-0.5", classNames?.nav)}
           >
             {nav}
           </div>
@@ -310,7 +320,8 @@ export function ChatSidebar({
           <div
             data-slot="chat-sidebar-footer"
             className={cn(
-              "border-t border-sidebar-border px-2 py-2",
+              "px-2 py-2",
+              dividers && "border-t border-sidebar-border",
               classNames?.footer
             )}
           >
