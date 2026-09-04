@@ -11,6 +11,7 @@ import { ChangeSummaryStyledExample } from "@/components/examples/change-summary
 import { FileIconExample } from "@/components/examples/file-icon-example"
 import { FilePreviewActionsExample } from "@/components/examples/file-preview-actions-example"
 import { FilePreviewExample } from "@/components/examples/file-preview-example"
+import { FilePreviewFocusExample } from "@/components/examples/file-preview-focus-example"
 import { FilePreviewImageExample } from "@/components/examples/file-preview-image-example"
 import { FilePreviewSplitExample } from "@/components/examples/file-preview-split-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
@@ -20,6 +21,7 @@ import { MessageCitationsExample } from "@/components/examples/message-citations
 import { MessageExample } from "@/components/examples/message-example"
 import { MessageFileActionsExample } from "@/components/examples/message-file-actions-example"
 import { MessageListActionsExample } from "@/components/examples/message-list-actions-example"
+import { MessageListConversationsExample } from "@/components/examples/message-list-conversations-example"
 import { MessageListEmptyExample } from "@/components/examples/message-list-empty-example"
 import { MessageListExample } from "@/components/examples/message-list-example"
 import { MessageListJumpExample } from "@/components/examples/message-list-jump-example"
@@ -601,8 +603,26 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
           {
             name: "renderActions",
             type: "(message: ChatMessageData) => React.ReactNode",
-            description:
-              "Rendered under each settled turn — copy, retry, feedback.",
+            description: (
+              <>
+                Rendered under each settled turn — copy, retry, feedback. It
+                runs outside the memoized row, so the buttons always carry what
+                the caller knows on this render rather than the closure the row
+                last froze.
+              </>
+            ),
+          },
+          {
+            name: "conversationKey",
+            type: "string",
+            description: (
+              <>
+                Identifies the conversation on screen. Pass it whenever one
+                mounted list shows several transcripts in turn: on a change the
+                list stops following the chat that was left and jumps to the end
+                of the one just opened.
+              </>
+            ),
           },
           {
             name: "emptyState",
@@ -618,8 +638,14 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         ],
       },
       {
-        caption: "useChatAutoScroll(messages)",
+        caption: "useChatAutoScroll(messages, conversationKey?)",
         rows: [
+          {
+            name: "conversationKey",
+            type: "string",
+            description:
+              "Optional argument, not a returned value: the conversation these messages belong to. On a change the hook forgets the reader's scroll position — it was formed in the chat they just left — and follows the new transcript from its end.",
+          },
           {
             name: "scrollRef",
             type: "RefObject<HTMLDivElement>",
@@ -662,8 +688,8 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         title: "Streaming cost",
         description: (
           <>
-            Whole turn items are memoized — message content, generation
-            state, and caller-provided actions — and the callbacks you pass —{" "}
+            Turn rows are memoized — the message and everything under it —
+            and the callbacks you pass —{" "}
             <DocsCode>onEditMessage</DocsCode>,{" "}
             <DocsCode>onAskAnswer</DocsCode>, <DocsCode>onOpenFile</DocsCode>,{" "}
             <DocsCode>onChangeFileClick</DocsCode>,{" "}
@@ -675,9 +701,10 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             can skip their layout and paint work. Keep the
             message objects themselves stable (patch the streaming turn, map the
             rest through) and the list stays flat as it grows.{" "}
-            <DocsCode>renderActions</DocsCode> is stabilized internally too, so
-            settled actions do not get recreated for every streamed token and
-            still call the caller&apos;s latest closure.
+            <DocsCode>renderActions</DocsCode> is the deliberate exception: it
+            is rendered beside each row rather than inside the memo, so keep it
+            cheap — the actions of every settled turn re-render with their
+            caller, which is also what keeps them from firing a stale closure.
           </>
         ),
       },
@@ -687,7 +714,9 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
           <>
             Following is coalesced into one animation frame, so a burst of
             tokens schedules one scroll rather than dozens. Growing text tracks
-            the bottom instantly; a whole new message animates.
+            the bottom instantly; a whole new message animates. Follow state
+            belongs to one conversation, so a list that swaps transcripts
+            without remounting should pass <DocsCode>conversationKey</DocsCode>.
           </>
         ),
       },
@@ -714,15 +743,31 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
         title: "Per-message actions",
         description: (
           <>
-            <DocsCode>renderActions</DocsCode> is held at one identity inside
-            the memoized turn item and skipped while a turn is still streaming,
-            so settled buttons are not rebuilt by later tokens and never call a
-            stale closure.
+            <DocsCode>renderActions</DocsCode> is skipped while a turn is
+            still streaming or has an open question, and rendered outside the
+            memoized row — so a button clicked on a settled turn runs the
+            handler the caller has now, not the one that row first saw.
           </>
         ),
         example: {
           name: "message-list-actions-example",
           node: <MessageListActionsExample />,
+        },
+      },
+      {
+        title: "Switching conversations",
+        description: (
+          <>
+            One mounted list, two transcripts. <DocsCode>conversationKey</DocsCode>{" "}
+            is what tells it they are different conversations: scroll up in one,
+            switch, and the other opens at its newest turn instead of inheriting
+            a scroll position that was never its own.
+          </>
+        ),
+        example: {
+          name: "message-list-conversations-example",
+          node: <MessageListConversationsExample />,
+          align: "stretch",
         },
       },
       {
@@ -1948,8 +1993,10 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
               <>
                 Defaults to <DocsCode>file</DocsCode> when{" "}
                 <DocsCode>content</DocsCode> is set, otherwise{" "}
-                <DocsCode>diff</DocsCode>. The toggle only appears when both
-                views are possible.
+                <DocsCode>diff</DocsCode>. The default is settled when the body
+                actually arrives, so a host that shows the diff first and
+                fetches the text after still lands in the File view. The toggle
+                only appears when both views are possible.
               </>
             ),
           },
@@ -2094,8 +2141,22 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
               <>
                 1-based line of the File view to centre and mark — where a{" "}
                 <DocsCode>file.ts:42</DocsCode> reference pointed. Outranks the
-                first changed line, and opens the File view when there is
-                content.
+                first changed line, and opens the File view as soon as there is
+                content — including when the content lands after the path. A
+                line past the render cap reveals the whole file.
+              </>
+            ),
+          },
+          {
+            name: "focusNonce",
+            type: "number",
+            description: (
+              <>
+                Bump it to ask for the same <DocsCode>focusLine</DocsCode>{" "}
+                again. Centring happens once per request, so clicking one{" "}
+                <DocsCode>file.ts:42</DocsCode> chip a second time after
+                scrolling away only re-centres if the host says it is a new
+                request — this is how it says so.
               </>
             ),
           },
@@ -2150,6 +2211,7 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
       "file-preview-side",
       "file-preview-gutter",
       "file-preview-note",
+      "file-preview-show-all",
       "file-icon",
     ],
     examples: [
@@ -2182,6 +2244,25 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
         example: {
           name: "file-preview-actions-example",
           node: <FilePreviewActionsExample />,
+          align: "stretch",
+        },
+      },
+      {
+        title: "A line to land on, in a file too long to render",
+        description: (
+          <>
+            An app that opens the panel from a <DocsCode>file.ts:412</DocsCode>{" "}
+            reference has the path before it has the body, so the view a{" "}
+            <DocsCode>focusLine</DocsCode> asks for is settled when the text
+            actually lands. Long files render 300 rows behind{" "}
+            <DocsCode>Show all N lines</DocsCode> — except when the line to
+            centre on lies past that, which reveals the rest. Bump{" "}
+            <DocsCode>focusNonce</DocsCode> to ask for the same line twice.
+          </>
+        ),
+        example: {
+          name: "file-preview-focus-example",
+          node: <FilePreviewFocusExample />,
           align: "stretch",
         },
       },
@@ -2302,7 +2383,10 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
             <DocsCode>useDeferredValue</DocsCode> so a streaming file does not
             re-diff on every chunk. Bodies over ~150k characters skip
             highlighting and render as plain lines, gutter and highlights
-            intact.
+            intact. The File view also stops at 300 rows behind a{" "}
+            <DocsCode>Show all N lines</DocsCode> button — a whole file can be
+            a megabyte of them — and opens uncapped when the line it has been
+            asked to centre on lies past that.
           </>
         ),
       },

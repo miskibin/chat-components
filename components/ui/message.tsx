@@ -189,10 +189,6 @@ export const Message = React.memo(function Message({
     }
   }, [content, reasoningProp])
 
-  React.useEffect(() => {
-    setEditedContent(content)
-  }, [content])
-
   const { insideButtons, outsideButtons } = React.useMemo(
     () => ({
       insideButtons: actionButtons.filter((btn) => btn.position !== "outside"),
@@ -200,6 +196,17 @@ export const Message = React.memo(function Message({
     }),
     [actionButtons]
   )
+
+  /**
+   * The buffer is seeded where editing starts rather than synced from the
+   * content prop: an assistant turn rewrites that prop on every streamed
+   * token, and following it cost a second render each time to fill an editor
+   * that is not open and, for that sender, cannot be.
+   */
+  const startEdit = React.useCallback(() => {
+    setEditedContent(content)
+    setIsEditing(true)
+  }, [content])
 
   const cancelEdit = React.useCallback(() => {
     setIsEditing(false)
@@ -434,7 +441,7 @@ export const Message = React.memo(function Message({
             <button
               type="button"
               title="Edit message"
-              onClick={() => setIsEditing(true)}
+              onClick={startEdit}
               className={cn(
                 messageActionButton,
                 "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
@@ -631,7 +638,7 @@ export const Message = React.memo(function Message({
               <button
                 type="button"
                 title="Edit message"
-                onClick={() => setIsEditing(true)}
+                onClick={startEdit}
                 className={messageActionButton}
               >
                 <Pencil />

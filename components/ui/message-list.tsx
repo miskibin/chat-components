@@ -89,6 +89,12 @@ export type MessageListProps = React.ComponentProps<"div"> & {
    */
   resolveFileUrl?: (path: string) => string | undefined
   renderActions?: (message: ChatMessageData) => React.ReactNode
+  /**
+   * Identifies the conversation on screen. Pass it whenever one list renders
+   * several transcripts in turn: on a change the list stops following the
+   * chat that was left and jumps to the end of the one just opened.
+   */
+  conversationKey?: string
   emptyState?: React.ReactNode
 }
 
@@ -137,7 +143,10 @@ function useStableFileActions(actions?: FileActionItem[]) {
   return sameFileActions(held, actions) ? held : actions
 }
 
-export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
+export function useChatAutoScroll(
+  messages: ReadonlyArray<unknown>,
+  conversationKey?: string
+) {
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const contentRef = React.useRef<HTMLDivElement>(null)
   const autoScrollRef = React.useRef(true)
@@ -201,6 +210,28 @@ export function useChatAutoScroll(messages: ReadonlyArray<unknown>) {
     programmaticScrollUntilRef.current = Date.now() + 500
     node.scrollTo({ top: node.scrollHeight, behavior: "smooth" })
   }, [])
+
+  /**
+   * Follow state belongs to the conversation it was formed in. A host that
+   * swaps transcripts without remounting the list — the usual shape, since
+   * remounting throws away every rendered turn — would otherwise carry the
+   * reader's "scrolled up to read" over to a chat they have not looked at,
+   * and park them mid-transcript while its newest turn streams below.
+   *
+   * The count is cleared too, so the effect below reads the new transcript as
+   * an initial paint and jumps to its end instantly rather than animating.
+   */
+  const conversationRef = React.useRef(conversationKey)
+  React.useEffect(() => {
+    if (conversationRef.current === conversationKey) return
+    conversationRef.current = conversationKey
+    autoScrollRef.current = true
+    prevMessageCountRef.current = 0
+    const node = scrollRef.current
+    if (!node) return
+    programmaticScrollUntilRef.current = Date.now() + 500
+    node.scrollTo({ top: node.scrollHeight, behavior: "auto" })
+  }, [conversationKey])
 
   /**
    * Streaming turns re-run this every token. Coalescing to one frame — and
@@ -394,93 +425,6 @@ const MessageListRow = React.memo(function MessageListRow({
   )
 })
 
-/**
- * Owns the whole turn, including caller-provided actions. Keeping that work
- * inside the memo boundary matters on long transcripts: a streamed token only
- * rebuilds the live turn instead of recreating actions under every settled row.
- */
-const MessageListItem = React.memo(function MessageListItem({
-  message,
-  isStreaming,
-  openAsk,
-  waiting,
-  generationStage,
-  generationLabel,
-  patternHandlers,
-  onEditMessage,
-  onAskAnswer,
-  onReviewChanges,
-  onOpenFile,
-  onChangeFileClick,
-  onFileReferenceClick,
-  fileActions,
-  onQuote,
-  resolveFileUrl,
-  renderActions,
-}: {
-  message: ChatMessageData
-  isStreaming: boolean
-  openAsk: boolean
-  waiting: boolean
-  generationStage: GenerationStage
-  generationLabel?: string
-  patternHandlers: PatternHandler[]
-  onEditMessage?: (id: string, content: string) => void
-  onAskAnswer?: (
-    messageId: string,
-    toolId: string,
-    result: AskQuestionResult
-  ) => void
-  onReviewChanges?: (messageId: string) => void
-  onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
-  onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
-  onFileReferenceClick?: (
-    messageId: string,
-    path: string,
-    line?: number
-  ) => void
-  fileActions?: FileActionItem[]
-  onQuote?: (messageId: string, text: string) => void
-  resolveFileUrl?: (path: string) => string | undefined
-  renderActions?: (message: ChatMessageData) => React.ReactNode
-}) {
-  return (
-    <div
-      data-slot="message-list-item"
-      // Find-in-page and accessibility retain the DOM, while the browser can
-      // skip layout and paint work for distant transcript rows.
-      style={OFFSCREEN_ITEM_STYLE}
-    >
-      <MessageListRow
-        message={message}
-        isStreaming={isStreaming}
-        openAsk={openAsk}
-        patternHandlers={patternHandlers}
-        onEditMessage={onEditMessage}
-        onAskAnswer={onAskAnswer}
-        onReviewChanges={onReviewChanges}
-        onOpenFile={onOpenFile}
-        onChangeFileClick={onChangeFileClick}
-        onFileReferenceClick={onFileReferenceClick}
-        fileActions={fileActions}
-        onQuote={onQuote}
-        resolveFileUrl={resolveFileUrl}
-      />
-      {waiting ? (
-        <div className="mb-4">
-          <GenerationStatus
-            active
-            stage={generationStage}
-            label={generationLabel}
-          />
-        </div>
-      ) : isStreaming || openAsk ? null : (
-        renderActions?.(message)
-      )}
-    </div>
-  )
-})
-
 export function MessageList({
   messages,
   isGenerating = false,
@@ -497,6 +441,7 @@ export function MessageList({
   onQuote,
   resolveFileUrl,
   renderActions,
+  conversationKey,
   emptyState,
   className,
   children,
@@ -504,12 +449,11 @@ export function MessageList({
   ...props
 }: MessageListProps) {
   const { scrollRef, contentRef, handleMessageScroll, atBottom, scrollToBottom } =
-    useChatAutoScroll(messages)
+    useChatAutoScroll(messages, conversationKey)
   const lastIndex = messages.length - 1
 
   const stableEdit = useStableCallback(onEditMessage)
   const stableAskAnswer = useStableCallback(onAskAnswer)
-  const stableRenderActions = useStableCallback(renderActions)
   const stableReviewChanges = useStableCallback(onReviewChanges)
   const stableOpenFile = useStableCallback(onOpenFile)
   const stableChangeFileClick = useStableCallback(onChangeFileClick)
@@ -560,32 +504,52 @@ export function MessageList({
                 !message.parts?.length
 
               return (
-                <MessageListItem
+                <div
                   key={message.id}
-                  message={message}
-                  isStreaming={isStreaming}
-                  openAsk={openAsk}
-                  waiting={waiting}
-                  generationStage={generationStage}
-                  generationLabel={generationLabel}
-                  patternHandlers={patternHandlers}
-                  onEditMessage={onEditMessage ? stableEdit : undefined}
-                  onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
-                  onReviewChanges={
-                    onReviewChanges ? stableReviewChanges : undefined
-                  }
-                  onOpenFile={onOpenFile ? stableOpenFile : undefined}
-                  onChangeFileClick={
-                    onChangeFileClick ? stableChangeFileClick : undefined
-                  }
-                  onFileReferenceClick={
-                    onFileReferenceClick ? stableFileReferenceClick : undefined
-                  }
-                  fileActions={stableFileActions}
-                  onQuote={onQuote ? stableQuote : undefined}
-                  resolveFileUrl={resolveFileUrl ? stableResolveFileUrl : undefined}
-                  renderActions={renderActions ? stableRenderActions : undefined}
-                />
+                  data-slot="message-list-item"
+                  // Find-in-page and accessibility retain the DOM, while the
+                  // browser can skip layout and paint work for distant rows.
+                  style={OFFSCREEN_ITEM_STYLE}
+                >
+                  <MessageListRow
+                    message={message}
+                    isStreaming={isStreaming}
+                    openAsk={openAsk}
+                    patternHandlers={patternHandlers}
+                    onEditMessage={onEditMessage ? stableEdit : undefined}
+                    onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
+                    onReviewChanges={
+                      onReviewChanges ? stableReviewChanges : undefined
+                    }
+                    onOpenFile={onOpenFile ? stableOpenFile : undefined}
+                    onChangeFileClick={
+                      onChangeFileClick ? stableChangeFileClick : undefined
+                    }
+                    onFileReferenceClick={
+                      onFileReferenceClick ? stableFileReferenceClick : undefined
+                    }
+                    fileActions={stableFileActions}
+                    onQuote={onQuote ? stableQuote : undefined}
+                    resolveFileUrl={
+                      resolveFileUrl ? stableResolveFileUrl : undefined
+                    }
+                  />
+                  {/* Rendered here, outside the memo: the actions a caller
+                      builds close over what it knows right now — the picked
+                      model, the running turn — and a settled row that froze
+                      them would hand a stale one back on the next click. */}
+                  {waiting ? (
+                    <div className="mb-4">
+                      <GenerationStatus
+                        active
+                        stage={generationStage}
+                        label={generationLabel}
+                      />
+                    </div>
+                  ) : isStreaming || openAsk ? null : (
+                    renderActions?.(message)
+                  )}
+                </div>
               )
             })}
         {children}

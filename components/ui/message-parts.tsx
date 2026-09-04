@@ -454,10 +454,26 @@ function splitChangeLines(value: string): string[] {
   return parts
 }
 
+/**
+ * Word diffing is quadratic in the length of the pair it compares, and a tool
+ * hands us whatever it wrote — a minified bundle on one line, or a rewrite of
+ * a thousand of them. Past either bound the chips are dropped and the row
+ * renders as plain text, which is what every renderer already does when a
+ * line arrives without `segments`.
+ */
+const MAX_WORD_DIFF_LINE_CHARS = 2000
+const MAX_WORD_DIFF_PAIRS = 300
+
 function wordSegments(
   before: string,
   after: string
-): { removed: DiffSegment[]; added: DiffSegment[] } {
+): { removed: DiffSegment[]; added: DiffSegment[] } | null {
+  if (
+    before.length > MAX_WORD_DIFF_LINE_CHARS ||
+    after.length > MAX_WORD_DIFF_LINE_CHARS
+  ) {
+    return null
+  }
   const parts = diffWords(before, after)
   return {
     removed: parts
@@ -474,6 +490,7 @@ export function buildDiffLines(oldText: string, newText: string): ToolDiffLine[]
   const lines: ToolDiffLine[] = []
   let oldLine = 1
   let newLine = 1
+  let wordDiffPairs = 0
 
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i]
@@ -487,18 +504,21 @@ export function buildDiffLines(oldText: string, newText: string): ToolDiffLine[]
         const rem = removedLines[j]
         const add = addedLines[j]
         if (rem !== undefined && add !== undefined) {
-          const segments = wordSegments(rem, add)
+          const segments =
+            wordDiffPairs++ < MAX_WORD_DIFF_PAIRS
+              ? wordSegments(rem, add)
+              : null
           lines.push({
             type: "remove",
             text: rem,
             oldLine: oldLine++,
-            segments: segments.removed,
+            segments: segments?.removed,
           })
           lines.push({
             type: "add",
             text: add,
             newLine: newLine++,
-            segments: segments.added,
+            segments: segments?.added,
           })
         } else if (rem !== undefined) {
           lines.push({ type: "remove", text: rem, oldLine: oldLine++ })
@@ -582,6 +602,7 @@ export function parseUnifiedPatch(patch: string): ToolDiffLine[] | null {
 /** Pair adjacent remove/add rows so changed tokens get Cursor-style chips. */
 function applyWordHighlights(lines: ToolDiffLine[]): ToolDiffLine[] {
   const out: ToolDiffLine[] = []
+  let wordDiffPairs = 0
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     const next = lines[i + 1]
@@ -591,9 +612,12 @@ function applyWordHighlights(lines: ToolDiffLine[]): ToolDiffLine[] {
       !line.segments &&
       !next.segments
     ) {
-      const segments = wordSegments(line.text, next.text)
-      out.push({ ...line, segments: segments.removed })
-      out.push({ ...next, segments: segments.added })
+      const segments =
+        wordDiffPairs++ < MAX_WORD_DIFF_PAIRS
+          ? wordSegments(line.text, next.text)
+          : null
+      out.push({ ...line, segments: segments?.removed })
+      out.push({ ...next, segments: segments?.added })
       i++
       continue
     }
@@ -1698,11 +1722,12 @@ export const MessageCode = React.memo(function MessageCode({
 }) {
   const [copied, setCopied] = React.useState(false)
 
+  /* "Copied" waits for the write to land: `navigator.clipboard` is undefined
+     outside a secure context, and a write can still be refused. */
   const copy = React.useCallback(() => {
-    void navigator.clipboard
-      .writeText(block.code)
-      .then(() => setCopied(true))
-      .catch(() => {})
+    const clipboard = navigator.clipboard
+    if (!clipboard) return
+    void clipboard.writeText(block.code).then(() => setCopied(true), () => {})
   }, [block.code])
 
   React.useEffect(() => {

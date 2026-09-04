@@ -91,6 +91,24 @@ export async function* runCursorAgent(
     stdio: ["ignore", "pipe", "pipe"],
   })
 
+  // A process that never starts emits `error`, not `exit`, and an unhandled
+  // `error` on a child process is thrown at the whole server rather than at
+  // this turn. Held on an object instead of a `let` so the assignment inside
+  // the listener is still visible to the read below.
+  const failure: { error?: NodeJS.ErrnoException } = {}
+  child.once("error", (err: NodeJS.ErrnoException) => {
+    failure.error = err
+  })
+
+  // Registered now, not after the read loop: both events have already fired by
+  // then for a child that failed to start or was killed, and a listener added
+  // late waits forever for one that will not come again. A signal kill leaves
+  // no exit code, which is a failure and not a clean zero.
+  const exited = new Promise<number>((resolve) => {
+    child.once("close", (code) => resolve(code ?? 1))
+    child.once("error", () => resolve(1))
+  })
+
   let stderrTail = ""
   child.stderr?.on("data", (chunk: Buffer | string) => {
     stderrTail = (stderrTail + String(chunk)).slice(-STDERR_TAIL_MAX)
@@ -105,7 +123,6 @@ export async function* runCursorAgent(
       return
     }
 
-    const rl = createInterface({ input: child.stdout })
     let emittedSession = false
     let sawStreamingDelta = false
     let gotText = false
@@ -115,7 +132,7 @@ export async function* runCursorAgent(
     const emittedHash = createHash("sha256")
     let emittedLength = 0
 
-    for await (const line of rl) {
+    for await (const line of readLines(child.stdout)) {
       if (options.signal?.aborted) break
       const trimmed = line.trim()
       if (!trimmed.startsWith("{")) continue
@@ -182,15 +199,17 @@ export async function* runCursorAgent(
       }
     }
 
-    const exitCode: number = await new Promise((resolve) => {
-      if (child.exitCode != null) {
-        resolve(child.exitCode)
-        return
-      }
-      child.once("close", (code) => resolve(code ?? 1))
-    })
+    const exitCode = await exited
 
     if (options.signal?.aborted) return
+
+    if (failure.error) {
+      yield {
+        type: "error",
+        message: describeSpawnFailure(failure.error, cmd, prefix),
+      }
+      return
+    }
 
     if (exitCode !== 0 && !gotResult) {
       const err =
@@ -202,6 +221,43 @@ export async function* runCursorAgent(
     options.signal?.removeEventListener("abort", onAbort)
     killAgent(child)
   }
+}
+
+/**
+ * The CLI's stdout is torn down when the spawn itself fails, and the iterator
+ * rejects instead of ending. The child's own `error` event carries the real
+ * reason, so swallow the tear-down here and let the caller report that.
+ */
+async function* readLines(stdout: NodeJS.ReadableStream) {
+  const rl = createInterface({ input: stdout })
+  try {
+    yield* rl
+  } catch {
+    /* reported from `failure.error` or the exit code */
+  }
+}
+
+/**
+ * The three ways the CLI fails to launch are indistinguishable in the UI once
+ * the errno is dropped, and each has a different fix — so name the one that
+ * happened and what was tried.
+ */
+function describeSpawnFailure(
+  err: NodeJS.ErrnoException,
+  cmd: string,
+  prefix: string[]
+): string {
+  const target = [cmd, ...prefix].join(" ")
+  if (err.code === "EINVAL" && process.platform === "win32") {
+    return "Could not start the Cursor agent: Node refuses to spawn a .cmd shim directly. Point CURSOR_AGENT_BIN at agent.exe or at the CLI's own entry point."
+  }
+  if (err.code === "ENOENT") {
+    return `Cursor agent not found — tried ${target}. Install the Cursor CLI, set CURSOR_AGENT_BIN to its path, or check that the workspace folder still exists.`
+  }
+  if (err.code === "EACCES") {
+    return `${target} is not executable. Check its permissions or set CURSOR_AGENT_BIN to another path.`
+  }
+  return `Could not start the Cursor agent (${err.code ?? "spawn failed"}): ${err.message} — tried ${target}`
 }
 
 export async function listCursorModels(): Promise<

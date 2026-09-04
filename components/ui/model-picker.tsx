@@ -128,7 +128,10 @@ export function ModelPicker({
   )
 
   const selectedId = value ?? internalModel
-  const current = options.find((m) => m.id === selectedId) ?? options[0] ?? null
+  // An id that names no option is not a selection: the trigger falls back to
+  // the placeholder rather than naming a model no row is checked beside and
+  // `onChange` never announced.
+  const current = options.find((m) => m.id === selectedId) ?? null
 
   const selectedEffortId = effort ?? internalEffort
   const currentEffort =

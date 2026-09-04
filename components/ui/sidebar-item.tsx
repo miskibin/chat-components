@@ -26,6 +26,7 @@ import {
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
+  type TouchEvent,
 } from "react"
 
 import {
@@ -423,9 +424,19 @@ function SidebarItemRow({
   drag,
 }: SidebarItemRowProps) {
   const [draft, setDraft] = useState(item.title)
+  const [wasEditing, setWasEditing] = useState(editing)
   const inputRef = useRef<HTMLInputElement>(null)
   const pinned = !!item.pinned
   const multi = (bulk?.count ?? 0) > 1
+
+  // Editing also starts from outside the row — a `renameToken` after the app
+  // regenerated the title — so the draft is seeded wherever it starts, not
+  // only in `startEdit`. Adjusted while rendering, so the input never paints
+  // one frame holding the title the row was mounted with.
+  if (editing !== wasEditing) {
+    setWasEditing(editing)
+    if (editing) setDraft(item.title)
+  }
 
   useEffect(() => {
     if (!editing) return
@@ -434,9 +445,8 @@ function SidebarItemRow({
   }, [editing])
 
   const startEdit = useCallback(() => {
-    setDraft(item.title)
     onEditingChange(true)
-  }, [item.title, onEditingChange])
+  }, [onEditingChange])
 
   const commit = useCallback(() => {
     onEditingChange(false)
@@ -452,9 +462,32 @@ function SidebarItemRow({
   const custom = renderContent?.(item, { active, pinned, selected })
   const multiline = custom === undefined && isMultiline(item)
 
+  /* dnd-kit installs the activator its sensors declare, and the list's are
+     Mouse/Touch/Keyboard — `onMouseDown` and `onTouchStart`. `onPointerDown`
+     is guarded too, for a consumer that passes a PointerSensor of its own;
+     whichever one is missing wraps nothing. Guarding only a name no sensor
+     uses lets a modifier-click that drifts a few px start a drag. */
+  const onMouseDown = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      // Modifier clicks are for range/toggle select — do not start a drag.
+      if (isModifierClick(event)) return
+      const handler = drag?.listeners?.onMouseDown
+      if (typeof handler === "function") handler(event)
+    },
+    [drag?.listeners]
+  )
+
+  const onTouchStart = useCallback(
+    (event: TouchEvent<HTMLButtonElement>) => {
+      if (isModifierClick(event)) return
+      const handler = drag?.listeners?.onTouchStart
+      if (typeof handler === "function") handler(event)
+    },
+    [drag?.listeners]
+  )
+
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLButtonElement>) => {
-      // Modifier clicks are for range/toggle select — do not start a drag.
       if (isModifierClick(event)) return
       const handler = drag?.listeners?.onPointerDown
       if (typeof handler === "function") handler(event)
@@ -508,6 +541,8 @@ function SidebarItemRow({
           onDoubleClick={onRename && !multi ? startEdit : undefined}
           {...(drag?.attributes ?? {})}
           {...(drag?.listeners ?? {})}
+          onMouseDown={onMouseDown}
+          onTouchStart={onTouchStart}
           onPointerDown={onPointerDown}
           className={cn(
             "group/row flex w-full select-none gap-2 rounded-md px-2 text-left text-[13px] leading-5",

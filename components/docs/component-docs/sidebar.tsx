@@ -426,7 +426,9 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
                 sidebar. Bump <DocsCode>token</DocsCode> (0 is idle) to request
                 it — for a command palette&apos;s &ldquo;Rename current
                 chat&rdquo; or a keyboard shortcut. The row itself owns the
-                editing state, so nothing else has to.
+                editing state, so nothing else has to, and the input is seeded
+                with the title the row is showing right now — a title the app
+                regenerated in the meantime included.
               </>
             ),
           },

@@ -56,6 +56,11 @@ export type FilePreviewFile = {
    */
   focusLine?: number
   /**
+   * Bump it to ask for the same `focusLine` again — clicking one `file.ts:42`
+   * chip twice is two requests, and only the host can tell them apart.
+   */
+  focusNonce?: number
+  /**
    * A URL the page can load this file's picture from. Set it for an image and
    * the panel shows the picture instead of a text body — only the host knows
    * how a path on the machine reaches the browser.
@@ -99,6 +104,9 @@ const HIGHLIGHT_MAX_CHARS = 150_000
 
 /** How long the header says "Copied" before falling back to the path. */
 const COPIED_MS = 1200
+
+/** A whole file is up to a megabyte of rows; the rest is one click away. */
+const PREVIEW_LINE_CAP = 300
 
 /** Quiet square button shared by every header control. */
 const filePreviewButton =
@@ -477,6 +485,25 @@ const FileRow = React.memo(function FilePreviewFileRow({
   )
 })
 
+function ShowAllLines({
+  total,
+  onShowAll,
+}: {
+  total: number
+  onShowAll: () => void
+}) {
+  return (
+    <button
+      type="button"
+      data-slot="file-preview-show-all"
+      onClick={onShowAll}
+      className="w-full border-t border-border/50 bg-muted/40 py-1 text-center text-[12px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      Show all {total.toLocaleString()} lines
+    </button>
+  )
+}
+
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return (
     <p
@@ -526,16 +553,36 @@ export function FilePreview({
     focusLine != null && hasFile
       ? "file"
       : (defaultView ?? (hasFile ? "file" : "diff"))
+  // A focus request is the line *and* the host's nonce: the same line asked
+  // for twice is two requests, and only the host can tell them apart.
+  const focusKey = `${focusLine ?? ""}\0${deferredFile.focusNonce ?? ""}`
   const [requested, setRequested] = React.useState<FilePreviewView>(preferred)
   const [shownPath, setShownPath] = React.useState(deferredFile.path)
+  const [shownHasFile, setShownHasFile] = React.useState(hasFile)
+  const [shownFocus, setShownFocus] = React.useState(focusKey)
+  const [showAllLines, setShowAllLines] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
 
   // Adjust while rendering rather than in an effect: a newly opened file never
   // paints one frame in the previous file's view.
   if (shownPath !== deferredFile.path) {
     setShownPath(deferredFile.path)
+    setShownHasFile(hasFile)
+    setShownFocus(focusKey)
+    setShowAllLines(false)
     setRequested(preferred)
     setCopied(false)
+  } else if (hasFile !== shownHasFile || focusKey !== shownFocus) {
+    // The body lands after the path — a host sets the diff and fetches the
+    // text after it — so the view a focus request (or the `defaultView`
+    // default) asks for can only be settled once the file is actually here,
+    // and a fresh request settles it again. Until then the toggle is hidden,
+    // so this can never overrule a choice the reader made.
+    const arrived = hasFile && !shownHasFile
+    const refocused = hasFile && focusLine != null && focusKey !== shownFocus
+    setShownHasFile(hasFile)
+    setShownFocus(focusKey)
+    if (arrived || refocused) setRequested(preferred)
   }
 
   const view: FilePreviewView = canToggle
@@ -550,13 +597,40 @@ export function FilePreview({
   const [internalWrap, setInternalWrap] = React.useState(defaultWrap)
   const wrapped = wrap ?? internalWrap
 
+  /** Row the File view centres on — the focus request first, else the first change. */
+  const fileTarget = React.useMemo(() => {
+    if (focusLine != null) return focusLine - startLine
+    if (model.changed.size === 0) return -1
+    // Iterated rather than spread into Math.min: a whole-file write marks
+    // every line, and that set can be enormous.
+    let first = Number.POSITIVE_INFINITY
+    for (const line of model.changed) if (line < first) first = line
+    return first - startLine
+  }, [focusLine, model.changed, startLine])
+
+  // A file the app hands over can be a megabyte, so the File view renders
+  // behind the same cap a tool row uses — never one that would hide the row we
+  // are about to centre on.
+  const fileCapped =
+    !showAllLines &&
+    !!model.fileLines &&
+    model.fileLines.length > PREVIEW_LINE_CAP &&
+    fileTarget < PREVIEW_LINE_CAP
+  const fileLines = React.useMemo(
+    () =>
+      fileCapped && model.fileLines
+        ? model.fileLines.slice(0, PREVIEW_LINE_CAP)
+        : model.fileLines,
+    [fileCapped, model.fileLines]
+  )
+
   const source = React.useMemo(() => {
     const text =
       view === "diff"
         ? model.diffLines.map((line) => line.text).join("\n")
-        : (model.fileLines?.join("\n") ?? "")
+        : (fileLines?.join("\n") ?? "")
     return text.length > HIGHLIGHT_MAX_CHARS ? "" : text
-  }, [model.diffLines, model.fileLines, view])
+  }, [fileLines, model.diffLines, view])
   const highlighted = useHighlightedLines(source, language)
 
   const splitRows = React.useMemo(
@@ -580,28 +654,15 @@ export function FilePreview({
       }
       return model.diffLines.findIndex((line) => line.type !== "context")
     }
-    if (focusLine != null) return focusLine - startLine
-    if (model.changed.size === 0) return -1
-    // Iterated rather than spread into Math.min: a whole-file write marks
-    // every line, and that set can be enormous.
-    let first = Number.POSITIVE_INFINITY
-    for (const line of model.changed) if (line < first) first = line
-    return first - startLine
-  }, [
-    focusLine,
-    model.changed,
-    model.diffLines,
-    splitRows,
-    startLine,
-    view,
-  ])
+    return fileTarget
+  }, [fileTarget, model.diffLines, splitRows, view])
 
   /**
    * Centre the target line in the panel's own scroller — once per file, view
    * and request, so a re-render never yanks the reader back. `scrollIntoView`
    * would drag the page's other scroll containers along with it.
    */
-  const scrollKey = `${deferredFile.path}\0${startLine}\0${view}\0${layout}\0${focusLine ?? ""}\0${scrollTarget}`
+  const scrollKey = `${deferredFile.path}\0${startLine}\0${view}\0${layout}\0${focusKey}\0${scrollTarget}`
   const scrolledRef = React.useRef("")
   React.useEffect(() => {
     const container = bodyRef.current
@@ -661,6 +722,7 @@ export function FilePreview({
 
   const showFile = React.useCallback(() => setRequested("file"), [])
   const showDiff = React.useCallback(() => setRequested("diff"), [])
+  const revealAllLines = React.useCallback(() => setShowAllLines(true), [])
 
   const layoutChanged = useStableCallback(onDiffLayoutChange)
   const toggleLayout = React.useCallback(() => {
@@ -864,8 +926,8 @@ export function FilePreview({
             />
           </div>
         ) : null}
-        {!image && view === "file" && model.fileLines
-          ? model.fileLines.map((text, index) => (
+        {!image && view === "file" && fileLines
+          ? fileLines.map((text, index) => (
               <FileRow
                 key={index}
                 text={text}
@@ -877,6 +939,12 @@ export function FilePreview({
               />
             ))
           : null}
+        {!image && view === "file" && fileCapped && model.fileLines ? (
+          <ShowAllLines
+            total={model.fileLines.length}
+            onShowAll={revealAllLines}
+          />
+        ) : null}
         {view === "diff" && splitRows
           ? splitRows.map((row, index) => (
               <SplitRow
