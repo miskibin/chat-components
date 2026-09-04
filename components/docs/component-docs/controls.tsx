@@ -224,7 +224,14 @@ export function Picker() {
           {
             name: "value",
             type: "string",
-            description: "Controlled selection. Omit to let it manage its own.",
+            description: (
+              <>
+                Controlled selection. Omit to let it manage its own. An id that
+                matches no option is not a selection: the trigger shows the{" "}
+                <DocsCode>placeholder</DocsCode> rather than naming a model no
+                row is checked beside.
+              </>
+            ),
           },
           {
             name: "defaultValue",
@@ -289,7 +296,8 @@ export function Picker() {
             name: "placeholder",
             type: "string",
             default: '"Model"',
-            description: "Trigger label when nothing is selected.",
+            description:
+              "Trigger label while nothing is selected — including when the selected id names no option, which is what a catalog that is still loading looks like.",
           },
           {
             name: "searchPlaceholder",

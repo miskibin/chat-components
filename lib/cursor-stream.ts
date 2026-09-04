@@ -46,14 +46,29 @@ export async function streamCursorChat(
         .trim()
       eventLines = []
       if (!data || data === "[DONE]") continue
-      handlers.onEvent(JSON.parse(data) as AgentStreamEvent)
+      // A frame the route never finished writing is not worth the rest of the
+      // turn: skip it and keep reading. A handler that throws still escapes —
+      // that is the caller's bug, and the `finally` below releases the body.
+      let event: AgentStreamEvent
+      try {
+        event = JSON.parse(data) as AgentStreamEvent
+      } catch {
+        continue
+      }
+      handlers.onEvent(event)
     }
   }
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    consume(decoder.decode(value, { stream: true }))
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      consume(decoder.decode(value, { stream: true }))
+    }
+    consume(decoder.decode())
+  } finally {
+    // Whatever ended the loop — the stream, an abort, a throwing handler — the
+    // reader stays locked to the body until it is cancelled.
+    reader.cancel().catch(() => {})
   }
-  consume(decoder.decode())
 }

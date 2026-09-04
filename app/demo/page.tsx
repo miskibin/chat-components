@@ -332,6 +332,8 @@ export default function ChatExample() {
   // One clock for every sidebar timestamp / Working elapsed label.
   const [clock, setClock] = useState(() => nowMs())
   const abortBySessionRef = useRef(new Map<string, AbortController>())
+  /** One counter for every focus request the panel is handed. */
+  const focusNonceRef = useRef(0)
   const activeIdRef = useRef(activeId)
 
   useEffect(() => {
@@ -472,14 +474,15 @@ export default function ChatExample() {
 
   const removeSession = (id: string) => {
     abortSession(id)
-    setSessions((prev) => {
-      const next = prev.filter((s) => s.id !== id)
-      if (activeId === id) {
-        setActiveId(next[0]?.id ?? "")
-        setMessages(next[0]?.messages ?? [])
-      }
-      return next
-    })
+    // Which chat takes over is read here rather than inside the updater: an
+    // updater React may run twice has to stay pure, so the three setters are
+    // siblings.
+    const remaining = sessions.filter((s) => s.id !== id)
+    setSessions((prev) => prev.filter((s) => s.id !== id))
+    if (activeId === id) {
+      setActiveId(remaining[0]?.id ?? "")
+      setMessages(remaining[0]?.messages ?? [])
+    }
   }
 
   const runPrompt = async (
@@ -504,7 +507,15 @@ export default function ChatExample() {
       parts: [],
     }
 
+    /* The run owns this session's transcript while it streams — nothing else
+       writes it until the run is aborted — so it keeps its own copy. That is
+       what lets every patch compute the next transcript up front and leave
+       the `setSessions` updater pure: two sibling setters, not one smuggled
+       inside the other. */
+    let liveMessages: MessageData[] = []
+
     const applyMessages = (next: MessageData[], nextSessionId?: string) => {
+      liveMessages = next
       persistSession(sessionId, (session) => ({
         ...session,
         messages: next,
@@ -541,18 +552,16 @@ export default function ChatExample() {
       updater: (message: MessageData) => MessageData,
       nextCursorSessionId?: string
     ) => {
-      persistSession(sessionId, (session) => {
-        const current = session.messages ?? []
-        const next = current.map((message) =>
-          message.id === assistantId ? updater(message) : message
-        )
-        if (activeIdRef.current === sessionId) setMessages(next)
-        return {
-          ...session,
-          messages: next,
-          cursorSessionId: nextCursorSessionId ?? session.cursorSessionId,
-        }
-      })
+      const next = liveMessages.map((message) =>
+        message.id === assistantId ? updater(message) : message
+      )
+      liveMessages = next
+      persistSession(sessionId, (session) => ({
+        ...session,
+        messages: next,
+        cursorSessionId: nextCursorSessionId ?? session.cursorSessionId,
+      }))
+      if (activeIdRef.current === sessionId) setMessages(next)
     }
 
     const markFailed = () => {
@@ -795,13 +804,24 @@ export default function ChatExample() {
   }
 
   /**
-   * A `path.ts` chip in the answer's own text. The badge hands over the path
-   * with its `:line` suffix already dropped; stripped again here because a
-   * host, not the component, decides what a location means.
+   * A `path.ts:42` chip in the answer's own text. The badge hands over the
+   * path with its `:line` suffix already dropped and the line beside it;
+   * stripped again here because a host, not the component, decides what a
+   * location means. The nonce is what makes a second click on the same chip a
+   * second request, so the panel re-centres after the reader scrolled away.
    */
-  const openReferencedFile = (messageId: string, reference: string) => {
+  const openReferencedFile = (
+    messageId: string,
+    reference: string,
+    line?: number
+  ) => {
     const path = reference.replace(/:\d+(?::\d+)?$/, "")
-    setPreviewFile(previewFromTurn(messageId, path) ?? { path })
+    focusNonceRef.current += 1
+    setPreviewFile({
+      ...(previewFromTurn(messageId, path) ?? { path }),
+      focusLine: line,
+      focusNonce: focusNonceRef.current,
+    })
   }
 
   const handleAskAnswer = (

@@ -97,7 +97,10 @@ export function FolderPicker({
     if (!onOpenFolder || openingFolder) return
     setOpen(false)
     setOpeningFolder(true)
-    Promise.resolve(onOpenFolder()).finally(() => setOpeningFolder(false))
+    // The host reports its own failures; here a rejection only ends the wait.
+    Promise.resolve(onOpenFolder())
+      .catch(() => {})
+      .finally(() => setOpeningFolder(false))
   }, [onOpenFolder, openingFolder])
 
   const label = value ? folderName(value) : placeholder

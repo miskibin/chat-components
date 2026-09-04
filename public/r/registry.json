@@ -298,7 +298,7 @@
       "name": "message-list",
       "type": "registry:ui",
       "title": "Message List",
-      "description": "Memoized, offscreen-aware message list with smart auto-scroll, a jump-to-bottom button, stable actions, quoting, file actions, and generation status.",
+      "description": "Memoized, offscreen-aware message list with smart auto-scroll, a jump-to-bottom button, stable callbacks, per-turn actions, quoting, file actions, and generation status.",
       "registryDependencies": [
         "miskibin/chat-components/message",
         "miskibin/chat-components/generation-status"
