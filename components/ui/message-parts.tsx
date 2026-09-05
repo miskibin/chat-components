@@ -32,6 +32,12 @@ import {
   type AskQuestionResult,
 } from "@/components/ui/ask-question"
 import {
+  PlanCard,
+  isPlanToolName,
+  parsePlan,
+  type PlanData,
+} from "@/components/ui/plan-card"
+import {
   TodoList,
   isTodoToolName,
   parseTodoItems,
@@ -166,6 +172,151 @@ function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value : undefined
 }
 
+/**
+ * The harness's own notes to the model, stapled onto a tool result. They are
+ * addressed to the agent, never to the person reading the transcript, and on
+ * some turns they are longer than the output they trail.
+ */
+const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/gi
+/** Colour a CLI wrote for a terminal that isn't there. */
+const ANSI_RE = /\u001B\[[0-9;?]*[a-zA-Z]/g
+
+/** Pretty-prints a payload that arrived as one long JSON line. */
+function expandJson(text: string): string | null {
+  const first = text[0]
+  if (first !== "{" && first !== "[") return null
+  if (text.length > 200_000) return null
+  try {
+    const value = JSON.parse(text) as unknown
+    if (!value || typeof value !== "object") return null
+    const pretty = JSON.stringify(value, null, 2)
+    return pretty === text ? null : pretty
+  } catch {
+    return null
+  }
+}
+
+/**
+ * What a tool actually said, with everything that is not that stripped out:
+ * the harness's system reminders, terminal colour codes, trailing blanks, and
+ * the single-line JSON a structured tool answers with.
+ */
+export function cleanToolOutput(output?: string): string | undefined {
+  if (!output) return undefined
+  const text = output
+    .replace(SYSTEM_REMINDER_RE, "")
+    .replace(ANSI_RE, "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+  if (!text) return undefined
+  return expandJson(text) ?? text
+}
+
+/** Written for the model's own benefit — never worth a row of its own. */
+const NOISE_ARG_KEYS = new Set([
+  "description",
+  "explanation",
+  "reason",
+  "reasoning",
+  "thought",
+  "thoughts",
+  "intent",
+  "comment",
+  "id",
+  "uuid",
+  "callid",
+  "sessionid",
+  "toolid",
+  "tooluseid",
+  "parenttooluseid",
+])
+
+/** Already drawn by the row: the command block, the diff, the checklist. */
+const RENDERED_ARG_KEYS = new Set([
+  "command",
+  "cmd",
+  "script",
+  "content",
+  "contents",
+  "filetext",
+  "newstring",
+  "oldstring",
+  "newstr",
+  "oldstr",
+  "newtext",
+  "oldtext",
+  "newcontent",
+  "oldcontent",
+  "patch",
+  "diff",
+  "edits",
+  "todos",
+  "items",
+  "tasks",
+  "steps",
+  "plan",
+])
+
+export type ToolArgRow = { key: string; value: string; full: string }
+
+function argText(value: unknown): string | undefined {
+  if (value == null) return undefined
+  if (typeof value === "string") return value.trim() || undefined
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+  try {
+    const json = JSON.stringify(value)
+    return json && json !== "{}" && json !== "[]" ? json : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The arguments worth reading, for a row whose body is not a diff or a file.
+ * The raw JSON blob it replaces is mostly punctuation, the model's own note to
+ * itself, and a repeat of what the headline already said.
+ *
+ * `skip` is how the row hands over the keys it draws itself — the path it put
+ * in the headline, for instance, which a Grep row keeps because its headline
+ * is the pattern.
+ */
+export function toolArgRows(
+  args: Record<string, unknown>,
+  skip?: Iterable<string>
+): ToolArgRow[] {
+  const hidden = new Set<string>()
+  for (const key of skip ?? []) hidden.add(key.toLowerCase())
+  const rows: ToolArgRow[] = []
+  for (const [key, value] of Object.entries(args)) {
+    const normalized = key.replace(/[\s_-]+/g, "").toLowerCase()
+    if (NOISE_ARG_KEYS.has(normalized) || RENDERED_ARG_KEYS.has(normalized)) {
+      continue
+    }
+    if (hidden.has(key.toLowerCase()) || hidden.has(normalized)) continue
+    const text = argText(value)
+    if (!text) continue
+    const oneLine = text.replace(/\s+/g, " ")
+    rows.push({
+      key: key.replace(/[_-]+/g, " "),
+      value: oneLine.length > 180 ? `${oneLine.slice(0, 179)}…` : oneLine,
+      full: text,
+    })
+  }
+  return rows
+}
+
+/** `mcp__github__list_issues` → `github · list issues`. */
+function prettyToolName(name: string) {
+  if (!name.startsWith("mcp__")) return name
+  const [, server, ...rest] = name.split("__")
+  if (!server || rest.length === 0) return name
+  return `${server} · ${rest.join(" ").replace(/_+/g, " ")}`
+}
+
 function fileName(path: string) {
   const trimmed = path.replace(/[\\/]+$/, "")
   return trimmed.split(/[\\/]/).pop() || path
@@ -278,6 +429,17 @@ function toolHeadline(tool: MessageToolCallData): ToolHeadline {
     asString(args.glob) ??
     asString(args.search)
 
+  /**
+   * An MCP tool is named `mcp__<server>__<tool>`, and the words in it belong to
+   * that server's vocabulary rather than to the list below — `list_issues` is
+   * not a directory listing, and `write_comment` writes no file.
+   */
+  if (tool.name.startsWith("mcp__")) {
+    return {
+      label: failed ? "Failed" : running ? "Working" : "Done",
+      detail: prettyToolName(tool.name),
+    }
+  }
   if (isTodoToolName(tool.name)) {
     const items = parseTodoItems(tool.input)
     const progress = items ? todoProgress(items) : null
@@ -371,9 +533,20 @@ function toolHeadline(tool: MessageToolCallData): ToolHeadline {
       detail: "Ask Question",
     }
   }
+  // Only reached while the arguments are still streaming — a plan that has
+  // fully arrived is a card, not a row.
+  if (isPlanToolName(tool.name)) {
+    return {
+      label: failed
+        ? "Couldn’t write the plan"
+        : running
+          ? "Writing plan"
+          : "Wrote plan",
+    }
+  }
   return {
     label: failed ? "Failed" : running ? "Working" : "Done",
-    detail: tool.name,
+    detail: prettyToolName(tool.name),
   }
 }
 
@@ -937,9 +1110,12 @@ const PREVIEW_LINE_CAP = 300
 function ShowAllLines({
   total,
   onShowAll,
+  label,
 }: {
   total: number
   onShowAll: () => void
+  /** Replaces the line count, for a body cut short by length rather than lines. */
+  label?: string
 }) {
   return (
     <button
@@ -948,10 +1124,62 @@ function ShowAllLines({
       onClick={onShowAll}
       className="w-full border-t border-border/50 bg-muted/40 py-1 text-center text-[12px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      Show all {total.toLocaleString()} lines
+      {label ?? `Show all ${total.toLocaleString()} lines`}
     </button>
   )
 }
+
+/** How much of a plain output a row shows before it offers the rest. */
+const OUTPUT_LINE_CAP = 24
+const OUTPUT_CHAR_CAP = 4_000
+
+/**
+ * Plain tool text — an output with no structure to draw, or an argument the
+ * tool passed whole. Capped rather than dumped: a build log is thousands of
+ * lines, and a row that pastes all of them buries the turn around it.
+ */
+const ToolText = React.memo(function ToolText({
+  text,
+  tone,
+}: {
+  text: string
+  tone?: "error"
+}) {
+  const [showAll, setShowAll] = React.useState(false)
+  const lines = React.useMemo(() => text.split("\n"), [text])
+  const capped =
+    !showAll &&
+    (lines.length > OUTPUT_LINE_CAP || text.length > OUTPUT_CHAR_CAP)
+  const visible = capped
+    ? lines.slice(0, OUTPUT_LINE_CAP).join("\n").slice(0, OUTPUT_CHAR_CAP)
+    : text
+  const showAllLines = React.useCallback(() => setShowAll(true), [])
+
+  return (
+    <div
+      data-slot="message-tool-text"
+      className="overflow-hidden rounded-md border border-border/60 bg-muted/30"
+    >
+      <pre
+        className={cn(
+          "m-0 max-h-[min(22rem,55vh)] overflow-auto px-2 py-1.5 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap",
+          tone === "error" ? "text-destructive" : "text-muted-foreground"
+        )}
+      >
+        {visible}
+      </pre>
+      {capped ? (
+        <ShowAllLines
+          total={lines.length}
+          onShowAll={showAllLines}
+          label={
+            lines.length > OUTPUT_LINE_CAP ? undefined : "Show the whole output"
+          }
+        />
+      ) : null}
+    </div>
+  )
+})
 
 const ToolDiff = React.memo(function ToolDiff({
   lines,
@@ -1132,6 +1360,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   tool,
   defaultOpen = false,
   onAskAnswer,
+  onPlanBuild,
   onOpenFile,
   fileActions,
   resolveFileUrl,
@@ -1144,6 +1373,13 @@ export const MessageToolCall = React.memo(function MessageToolCall({
    * id first so the same handler can be shared by every row in a turn.
    */
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
+  /**
+   * Offers the plan card its Build button. Takes the tool id first, like
+   * `onAskAnswer`, so one stable handler serves every row in a turn. Hand it
+   * only to the newest plan in a thread — an older one is history, and a
+   * button on it would build a plan the conversation has already moved past.
+   */
+  onPlanBuild?: (toolId: string) => void
   /**
    * Opt in to “click the headline to open the file” — the row splits into an
    * open button and a separate chevron. Only fires for Edit / Write / Read
@@ -1215,6 +1451,18 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   )
   const showTodos = !!todos && todos.length > 0
   /**
+   * A plan the agent wrote out. Null while the arguments are still streaming,
+   * so the row stays a row until the whole plan has landed and can be drawn in
+   * one piece.
+   */
+  const plan = React.useMemo<PlanData | null>(
+    () =>
+      isPlanToolName(deferredTool.name)
+        ? parsePlan(deferredTool.input)
+        : null,
+    [deferredTool]
+  )
+  /**
    * An ask the agent closed without a selection is still the user's to answer,
    * but only where the owner says so: `onAskAnswer` is the signal that this row
    * is the live one. Without it an ask from an old turn would reopen on reload.
@@ -1246,6 +1494,21 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     onOpenFile?.(tool)
   }, [onOpenFile, tool])
 
+  const buildPlan = React.useCallback(() => {
+    onPlanBuild?.(tool.id)
+  }, [onPlanBuild, tool.id])
+
+  if (plan) {
+    return (
+      <PlanCard
+        plan={plan}
+        onBuild={onPlanBuild ? buildPlan : undefined}
+        busy={running}
+        className={className}
+      />
+    )
+  }
+
   if (ask && askOpen) {
     return (
       <AskQuestion
@@ -1275,13 +1538,41 @@ export const MessageToolCall = React.memo(function MessageToolCall({
       ? resolveFileUrl?.(imagePath)
       : undefined
   const showImage = !!imageSrc
+  /**
+   * The body is built from what the tool was *asked* and what it *said* —
+   * never from the raw argument blob, which is mostly punctuation, the model's
+   * own note to itself, and a repeat of the headline.
+   */
+  const commandText = (() => {
+    const raw =
+      asString(args.command) ?? asString(args.cmd) ?? asString(args.script)
+    return raw ? unwrapShell(raw).trim() : undefined
+  })()
+  /* The path already sits in the headline whenever that is what it says. */
+  const pathKey = ["path", "filePath", "target_file", "file"].find(
+    (key) => asString(args[key]) && asString(args[key]) === path
+  )
+  const skipArgs =
+    pathKey && path && headline.detail === fileName(path) ? [pathKey] : undefined
+  const argRows = toolArgRows(args, skipArgs)
+  /** An argument string the tool passed whole, rather than as JSON. */
+  const rawInput =
+    Object.keys(args).length === 0 ? displayTool.input?.trim() : undefined
+  const outputText = cleanToolOutput(displayTool.output)
+  const showOutput =
+    !!outputText &&
+    (errored ||
+      (!showDiff && !showFile && !showImage && !showTodos && !showAskSummary))
   const hasBody =
     showDiff ||
     showFile ||
     showTodos ||
     showImage ||
     showAskSummary ||
-    !!(displayTool.input || displayTool.output)
+    !!commandText ||
+    argRows.length > 0 ||
+    !!rawInput ||
+    showOutput
   const stats = showDiff ? formatDiffStats(diff) : null
   const readMeta = showImage
     ? imageDimensions(displayTool.output)
@@ -1295,11 +1586,11 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     !showTodos &&
     !stats &&
     !readMeta &&
-    displayTool.output &&
-    displayTool.output.length < 28 &&
-    !displayTool.output.includes("\n") &&
-    !/^[+\d\s−-]+$/.test(displayTool.output)
-      ? displayTool.output
+    outputText &&
+    outputText.length < 28 &&
+    !outputText.includes("\n") &&
+    !/^[+\d\s−-]+$/.test(outputText)
+      ? outputText
       : null
 
   /**
@@ -1456,7 +1747,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
               />
             ) : null}
             {showTodos && todos ? (
-              <TodoList items={todos} className="py-1" />
+              <TodoList items={todos} running={running} className="py-1" />
             ) : null}
             {showImage && imageSrc ? (
               <ToolImageView
@@ -1472,26 +1763,35 @@ export const MessageToolCall = React.memo(function MessageToolCall({
                 startLine={readFile.startLine}
               />
             ) : null}
-            {!showDiff &&
-            !showFile &&
-            !showImage &&
-            !showTodos &&
-            !showAskSummary &&
-            displayTool.input ? (
-              <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
-                {displayTool.input}
+            {commandText ? (
+              <pre
+                data-slot="message-tool-command"
+                className="m-0 overflow-x-auto rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 font-mono text-[12.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground/90"
+              >
+                {commandText}
               </pre>
             ) : null}
-            {displayTool.output &&
-            (errored ||
-              (!showDiff &&
-                !showFile &&
-                !showImage &&
-                !showTodos &&
-                !showAskSummary)) ? (
-              <pre className="m-0 overflow-x-auto py-1 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
-                {displayTool.output}
-              </pre>
+            {argRows.length > 0 ? (
+              <dl
+                data-slot="message-tool-args"
+                className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 py-0.5 text-[12px] leading-relaxed"
+              >
+                {argRows.map((row) => (
+                  <React.Fragment key={row.key}>
+                    <dt className="text-muted-foreground/70">{row.key}</dt>
+                    <dd
+                      className="min-w-0 font-mono break-words text-foreground/80"
+                      title={row.full === row.value ? undefined : row.full}
+                    >
+                      {row.value}
+                    </dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            ) : null}
+            {rawInput ? <ToolText text={rawInput} /> : null}
+            {showOutput && outputText ? (
+              <ToolText text={outputText} tone={errored ? "error" : undefined} />
             ) : null}
           </div>
         </CollapsibleContent>
@@ -1507,6 +1807,7 @@ export function MessageToolCalls({
   collapseAt = 3,
   defaultOpen,
   onAskAnswer,
+  onPlanBuild,
   onOpenFile,
   fileActions,
   resolveFileUrl,
@@ -1517,6 +1818,8 @@ export function MessageToolCalls({
   collapseAt?: number
   defaultOpen?: boolean
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
+  /** Forwarded to every row — see `MessageToolCall`. */
+  onPlanBuild?: (toolId: string) => void
   /** Forwarded to every row — see `MessageToolCall`. */
   onOpenFile?: (tool: MessageToolCallData) => void
   /** Forwarded to every row — see `MessageToolCall`. */
@@ -1540,6 +1843,7 @@ export function MessageToolCalls({
           key={tool.id}
           tool={tool}
           onAskAnswer={onAskAnswer}
+          onPlanBuild={onPlanBuild}
           onOpenFile={onOpenFile}
           fileActions={fileActions}
           resolveFileUrl={resolveFileUrl}

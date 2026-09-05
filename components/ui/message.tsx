@@ -21,6 +21,7 @@ import {
   isPendingAskTool,
   type AskQuestionResult,
 } from "@/components/ui/ask-question"
+import { hasWrittenPlan } from "@/components/ui/plan-card"
 import {
   ChangeSummary,
   fileChangesFromTools,
@@ -74,6 +75,11 @@ export type MessageProps = {
   isAnimating?: boolean
   /** Called when an Ask Question tool on this turn is submitted or skipped. */
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
+  /**
+   * Offers the Build button on a plan this turn wrote. Hand it only to the
+   * newest plan in a thread — see `MessageToolCall`.
+   */
+  onPlanBuild?: (toolId: string) => void
   /**
    * Elapsed seconds — labels the “Worked for 12s” row the thinking and tool
    * parts collapse into once the turn settles.
@@ -163,6 +169,7 @@ export const Message = React.memo(function Message({
   attachments = EMPTY_ATTACHMENTS,
   isAnimating = false,
   onAskAnswer,
+  onPlanBuild,
   workedFor,
   changes,
   onReviewChanges,
@@ -228,11 +235,17 @@ export const Message = React.memo(function Message({
    * Everything up to and including the last thinking / tool part is the
    * turn's process; whatever trails it is the answer. One scan, so a turn
    * that streams a hundred parts still costs one pass per render.
+   *
+   * A written plan is the exception: it is what the turn came back with, so it
+   * reads as the answer rather than folding into the stack. One left mid-turn
+   * — superseded by whatever the agent did next — stays process.
    */
   const processEnd = React.useMemo(
     () =>
       parts?.findLastIndex(
-        (part) => part.type === "tool" || part.type === "thinking"
+        (part) =>
+          part.type === "thinking" ||
+          (part.type === "tool" && !hasWrittenPlan(part.tool))
       ) ?? -1,
     [parts]
   )
@@ -497,6 +510,7 @@ export const Message = React.memo(function Message({
           key={part.id}
           tool={part.tool}
           onAskAnswer={onAskAnswer}
+          onPlanBuild={onPlanBuild}
           onOpenFile={onOpenFile}
           fileActions={fileActions}
           resolveFileUrl={resolveFileUrl}
@@ -541,6 +555,7 @@ export const Message = React.memo(function Message({
             tools={tools}
             defaultOpen
             onAskAnswer={onAskAnswer}
+            onPlanBuild={onPlanBuild}
             onOpenFile={onOpenFile}
             fileActions={fileActions}
             resolveFileUrl={resolveFileUrl}
