@@ -238,6 +238,23 @@
       ]
     },
     {
+      "name": "plan-card",
+      "type": "registry:ui",
+      "title": "Plan Card",
+      "description": "The plan a harness wrote before it started work — its markdown, its checklist, and the one Build button that moves the conversation on.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "miskibin/chat-components/message-markdown",
+        "miskibin/chat-components/todo-list"
+      ],
+      "files": [
+        {
+          "path": "components/ui/plan-card.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "message-parts",
       "type": "registry:ui",
       "title": "Message Parts",
@@ -249,7 +266,8 @@
         "miskibin/chat-components/ask-question",
         "miskibin/chat-components/change-summary",
         "miskibin/chat-components/file-icon",
-        "miskibin/chat-components/todo-list"
+        "miskibin/chat-components/todo-list",
+        "miskibin/chat-components/plan-card"
       ],
       "files": [
         {
@@ -285,7 +303,8 @@
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/message-parts",
-        "miskibin/chat-components/change-summary"
+        "miskibin/chat-components/change-summary",
+        "miskibin/chat-components/plan-card"
       ],
       "files": [
         {
