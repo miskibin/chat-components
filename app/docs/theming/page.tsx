@@ -104,6 +104,18 @@ export default function ThemingPage() {
               ),
             },
             {
+              name: "--ui-scale",
+              type: "number",
+              description: (
+                <>
+                  Interface scale, <DocsCode>1</DocsCode> by default. Set it when
+                  you scale the app with CSS <DocsCode>zoom</DocsCode> so
+                  portalled menus scale with it — see{" "}
+                  <em>Scaling the whole UI</em> below.
+                </>
+              ),
+            },
+            {
               name: "--font-sans / --font-mono",
               type: "font stack",
               description:
@@ -263,6 +275,11 @@ export default function ThemingPage() {
           a clamp against the viewport has to divide it back out. Every picker
           in this registry already does — <DocsCode>ModelPicker</DocsCode>,{" "}
           <DocsCode>ModePicker</DocsCode>, <DocsCode>FolderPicker</DocsCode>.
+          Radix&apos;s available-height variable has the same problem: it is
+          measured before the portal content is zoomed, so{" "}
+          <DocsCode>DropdownMenuContent</DocsCode> divides it by the scale
+          before using it as its <DocsCode>max-height</DocsCode> — otherwise a
+          long menu clips above 100% and wastes room below it.
         </DocsP>
         <CodeBlock
           lang="tsx"
@@ -273,7 +290,11 @@ export default function ThemingPage() {
 className={cn("[zoom:var(--ui-scale,1)]", …)}
 
 /* A viewport-clamped width inside a portal: vw is not scaled by zoom */
-className="w-[min(17rem,calc((100vw-1.5rem)/var(--ui-scale,1)))]"`}
+className="w-[min(17rem,calc((100vw-1.5rem)/var(--ui-scale,1)))]"
+
+/* DropdownMenuContent: Radix measures the available height before the
+   content is zoomed, so divide it back out or the menu clips at > 100% */
+className="max-h-[calc(var(--radix-dropdown-menu-content-available-height)/var(--ui-scale,1))]"`}
         />
         <DocsP>
           Set nothing and every one of these is a no-op —{" "}
