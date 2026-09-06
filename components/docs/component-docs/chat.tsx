@@ -16,6 +16,7 @@ import { PromptSuggestionsExample } from "@/components/examples/prompt-suggestio
 import { PromptSuggestionsStyledExample } from "@/components/examples/prompt-suggestions-styled-example"
 import { TodoListChecklistExample } from "@/components/examples/todo-list-checklist-example"
 import { TodoListComposerExample } from "@/components/examples/todo-list-composer-example"
+import { TodoListSettledExample } from "@/components/examples/todo-list-settled-example"
 import { TodoListExample } from "@/components/examples/todo-list-example"
 import { ResizableExample } from "@/components/examples/resizable-example"
 
@@ -686,6 +687,24 @@ export function Plan({ toolInput }: { toolInput?: string }) {
         },
       },
       {
+        title: "When the turn is over",
+        description: (
+          <>
+            <DocsCode>running</DocsCode> is what tells the bar the turn behind
+            it has settled. An agent that stops without writing its last step
+            off is the common case, and a spinner that outlives the run reads
+            as work still happening — so an unfinished step goes quiet, and a
+            plan whose steps are all done says <em>Plan done</em>. Live,
+            abandoned, and finished, in that order.
+          </>
+        ),
+        example: {
+          name: "todo-list-settled-example",
+          node: <TodoListSettledExample />,
+          align: "stretch",
+        },
+      },
+      {
         title: "The checklist alone",
         description: (
           <>
@@ -766,6 +785,13 @@ export function Plan({ toolInput }: { toolInput?: string }) {
             description:
               "Replaces the collapsed headline, which is otherwise the in-progress task (or the next unfinished one).",
           },
+          {
+            name: "running",
+            type: "boolean",
+            default: "true",
+            description:
+              "False once the turn behind the plan has settled: nothing spins, and a plan with every step done reads as done.",
+          },
         ],
       },
       {
@@ -776,6 +802,13 @@ export function Plan({ toolInput }: { toolInput?: string }) {
             type: "TodoItem[]",
             required: true,
             description: "The same list, rendered as a bare ordered list.",
+          },
+          {
+            name: "running",
+            type: "boolean",
+            default: "true",
+            description:
+              "False draws an unfinished step as the step nobody got to, instead of one still being worked on.",
           },
         ],
       },

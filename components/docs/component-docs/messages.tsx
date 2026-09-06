@@ -31,7 +31,9 @@ import { MessageMarkdownImagesExample } from "@/components/examples/message-mark
 import { MessageMarkdownMermaidExample } from "@/components/examples/message-markdown-mermaid-example"
 import { MessageMarkdownStyledExample } from "@/components/examples/message-markdown-styled-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
+import { MessagePartsOutputExample } from "@/components/examples/message-parts-output-example"
 import { MessageProcessExample } from "@/components/examples/message-process-example"
+import { PlanCardExample } from "@/components/examples/plan-card-example"
 import { MessageQuoteExample } from "@/components/examples/message-quote-example"
 import { MessageSenderExample } from "@/components/examples/message-sender-example"
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
@@ -1207,6 +1209,28 @@ export function Answer() {
         },
       },
       {
+        title: "The useful half of a tool call",
+        description: (
+          <>
+            An expanded row shows what the tool was asked and what it said —
+            never the raw argument blob. The command loses its{" "}
+            <DocsCode>/bin/zsh -lc</DocsCode> wrapper and gets its own block,
+            the arguments left over are listed as pairs (the model&rsquo;s own{" "}
+            <DocsCode>description</DocsCode> is not one of them), and the output
+            is stripped of{" "}
+            <DocsCode>&lt;system-reminder&gt;</DocsCode> blocks and terminal
+            colour, pretty-printed when it is JSON, and capped with a{" "}
+            &ldquo;show all&rdquo; break. An{" "}
+            <DocsCode>mcp__server__tool</DocsCode> name reads as{" "}
+            <DocsCode>server · tool</DocsCode>.
+          </>
+        ),
+        example: {
+          name: "message-parts-output-example",
+          node: <MessagePartsOutputExample />,
+        },
+      },
+      {
         title: "Plans, not payloads",
         description: (
           <>
@@ -1520,6 +1544,117 @@ export function Clarify() {
             onto it does not, so the group stays navigable.
           </>
         ),
+      },
+    ],
+  },
+
+  "plan-card": {
+    title: "Plan Card",
+    description:
+      "The plan a harness wrote before it started work — its markdown, its checklist, and the one Build button that moves the conversation on.",
+    registry: "plan-card",
+    registryDependencies: ["message-markdown", "todo-list"],
+    preview: { name: "plan-card-example", node: <PlanCardExample /> },
+    usage: `"use client"
+
+import { MessageList } from "@/components/ui/message-list"
+
+export function Thread() {
+  return (
+    <MessageList
+      messages={messages}
+      // Only the newest plan gets the button; the list handles that.
+      onPlanBuild={(messageId, toolId) => build(messageId, toolId)}
+    />
+  )
+}`,
+    props: [
+      {
+        caption: "PlanCard",
+        rows: [
+          {
+            name: "plan",
+            type: "PlanData",
+            required: true,
+            description: (
+              <>
+                <DocsCode>{"{ title?, overview?, body, todos? }"}</DocsCode>.{" "}
+                <DocsCode>body</DocsCode> is markdown;{" "}
+                <DocsCode>parsePlan</DocsCode> builds one from a tool
+                call&rsquo;s arguments.
+              </>
+            ),
+          },
+          {
+            name: "onBuild",
+            type: "() => void",
+            description:
+              "Renders the Build button. Omit it and the card is a plain record of what was proposed — which is what every plan but the newest one is.",
+          },
+          {
+            name: "buildLabel",
+            type: "string",
+            default: '"Build"',
+            description: "Label on the action.",
+          },
+          {
+            name: "busy",
+            type: "boolean",
+            default: "false",
+            description:
+              "Locks the action while the turn that carries the plan out is starting.",
+          },
+        ],
+      },
+      {
+        caption: "Helpers",
+        rows: [
+          {
+            name: "parsePlan",
+            type: "(input?: string | null) => PlanData | null",
+            description:
+              "The plan inside a tool call's arguments — null for anything else, and for a half-streamed blob, so a row only becomes a card once the whole plan has landed.",
+          },
+          {
+            name: "isPlanToolName",
+            type: "(name: string) => boolean",
+            description:
+              "A tool name carrying the word plan — ExitPlanMode, create_plan, update_plan.",
+          },
+          {
+            name: "hasWrittenPlan",
+            type: "(tool: { name, input? }) => boolean",
+            description:
+              "Both of the above at once. Message uses it to keep a plan out of the collapsed process stack.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "plan-card",
+      "plan-card-header",
+      "plan-card-title",
+      "plan-card-count",
+      "plan-card-body",
+      "plan-card-overview",
+      "plan-card-todos",
+      "plan-card-actions",
+      "plan-card-build",
+    ],
+    examples: [
+      {
+        title: "It is the answer, not the process",
+        description: (
+          <>
+            A <DocsCode>MessageToolCall</DocsCode> whose arguments parse as a
+            plan renders this card instead of a disclosure row, and{" "}
+            <DocsCode>Message</DocsCode> keeps a trailing plan out of the
+            &ldquo;Worked for 12s&rdquo; group — a proposal folded away is a
+            proposal nobody acts on. Press Build here to see what the host is
+            handed.
+          </>
+        ),
+        example: { name: "plan-card-example", node: <PlanCardExample /> },
       },
     ],
   },

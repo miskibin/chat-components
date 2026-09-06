@@ -63,6 +63,12 @@ export type MessageListProps = React.ComponentProps<"div"> & {
     toolId: string,
     result: AskQuestionResult
   ) => void
+  /**
+   * Build the plan a turn wrote. Only offered on the newest plan in the list,
+   * and only once the turn that wrote it has settled — an older one is a
+   * record of what was proposed, not a button.
+   */
+  onPlanBuild?: (messageId: string, toolId: string) => void
   /** Makes the Review label on a turn's change card a button. */
   onReviewChanges?: (messageId: string) => void
   /** Clicking an Edit / Write / Read headline — open it in a file panel. */
@@ -325,9 +331,11 @@ const MessageListRow = React.memo(function MessageListRow({
   message,
   isStreaming,
   openAsk,
+  openPlan,
   patternHandlers,
   onEditMessage,
   onAskAnswer,
+  onPlanBuild,
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
@@ -339,6 +347,8 @@ const MessageListRow = React.memo(function MessageListRow({
   message: ChatMessageData
   isStreaming: boolean
   openAsk: boolean
+  /** This message carries the plan the Build button belongs on. */
+  openPlan: boolean
   patternHandlers: PatternHandler[]
   onEditMessage?: (id: string, content: string) => void
   onAskAnswer?: (
@@ -346,6 +356,12 @@ const MessageListRow = React.memo(function MessageListRow({
     toolId: string,
     result: AskQuestionResult
   ) => void
+  /**
+   * Build the plan a turn wrote. Only offered on the newest plan in the list,
+   * and only once the turn that wrote it has settled — an older one is a
+   * record of what was proposed, not a button.
+   */
+  onPlanBuild?: (messageId: string, toolId: string) => void
   onReviewChanges?: (messageId: string) => void
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
@@ -368,6 +384,10 @@ const MessageListRow = React.memo(function MessageListRow({
     (toolId: string, result: AskQuestionResult) =>
       onAskAnswer?.(message.id, toolId, result),
     [message.id, onAskAnswer]
+  )
+  const handlePlanBuild = React.useCallback(
+    (toolId: string) => onPlanBuild?.(message.id, toolId),
+    [message.id, onPlanBuild]
   )
   const handleReviewChanges = React.useCallback(
     () => onReviewChanges?.(message.id),
@@ -412,6 +432,8 @@ const MessageListRow = React.memo(function MessageListRow({
       /* Only the row that is actually asking takes a callback, so every other
          memoized Message keeps its render while the turn streams. */
       onAskAnswer={openAsk && onAskAnswer ? handleAskAnswer : undefined}
+      /* Same rule for the plan: only the row that still has one to build. */
+      onPlanBuild={openPlan && onPlanBuild ? handlePlanBuild : undefined}
       onReviewChanges={onReviewChanges ? handleReviewChanges : undefined}
       onOpenFile={onOpenFile ? handleOpenFile : undefined}
       onChangeFileClick={onChangeFileClick ? handleChangeFileClick : undefined}
@@ -433,6 +455,7 @@ export function MessageList({
   patternHandlers = EMPTY_PATTERNS,
   onEditMessage,
   onAskAnswer,
+  onPlanBuild,
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
@@ -454,6 +477,7 @@ export function MessageList({
 
   const stableEdit = useStableCallback(onEditMessage)
   const stableAskAnswer = useStableCallback(onAskAnswer)
+  const stablePlanBuild = useStableCallback(onPlanBuild)
   const stableReviewChanges = useStableCallback(onReviewChanges)
   const stableOpenFile = useStableCallback(onOpenFile)
   const stableChangeFileClick = useStableCallback(onChangeFileClick)
@@ -496,6 +520,9 @@ export function MessageList({
               const openAsk =
                 hasAskTool(message, isPendingAskTool) ||
                 (isLast && hasAskTool(message, isOpenAskTool))
+              /* The plan is only actionable where it is the last word in the
+                 thread and nothing is still arriving. */
+              const openPlan = isLast && !isStreaming
               const waiting =
                 isStreaming &&
                 !message.reasoning &&
@@ -515,9 +542,11 @@ export function MessageList({
                     message={message}
                     isStreaming={isStreaming}
                     openAsk={openAsk}
+                    openPlan={openPlan}
                     patternHandlers={patternHandlers}
                     onEditMessage={onEditMessage ? stableEdit : undefined}
                     onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
+                    onPlanBuild={onPlanBuild ? stablePlanBuild : undefined}
                     onReviewChanges={
                       onReviewChanges ? stableReviewChanges : undefined
                     }

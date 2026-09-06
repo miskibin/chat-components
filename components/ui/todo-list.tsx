@@ -1,6 +1,14 @@
 "use client"
 
-import { Check, ChevronDown, Circle, ListTodo, Loader2 } from "lucide-react"
+import {
+  Check,
+  CheckCheck,
+  ChevronDown,
+  Circle,
+  CircleDashed,
+  ListTodo,
+  Loader2,
+} from "lucide-react"
 import * as React from "react"
 
 import {
@@ -142,18 +150,36 @@ export function todoProgress(items: TodoItem[]) {
   }
 }
 
-function TodoMark({ status }: { status: TodoStatus }) {
+function TodoMark({
+  status,
+  running,
+}: {
+  status: TodoStatus
+  running: boolean
+}) {
   if (status === "completed") {
     return <Check className="size-3.5 shrink-0 text-muted-foreground" />
   }
   if (status === "in_progress") {
-    return <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+    /* Nothing is working on it any more, so nothing spins: a harness that
+       stops without marking its last step done would otherwise leave a
+       transcript spinning forever. */
+    return running ? (
+      <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+    ) : (
+      <CircleDashed className="size-3.5 shrink-0 text-primary/70" />
+    )
   }
   return <Circle className="size-3.5 shrink-0 opacity-30" />
 }
 
 export type TodoListProps = React.ComponentProps<"ol"> & {
   items: TodoItem[]
+  /**
+   * False once the turn behind the plan has settled: an unfinished step stops
+   * spinning and is drawn as the step nobody got to, which is what it is.
+   */
+  running?: boolean
 }
 
 /**
@@ -162,6 +188,7 @@ export type TodoListProps = React.ComponentProps<"ol"> & {
  */
 export const TodoList = React.memo(function TodoList({
   items,
+  running = true,
   className,
   ...props
 }: TodoListProps) {
@@ -181,7 +208,7 @@ export const TodoList = React.memo(function TodoList({
           className="flex items-start gap-2 leading-snug"
         >
           <span className="mt-[1px] flex size-4 items-center justify-center">
-            <TodoMark status={item.status} />
+            <TodoMark status={item.status} running={running} />
           </span>
           <span
             className={cn(
@@ -209,6 +236,13 @@ export type TodoPanelProps = Omit<React.ComponentProps<"div">, "onSelect"> & {
   onOpenChange?: (open: boolean) => void
   /** Replaces the collapsed headline, which is otherwise the live task. */
   label?: React.ReactNode
+  /**
+   * False once the turn behind the plan has settled. The bar then stops
+   * spinning, and a plan whose steps are all done says so — an agent that ends
+   * without writing its last step off would otherwise leave the composer
+   * looking like it is still working.
+   */
+  running?: boolean
 }
 
 /**
@@ -225,6 +259,7 @@ export function TodoPanel({
   open,
   onOpenChange,
   label,
+  running = true,
   className,
   ...props
 }: TodoPanelProps) {
@@ -242,7 +277,7 @@ export function TodoPanel({
   if (items.length === 0) return null
 
   const headline =
-    label ?? progress.current?.content ?? (progress.done ? "Plan done" : "Plan")
+    label ?? (progress.done ? "Plan done" : progress.current?.content) ?? "Plan"
 
   return (
     <div
@@ -257,7 +292,11 @@ export function TodoPanel({
         onOpenChange={setOpen}
         data-slot="todo-panel-root"
         data-state-done={progress.done ? "" : undefined}
-        className="group rounded-lg border animate-in fade-in duration-150"
+        data-running={running && !progress.done ? "" : undefined}
+        /* The same floating chrome as the composer it sits on: opaque on
+           purpose, because the bar hangs over the end of the transcript and a
+           transparent one leaves the last message reading through it. */
+        className="group rounded-lg border bg-background shadow-lg animate-in fade-in duration-150 dark:ring-1 dark:ring-foreground/10"
       >
         <CollapsibleTrigger asChild>
           <button
@@ -266,7 +305,9 @@ export function TodoPanel({
             aria-label={`Plan — ${progress.completed} of ${progress.total} done`}
             className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
           >
-            {progress.active ? (
+            {progress.done ? (
+              <CheckCheck className="size-3.5 text-muted-foreground" />
+            ) : progress.active && running ? (
               <Loader2 className="size-3.5 animate-spin text-primary" />
             ) : (
               <ListTodo className="size-3.5 opacity-70" />
@@ -297,6 +338,7 @@ export function TodoPanel({
         <CollapsibleContent>
           <TodoList
             items={items}
+            running={running}
             className="border-t px-2.5 py-2"
             data-slot="todo-panel-list"
           />
