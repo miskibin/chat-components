@@ -555,18 +555,20 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
       // Streamdown hands every renderer its hast `node`; it is not a DOM prop.
       p: ({
         children: kids,
-        node: _node,
+        node,
         ...props
-      }: { children?: React.ReactNode; node?: unknown }) => (
-        <p {...props}>{wrap(kids)}</p>
-      ),
+      }: { children?: React.ReactNode; node?: unknown }) => {
+        void node
+        return <p {...props}>{wrap(kids)}</p>
+      },
       li: ({
         children: kids,
-        node: _node,
+        node,
         ...props
-      }: { children?: React.ReactNode; node?: unknown }) => (
-        <li {...props}>{wrap(kids)}</li>
-      ),
+      }: { children?: React.ReactNode; node?: unknown }) => {
+        void node
+        return <li {...props}>{wrap(kids)}</li>
+      },
     }
   }, [patternHandlers, menuOnImages])
 
