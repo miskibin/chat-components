@@ -1,10 +1,12 @@
 "use client"
 
-import { ChevronRight, PanelLeft } from "lucide-react"
+import { ChevronDown, ChevronRight, PanelLeft } from "lucide-react"
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react"
 
 import { useSidebarDnd } from "@/components/ui/sidebar-dnd"
 import { SidebarEdgeDropZone } from "@/components/ui/sidebar-drop-zones"
+import { SIDEBAR_WIDTH_VAR } from "@/components/ui/sidebar-resize-rail"
+import { useVisibleAnimation } from "@/lib/visible-animation"
 import { cn } from "@/lib/utils"
 
 export const SIDEBAR_WIDTH_EXPANDED = 290
@@ -102,6 +104,17 @@ export type SidebarCollapsibleSectionProps = {
   description?: ReactNode
   /** Rendered at the right edge of the header, before the count. */
   action?: ReactNode
+  /**
+   * Header as a rule: the label, a hairline across the rest of the row, and the
+   * chevron at the far end. Opt-in — the default header is the uppercase
+   * caption with a leading chevron.
+   */
+  rule?: boolean
+  /**
+   * Something inside is still running. Shown as a dot on the header while the
+   * section is closed, so a folded folder still says a chat in it is streaming.
+   */
+  live?: boolean
   className?: string
   children: ReactNode
 }
@@ -113,9 +126,16 @@ export function SidebarCollapsibleSection({
   count,
   description,
   action,
+  rule = false,
+  live = false,
   className,
   children,
 }: SidebarCollapsibleSectionProps) {
+  // One observer for every live dot on the page: a section scrolled out of the
+  // sidebar, or a backgrounded tab, stops animating instead of compositing at
+  // 60fps for nobody.
+  const liveRef = useVisibleAnimation<HTMLSpanElement>(live && !open)
+
   return (
     <div
       data-slot="sidebar-section"
@@ -126,6 +146,7 @@ export function SidebarCollapsibleSection({
         type="button"
         data-slot="sidebar-section-trigger"
         data-state={open ? "open" : "closed"}
+        data-rule={rule || undefined}
         onClick={onToggle}
         aria-expanded={open}
         className={cn(
@@ -135,11 +156,43 @@ export function SidebarCollapsibleSection({
           "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60"
         )}
       >
-        <ChevronRight className="size-3 shrink-0 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
-        <span className="min-w-0 flex-1 truncate text-left">{title}</span>
+        {rule ? null : (
+          <ChevronRight className="size-3 shrink-0 transition-transform duration-200 group-data-[state=open]/section:rotate-90" />
+        )}
+        <span
+          className={cn(
+            "min-w-0 truncate text-left",
+            rule ? "shrink-0" : "flex-1"
+          )}
+        >
+          {title}
+        </span>
+        {live && !open ? (
+          <span
+            ref={liveRef}
+            aria-hidden
+            data-slot="sidebar-section-live"
+            className={cn(
+              "size-1.5 shrink-0 rounded-full bg-primary animate-pulse",
+              "[animation-duration:1.6s] motion-reduce:animate-none",
+              "[animation-play-state:var(--visible-animation-state,running)]",
+              "[will-change:var(--visible-animation-will-change,auto)]"
+            )}
+          />
+        ) : null}
+        {rule ? (
+          <span
+            aria-hidden
+            data-slot="sidebar-section-rule"
+            className="h-px min-w-2 flex-1 bg-sidebar-border"
+          />
+        ) : null}
         {action}
         {typeof count === "number" ? (
           <span className="shrink-0 font-normal tabular-nums">{count}</span>
+        ) : null}
+        {rule ? (
+          <ChevronDown className="size-3 shrink-0 transition-transform duration-200 group-data-[state=closed]/section:-rotate-90" />
         ) : null}
       </button>
       {open ? (
@@ -207,6 +260,20 @@ export type ChatSidebarProps = {
   dividers?: boolean
   widthExpanded?: number
   widthCollapsed?: number
+  /**
+   * Expanded width, overriding `widthExpanded`. A number is pixels; a string is
+   * used verbatim, so a resizable sidebar can hand over its own expression.
+   * Left alone, the panel reads `--chat-sidebar-width` and falls back to
+   * `widthExpanded` — which is how `SidebarResizeRail` drives it without a
+   * single React render per frame.
+   */
+  width?: number | string
+  /**
+   * Animate the collapse. Off by default: `width` is a layout property, so the
+   * transition reflows the sidebar and everything beside it on every frame for
+   * 300ms, and a collapse that snaps costs nothing and feels immediate.
+   */
+  animateWidth?: boolean
   className?: string
   classNames?: {
     rail?: string
@@ -233,6 +300,8 @@ export function ChatSidebar({
   dividers = false,
   widthExpanded = SIDEBAR_WIDTH_EXPANDED,
   widthCollapsed = SIDEBAR_WIDTH_COLLAPSED,
+  width,
+  animateWidth = false,
   className,
   classNames,
   collapseLabel = "Collapse sidebar",
@@ -240,17 +309,22 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   const { activeId, edgeZones: zones } = useSidebarDnd()
   const showZones = edgeZones && !!activeId && zones.length > 0
+  const expandedWidth =
+    typeof width === "number"
+      ? `${width}px`
+      : (width ?? `var(${SIDEBAR_WIDTH_VAR}, ${widthExpanded}px)`)
 
   return (
     <div
       data-slot="chat-sidebar"
       data-collapsed={collapsed}
       data-dividers={dividers}
-      style={{ width: collapsed ? widthCollapsed : widthExpanded }}
+      style={{ width: collapsed ? widthCollapsed : expandedWidth }}
       className={cn(
         "relative flex h-full max-w-full min-h-0 min-w-0 shrink-0 overflow-hidden",
         "border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
-        "transition-[width] duration-300 ease-in-out",
+        animateWidth &&
+          "transition-[width] duration-300 ease-in-out motion-reduce:transition-none",
         className
       )}
     >
@@ -274,7 +348,7 @@ export function ChatSidebar({
       <div
         data-slot="chat-sidebar-panel"
         hidden={collapsed}
-        style={{ width: widthExpanded, maxWidth: "100%" }}
+        style={{ width: expandedWidth, maxWidth: "100%" }}
         className={cn(
           "relative flex h-full min-h-0 flex-col",
           classNames?.panel
@@ -358,6 +432,7 @@ export {
   ChatSidebarItemList,
   SidebarItemBadge,
   SidebarItemStatusDot,
+  isTrailingDoubleClick,
   nextSidebarSelection,
 } from "@/components/ui/sidebar-item"
 export type {
@@ -367,6 +442,7 @@ export type {
   SidebarItemBadgeProps,
   SidebarItemBulkSelection,
   SidebarItemMenuAction,
+  SidebarItemRenderActions,
   SidebarItemRenderContent,
   SidebarItemRenderContext,
   SidebarItemStatus,
@@ -380,17 +456,43 @@ export {
   trashDropZone,
   useSidebarDnd,
   useSidebarDndList,
+  useSidebarDropVerb,
 } from "@/components/ui/sidebar-dnd"
 export type {
   ChatSidebarDndProps,
   SidebarCustomDrop,
   SidebarDndDrop,
+  SidebarDropVerb,
   SidebarDropZoneDef,
   SidebarReorderDrop,
   SidebarZoneDrop,
   SidebarZoneEdge,
   SidebarZoneTone,
 } from "@/components/ui/sidebar-dnd"
+export {
+  SIDEBAR_CONTENT_MIN_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  SIDEBAR_WIDTH_VAR,
+  SidebarResizeRail,
+  clampSidebarWidth,
+  resolveInitialSidebarWidth,
+  resolveSidebarWidthBounds,
+} from "@/components/ui/sidebar-resize-rail"
+export type {
+  SidebarResizeRailProps,
+  SidebarWidthBounds,
+  SidebarWidthVeto,
+} from "@/components/ui/sidebar-resize-rail"
+export {
+  SIDEBAR_MOTION_KEY_ATTRIBUTE,
+  createSidebarListMotion,
+  useSidebarListMotion,
+} from "@/components/ui/sidebar-motion"
+export type {
+  SidebarListMotion,
+  SidebarListMotionHandle,
+} from "@/components/ui/sidebar-motion"
 export {
   SidebarDropZone,
   SidebarEdgeDropZone,

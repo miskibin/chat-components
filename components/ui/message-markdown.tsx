@@ -2,7 +2,13 @@
 
 import * as React from "react"
 import { useTheme } from "next-themes"
-import { Streamdown, defaultRehypePlugins } from "streamdown"
+import {
+  Block,
+  Streamdown,
+  defaultRehypePlugins,
+  defaultRemarkPlugins,
+  type BlockProps,
+} from "streamdown"
 import { code } from "@streamdown/code"
 import { mermaid } from "@streamdown/mermaid"
 import { createMathPlugin } from "@streamdown/math"
@@ -14,6 +20,15 @@ import {
   type FileActionItem,
 } from "@/components/ui/change-summary"
 import { FileIcon } from "@/components/ui/file-icon"
+import { RenderErrorBoundary } from "@/components/ui/render-error-boundary"
+import { markdownClipboardPayload } from "@/lib/markdown-clipboard"
+import {
+  inlineCodeFileReference,
+  parseMarkdownFileLink,
+  type FilePathPosition,
+} from "@/lib/markdown-file-paths"
+import { remarkGithubAlerts } from "@/lib/markdown-github-alerts"
+import { remarkNormalizeListItemIndentation } from "@/lib/markdown-list-indentation"
 import { cn } from "@/lib/utils"
 
 const math = createMathPlugin({
@@ -24,18 +39,26 @@ const plugins = { code, mermaid, math }
 
 type RehypePlugins = React.ComponentProps<typeof Streamdown>["rehypePlugins"]
 type RehypePlugin = NonNullable<RehypePlugins>[number]
-type SanitizeSchema = { protocols?: Record<string, string[]> }
+type SanitizeSchema = {
+  protocols?: Record<string, string[]>
+  attributes?: Record<string, unknown[]>
+}
 
 /**
- * Streamdown's sanitizer only lets `http` and `https` through on `src`, so an
- * answer that inlines an image as a `data:` URI — how an agent hands back a
- * screenshot or a rendered chart — loses the `<img>` entirely.
+ * Two holes in Streamdown's sanitizer, both of which cost a whole feature.
  *
- * Putting that one protocol back is the whole change: the `harden` pass that
- * runs straight after the sanitizer already narrows `data:` down to
- * `data:image/*`, so nothing but a picture can ride in on it.
+ * It only lets `http` and `https` through on `src`, so an answer that inlines
+ * an image as a `data:` URI — how an agent hands back a screenshot or a
+ * rendered chart — loses the `<img>` entirely. Putting that one protocol back
+ * is safe: the `harden` pass that runs straight after already narrows `data:`
+ * down to `data:image/*`, so nothing but a picture can ride in on it.
+ *
+ * And it drops every `data-` attribute, which would take `data-alert` off the
+ * blockquotes `remarkGithubAlerts` marks before the CSS ever sees them. Only
+ * that one attribute, only on a blockquote, and its value is one of five words
+ * the plugin itself writes.
  */
-function sanitizeWithDataImages(): RehypePlugin {
+function messageSanitize(): RehypePlugin {
   const { sanitize } = defaultRehypePlugins
   if (!Array.isArray(sanitize)) return sanitize
   const [plugin, schema] = sanitize as [typeof sanitize[0], SanitizeSchema]
@@ -47,6 +70,10 @@ function sanitizeWithDataImages(): RehypePlugin {
         ...schema.protocols,
         src: [...(schema.protocols?.src ?? []), "data"],
       },
+      attributes: {
+        ...schema.attributes,
+        blockquote: [...(schema.attributes?.blockquote ?? []), "dataAlert"],
+      },
     },
   ]
 }
@@ -56,12 +83,58 @@ function sanitizeWithDataImages(): RehypePlugin {
  * pass inserted: relative links are claimed before the hardening pass, which
  * cannot resolve them (see `fileLinks`).
  */
-const rehypePlugins: RehypePlugins = [
-  defaultRehypePlugins.raw,
-  sanitizeWithDataImages(),
-  fileLinks,
-  defaultRehypePlugins.harden,
-]
+function messageRehypePlugins(): RehypePlugins {
+  const { raw, harden } = defaultRehypePlugins
+  return [raw, messageSanitize(), fileLinks, harden]
+}
+
+const rehypePlugins = messageRehypePlugins()
+
+type RemarkPlugins = React.ComponentProps<typeof Streamdown>["remarkPlugins"]
+
+/**
+ * Two things GFM does not do on its own. `remarkGithubAlerts` lifts a
+ * `> [!NOTE]` marker onto the blockquote as `data-alert`, which
+ * `message-markdown.css` styles as a callout; `remarkNormalizeListItemIndentation`
+ * undoes the CommonMark rule that turns `-       aligned text` into a code
+ * block, which an agent's own alignment hits constantly.
+ */
+// Streamdown's `remarkPlugins` REPLACES its default chain rather than
+// extending it, and that chain is where GFM comes from — hand it only these
+// two and every table renders as pipe-separated text. So the defaults come
+// first, then ours, which both expect the tree GFM has already shaped.
+const remarkPlugins = [
+  ...Object.values(defaultRemarkPlugins),
+  remarkGithubAlerts,
+  remarkNormalizeListItemIndentation,
+] as unknown as RemarkPlugins
+
+/**
+ * One block, isolated. A malformed fence, an unbalanced KaTeX brace or a
+ * half-streamed mermaid diagram throws during render, and without a boundary
+ * that throw unmounts the whole message — the answer, the tool rows, the turn.
+ * Here it costs one block, which falls back to its own source as plain text.
+ *
+ * Module scope on purpose: `BlockComponent` reaches a memoized renderer, and a
+ * component redefined per render would remount every block on every token.
+ */
+function IsolatedBlock(props: BlockProps) {
+  return (
+    <RenderErrorBoundary
+      resetKeys={[props.content]}
+      fallback={
+        <pre
+          data-slot="message-markdown-block-fallback"
+          className="my-2 overflow-x-auto rounded-md border bg-muted px-3 py-2 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-foreground"
+        >
+          {props.content}
+        </pre>
+      }
+    >
+      <Block {...props} />
+    </RenderErrorBoundary>
+  )
+}
 const shikiTheme: ["github-light", "github-dark"] = [
   "github-light",
   "github-dark",
@@ -92,6 +165,15 @@ export type MessageMarkdownProps = {
    * images it renders. Keep the array stable: it reaches memoized blocks.
    */
   fileActions?: FileActionItem[]
+  /**
+   * Copying a selection out of the answer writes markdown rather than the
+   * flattened text the browser would put on the clipboard — links, emphasis,
+   * lists, fences and tables all survive the round trip, and a rich-paste
+   * target gets a sanitized copy of the rendered HTML beside it.
+   *
+   * @default true
+   */
+  copyAsMarkdown?: boolean
 }
 
 type FileRefContextValue = {
@@ -109,53 +191,6 @@ const NO_FILE_REFS: FileRefContextValue = { onFileClick: null }
  */
 const FileRefContext = React.createContext<FileRefContextValue>(NO_FILE_REFS)
 
-const LINE_SUFFIX_RE = /:\d+(?::\d+)?$/
-const URL_SCHEME_RE = /^[a-zA-Z][\w+.-]*:\/\//
-/** `a/b/c.ts`, `./x.ts`, `~/notes.txt`, `.gitignore` — one path, no spaces. */
-const PATH_SHAPE_RE = /^(?:~|\.{1,2})?\/?(?:[\w@.-]+\/)*[\w@.-]+$/
-const FILE_EXTENSION_RE =
-  /\.(tsx?|jsx?|mjs|cjs|json[c5]?|ya?ml|toml|mdx?|css|s[ac]ss|less|py|rs|go|java|kt|rb|php|c|h|cc|cpp|cxx|hpp|sh|bash|zsh|sql|graphql|proto|prisma|vue|svelte|html?|xml|svg|txt|csv|tsv|env|lock|log|ini|cfg|conf)$/i
-/**
- * Extension-less names that are still unmistakably files. Dot-files are
- * enumerated rather than matched as “starts with a dot”, so a `.length` in an
- * answer stays code.
- */
-const KNOWN_FILENAME_RE =
-  /^(dockerfile|makefile|gemfile|procfile|readme|licen[cs]e|\.(env|gitignore|gitattributes|gitmodules|npmrc|nvmrc|editorconfig|dockerignore|babelrc|prettierrc|eslintrc)[\w.-]*)$/i
-/** `Next.js` and friends are prose about a library, not a JavaScript file. */
-const LIBRARY_DOT_JS_RE =
-  /^(next|node|nuxt|vue|react|three|d3|socket|express|nest|jquery|chart|video)\.js$/i
-
-/**
- * The path inside an inline-code span, or null when it reads as ordinary code.
- * Deliberately conservative: a recognized extension (or a well-known
- * extension-less filename) carries a reference on its own, while a bare
- * slashed string has to be at least three segments deep — otherwise every
- * `and/or` in an answer would turn into a file chip.
- */
-function fileReferencePath(raw: string): string | null {
-  const text = raw.trim()
-  if (!text || text.length > 120 || /\s/.test(text)) return null
-  if (URL_SCHEME_RE.test(text)) return null
-  const path = text.replace(LINE_SUFFIX_RE, "")
-  if (!PATH_SHAPE_RE.test(path)) return null
-  const segments = path.split("/").filter(Boolean)
-  const base = segments.at(-1) ?? path
-  if (FILE_EXTENSION_RE.test(base) && !LIBRARY_DOT_JS_RE.test(base)) return path
-  if (KNOWN_FILENAME_RE.test(base)) return path
-  return segments.length >= 3 ? path : null
-}
-
-/** The `:12` (or `:12:5`) a reference trails — the line, never the column. */
-function fileReferenceLine(raw: string): number | undefined {
-  const match = LINE_SUFFIX_RE.exec(raw.trim())
-  if (!match) return undefined
-  const line = Number(match[0].slice(1).split(":")[0])
-  return Number.isFinite(line) ? line : undefined
-}
-
-/** `#L42` — the line a repo browser puts in the fragment. */
-const HASH_LINE_RE = /#L?(\d+)$/
 /**
  * Every href the hardening pass resolves on its own: an absolute URL or custom
  * scheme, a host- or root-relative URL, an in-page anchor, and a dot-relative
@@ -164,26 +199,21 @@ const HASH_LINE_RE = /#L?(\d+)$/
 const HARDENABLE_HREF_RE = /^(?:[a-zA-Z][\w+.-]*:|\/|#|\.{1,2}\/)/
 
 /** A relative link is a file, plain text, or none of this file's business. */
-type LinkVerdict = { path: string; line?: number } | { path: null }
+type LinkVerdict = FilePathPosition | { path: null }
 
 /**
  * What `[label](href)` should become. `null` leaves the link alone.
  *
  * A path is a path whether or not it starts with `./` — `README.md` and
- * `./docs/setup.md` are the same reference — so the shape test comes first and
- * a dot-relative path is claimed too, rather than being resolved against the
- * page the transcript happens to be rendered on.
+ * `./docs/setup.md` are the same reference — so `parseMarkdownFileLink` gets
+ * first refusal and a dot-relative path is claimed too, rather than being
+ * resolved against the page the transcript happens to be rendered on.
  */
 function classifyLinkHref(href: string): LinkVerdict | null {
   const text = href.trim()
   if (!text) return { path: null }
-  const hashLine = HASH_LINE_RE.exec(text)
-  const target = hashLine ? text.slice(0, hashLine.index) : text
-  const path = fileReferencePath(target)
-  if (path) {
-    const line = hashLine ? Number(hashLine[1]) : fileReferenceLine(target)
-    return { path, line }
-  }
+  const reference = parseMarkdownFileLink(text)
+  if (reference) return reference
   return HARDENABLE_HREF_RE.test(text) ? null : { path: null }
 }
 
@@ -239,7 +269,11 @@ function rewriteFileLinks(node: HastNode) {
       children[index] = {
         type: "element",
         tagName: FILE_LINK_TAG,
-        properties: { dataPath: verdict.path, dataLine: verdict.line },
+        properties: {
+          dataPath: verdict.path,
+          dataLine: verdict.line,
+          dataHref: href,
+        },
         children: child.children ?? [],
       }
       continue
@@ -268,12 +302,18 @@ const fileRefChip =
 function FileRefChip({
   path,
   line,
+  copyAs,
   className,
   children,
   ...props
 }: Omit<React.ComponentProps<"span">, "ref"> & {
   path: string
   line?: number
+  /**
+   * What a copied selection crossing this chip should yield — the markdown the
+   * answer wrote, rather than the empty string a `<button>` serializes to.
+   */
+  copyAs?: string
 }) {
   const { onFileClick, fileActions } = React.useContext(FileRefContext)
   const label = (
@@ -290,6 +330,7 @@ function FileRefChip({
     <span
       data-slot="message-file-ref"
       data-path={path}
+      data-markdown-copy={copyAs}
       tabIndex={menuOnly ? 0 : undefined}
       className={cn(
         fileRefChip,
@@ -306,6 +347,7 @@ function FileRefChip({
       type="button"
       data-slot="message-file-ref"
       data-path={path}
+      data-markdown-copy={copyAs}
       data-interactive="true"
       title={path}
       onClick={() => onFileClick(path, line)}
@@ -343,9 +385,9 @@ function InlineCode({
   // the DOM, and of no use to a chip that reads its own text.
   void node
   const text = textOf(children)
-  const path = fileReferencePath(text)
+  const reference = inlineCodeFileReference(text)
 
-  if (!path) {
+  if (!reference) {
     return (
       <code
         className={cn(
@@ -363,33 +405,13 @@ function InlineCode({
   // The chip keeps saying `file.ts:42`; only the handler is told the number.
   return (
     <FileRefChip
-      path={path}
-      line={fileReferenceLine(text)}
+      path={reference.path}
+      line={reference.line}
+      copyAs={`\`${text}\``}
       className={className}
       {...props}
     >
       {children}
-    </FileRefChip>
-  )
-}
-
-/**
- * The relative link `fileLinks` claimed. Streamdown types a tag of its own
- * loosely, so the path arrives as a plain record entry.
- *
- * The label is flattened to text: an answer that writes ``[`README.md`](README.md)``
- * would otherwise nest a chip inside a chip, and a chip is a button.
- */
-function MarkdownFileLink(props: Record<string, unknown>) {
-  const rawPath = props["data-path"]
-  const rawLine = props["data-line"]
-  const path = typeof rawPath === "string" ? rawPath : ""
-  const line = typeof rawLine === "number" ? rawLine : undefined
-  const label = textOf(props.children as React.ReactNode).trim()
-  if (!path) return <>{label}</>
-  return (
-    <FileRefChip path={path} line={line}>
-      {label || path}
     </FileRefChip>
   )
 }
@@ -441,6 +463,35 @@ function MarkdownImage({
 }
 
 /**
+ * The relative link `fileLinks` claimed — `[the route](app/page.tsx:12)`, a
+ * bare `README.md`, or a `file://` URL a harness pasted. Rendered as the same
+ * chip an inline-code path gets, so both open the same panel at the same line.
+ * Streamdown types a tag of its own loosely, so the path arrives as a plain
+ * record entry.
+ *
+ * The label is flattened to text: an answer that writes ``[`README.md`](README.md)``
+ * would otherwise nest a chip inside a chip, and a chip is a button.
+ */
+function MarkdownFileLink(props: Record<string, unknown>) {
+  const rawPath = props["data-path"]
+  const rawLine = props["data-line"]
+  const rawHref = props["data-href"]
+  const path = typeof rawPath === "string" ? rawPath : ""
+  const parsedLine = typeof rawLine === "number" ? rawLine : Number(rawLine)
+  const line =
+    Number.isFinite(parsedLine) && parsedLine > 0 ? parsedLine : undefined
+  const label = textOf(props.children as React.ReactNode).trim()
+  if (!path) return <>{label}</>
+  const text = label || path
+  const href = typeof rawHref === "string" ? rawHref : path
+  return (
+    <FileRefChip path={path} line={line} copyAs={`[${text}](${href})`}>
+      {text}
+    </FileRefChip>
+  )
+}
+
+/**
  * Holds a callback prop at one identity, so a parent that re-renders on every
  * streamed token does not invalidate what depends on it.
  */
@@ -465,6 +516,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
   patternHandlers = EMPTY_HANDLERS,
   onFileClick,
   fileActions,
+  copyAsMarkdown = true,
 }: MessageMarkdownProps) {
   const { resolvedTheme } = useTheme()
   const mermaidConfig = React.useMemo(
@@ -581,13 +633,37 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
     [fileClick, fileActions]
   )
 
+  /**
+   * Serializing the selection back to markdown, on the way to the clipboard.
+   * One stable handler on the wrapper: the work happens only when someone
+   * actually copies, and nothing below it re-renders because of it.
+   */
+  const handleCopy = React.useCallback(
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
+      const selection = window.getSelection()
+      if (!selection || selection.isCollapsed) return
+      const payload = markdownClipboardPayload(selection)
+      if (!payload) return
+      event.clipboardData.setData("text/plain", payload.text)
+      event.clipboardData.setData("text/html", payload.html)
+      event.preventDefault()
+    },
+    []
+  )
+
   return (
-    <div data-slot="message-markdown" className="min-w-0">
+    <div
+      data-slot="message-markdown"
+      className="min-w-0"
+      onCopy={copyAsMarkdown ? handleCopy : undefined}
+    >
       <FileRefContext.Provider value={fileRefs}>
         <Streamdown
           className={cn("lc-markdown max-w-none", className)}
           plugins={plugins}
           rehypePlugins={rehypePlugins}
+          remarkPlugins={remarkPlugins}
+          BlockComponent={IsolatedBlock}
           shikiTheme={shikiTheme}
           mermaid={mermaidConfig}
           isAnimating={isAnimating}

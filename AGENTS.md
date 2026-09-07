@@ -70,6 +70,11 @@ A component change is not done until all of these are true:
   every production deploy.
 - The playground auto-falls back to `lib/mock-agent.ts` when no `agent` binary exists
   (`MOCK_CURSOR_AGENT=1` forces it); keep the mock exercising every UI part.
+- `@pierre/diffs` is patched through `patch-package` (`postinstall`,
+  `patches/@pierre+diffs+1.4.1.patch`): 1.4.1 never invalidates its wrapped-line height cache
+  when the container or gutter width changes, so a `DiffView` in a resizable panel drifts out
+  of its own scroll range. Regenerate the patch against the new version on every upgrade —
+  do not drop it, and do not hand-edit `node_modules`.
 
 ## Commands
 
@@ -79,6 +84,9 @@ npm run lint            # eslint (CI)
 npm run typecheck       # tsc --noEmit (CI)
 npm run build           # next build (CI)
 npm run registry:build  # regenerate public/r/*.json — required after component/registry edits
+npm run test            # node --test over tests/*.test.ts (no runner dependency:
+                        #   Node strips the types, tests/register.mjs resolves `@/`).
+                        #   Only the framework-free lib/ modules are testable this way.
 ```
 
 Deploys: pushes to `main` deploy to Vercel production (chat-input-azure.vercel.app). CI must be

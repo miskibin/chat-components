@@ -1,13 +1,18 @@
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
+import { SidebarActionsExample } from "@/components/examples/sidebar-actions-example"
 import { SidebarDividersExample } from "@/components/examples/sidebar-dividers-example"
+import { SidebarDropVerbExample } from "@/components/examples/sidebar-drop-verb-example"
 import { SidebarExample } from "@/components/examples/sidebar-example"
 import { SidebarItemExample } from "@/components/examples/sidebar-item-example"
 import { SidebarItemMenuExample } from "@/components/examples/sidebar-item-menu-example"
 import { SidebarItemStatusExample } from "@/components/examples/sidebar-item-status-example"
 import { SidebarMobileExample } from "@/components/examples/sidebar-mobile-example"
+import { SidebarMotionExample } from "@/components/examples/sidebar-motion-example"
 import { SidebarReorderExample } from "@/components/examples/sidebar-reorder-example"
+import { SidebarResizeExample } from "@/components/examples/sidebar-resize-example"
 import { SidebarRichExample } from "@/components/examples/sidebar-rich-example"
+import { SidebarSectionRuleExample } from "@/components/examples/sidebar-section-rule-example"
 import { SidebarSelectionExample } from "@/components/examples/sidebar-selection-example"
 import { SidebarStyledExample } from "@/components/examples/sidebar-styled-example"
 import { SidebarZonesExample } from "@/components/examples/sidebar-zones-example"
@@ -140,6 +145,27 @@ export function Nav() {
             description: "Rail width in pixels.",
           },
           {
+            name: "width",
+            type: "number | string",
+            description: (
+              <>
+                Expanded width, overriding <DocsCode>widthExpanded</DocsCode>. A
+                number is pixels, a string is used verbatim. Left alone the
+                panel reads{" "}
+                <DocsCode>var(--chat-sidebar-width, widthExpanded)</DocsCode>,
+                which is how <DocsCode>SidebarResizeRail</DocsCode> drives it
+                without a React render per frame.
+              </>
+            ),
+          },
+          {
+            name: "animateWidth",
+            type: "boolean",
+            default: "false",
+            description:
+              "Animate the collapse. Off by default: width is a layout property, so the transition reflows the sidebar and everything beside it on every frame for 300ms.",
+          },
+          {
             name: "classNames",
             type: "{ rail?, panel?, header?, nav?, content?, footer? }",
             description: "Per-region class overrides.",
@@ -179,9 +205,34 @@ export function Nav() {
           },
           {
             name: "SidebarCollapsibleSection",
-            type: "{ title, open, onToggle, count?, description?, action?, className?, children }",
+            type: "{ title, open, onToggle, count?, description?, action?, rule?, live?, className?, children }",
             description:
               "Uppercase section header with a rotating chevron, an optional count, and a slot for a header action.",
+          },
+          {
+            name: "rule",
+            type: "boolean",
+            default: "false",
+            description: (
+              <>
+                On <DocsCode>SidebarCollapsibleSection</DocsCode>: label, a
+                hairline across the rest of the row, chevron at the far end —
+                the shape a per-folder list wants.
+              </>
+            ),
+          },
+          {
+            name: "live",
+            type: "boolean",
+            default: "false",
+            description: (
+              <>
+                On <DocsCode>SidebarCollapsibleSection</DocsCode>: a dot on the
+                header while the section is closed, so a folded folder still
+                says something inside it is running. Animates only while it is
+                on screen and the tab is in front.
+              </>
+            ),
           },
           {
             name: "SidebarEmptyState",
@@ -220,6 +271,9 @@ export function Nav() {
       "chat-sidebar-content",
       "chat-sidebar-footer",
       "sidebar-section",
+      "sidebar-section-trigger",
+      "sidebar-section-rule",
+      "sidebar-section-live",
     ],
     examples: [
       {
@@ -250,6 +304,7 @@ export function Nav() {
   SidebarEdgeDropZone,
   SidebarEmptyState,
   SidebarItemStatusDot,
+  SidebarResizeRail,
   pinDropZone,
   trashDropZone,
   useSidebarDnd,
@@ -281,9 +336,9 @@ export function Nav() {
         title: "Widths and per-region classes",
         description: (
           <>
-            Widths are numbers because the root animates{" "}
-            <DocsCode>width</DocsCode> between them, so the collapsed rail and
-            the expanded panel are both yours to size.{" "}
+            Widths are numbers, so the collapsed rail and the expanded panel
+            are both yours to size; <DocsCode>animateWidth</DocsCode> decides
+            whether the root eases between them (it does not, by default).{" "}
             <DocsCode>classNames</DocsCode> reaches each region — rail, panel,
             header, nav, content, footer — without a single descendant selector.
             Collapse it below to see both widths.
@@ -293,6 +348,23 @@ export function Nav() {
           name: "sidebar-styled-example",
           node: <SidebarStyledExample />,
           align: "stretch" as const,
+        },
+      },
+      {
+        title: "Section headers as rules",
+        description: (
+          <>
+            <DocsCode>rule</DocsCode> turns a section header into a label, a
+            hairline and a chevron — one line per working folder instead of a
+            stack of captions. <DocsCode>live</DocsCode> adds the dot that keeps
+            a closed section honest while a chat inside it streams; it animates
+            only while it is on screen and the tab is in front, so a folded
+            sidebar full of them costs nothing. Toggle either section below.
+          </>
+        ),
+        example: {
+          name: "sidebar-section-rule-example",
+          node: <SidebarSectionRuleExample />,
         },
       },
       {
@@ -315,6 +387,30 @@ export function Nav() {
       },
     ],
     notes: [
+      {
+        title: "One observer for every looping animation",
+        description: (
+          <>
+            The live dot does not simply loop. <DocsCode>live</DocsCode> is
+            wired to <DocsCode>lib/visible-animation.ts</DocsCode>, which shares
+            a single <DocsCode>IntersectionObserver</DocsCode>, one{" "}
+            <DocsCode>visibilitychange</DocsCode> listener and one
+            reduced-motion query across the whole page, and writes{" "}
+            <DocsCode>--visible-animation-state</DocsCode> and{" "}
+            <DocsCode>--visible-animation-will-change</DocsCode> on each
+            element. Any animation can read them —{" "}
+            <DocsCode>
+              animation-play-state: var(--visible-animation-state, running)
+            </DocsCode>{" "}
+            — and stop when it is scrolled away or the tab goes to the
+            background. The fallback is <DocsCode>running</DocsCode>, so
+            forgetting the ref degrades to an ordinary animation rather than a
+            frozen one. <DocsCode>observeVisibleAnimation(element)</DocsCode> is
+            the imperative form and returns its own unsubscribe;{" "}
+            <DocsCode>useVisibleAnimation()</DocsCode> is a ref callback.
+          </>
+        ),
+      },
       {
         title: "Hover color",
         description: (
@@ -416,6 +512,45 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             type: "boolean",
             default: "true",
             description: "Leading status dot on unpinned rows.",
+          },
+          {
+            name: "motion",
+            type: "boolean",
+            default: "false",
+            description: (
+              <>
+                Animate rows between their layout positions — a chat arriving, a
+                deletion, a filter, a drag release. Transform and opacity only,
+                150ms, and it stands down entirely under{" "}
+                <DocsCode>prefers-reduced-motion</DocsCode> or when a single
+                update would fade more than forty rows.
+              </>
+            ),
+          },
+          {
+            name: "contentVisibility",
+            type: "boolean",
+            default: "true",
+            description: (
+              <>
+                Rows scrolled out of the sidebar skip layout and paint (
+                <DocsCode>content-visibility: auto</DocsCode>), reserving their
+                own height so the scrollbar stays honest. Turn it off for a list
+                short enough that the reserved size costs more than the skipped
+                work saves.
+              </>
+            ),
+          },
+          {
+            name: "renderActions",
+            type: "(item, ctx) => React.ReactNode",
+            description: (
+              <>
+                Row controls that take the meta slot on hover or keyboard focus.
+                Identity is stabilized internally, so an inline callback still
+                leaves rows memoized.
+              </>
+            ),
           },
           {
             name: "renameRequest",
@@ -543,6 +678,12 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             type: "React.ReactNode",
             description: "Custom leading node, rendered instead of the dot.",
           },
+          {
+            name: "recede",
+            type: "boolean",
+            description:
+              "Dims the row until it is hovered, active or selected. Background work should not compete with things awaiting you: a row that is merely busy recedes, a row that needs an answer does not.",
+          },
         ],
       },
       {
@@ -587,6 +728,18 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             ),
           },
           {
+            name: "isTrailingDoubleClick",
+            type: "(detail: number) => boolean",
+            description: (
+              <>
+                A double-click dispatches two clicks before{" "}
+                <DocsCode>dblclick</DocsCode>. The row swallows the second one
+                so double-click-to-rename does not also select; exported for a
+                custom row that wires both on the same element.
+              </>
+            ),
+          },
+          {
             name: "nextSidebarSelection",
             type: "(args) => { selectedIds, anchorId }",
             description:
@@ -621,6 +774,8 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
       "sidebar-item-meta",
       "sidebar-item-badge",
       "sidebar-item-status",
+      "sidebar-item-actions",
+      "sidebar-item-drop-verb",
       "sidebar-item-list",
       "sidebar-item-selection",
     ],
@@ -700,6 +855,41 @@ const items = sessions.map((session) => ({
         },
       },
       {
+        title: "Actions where the timestamp was",
+        description: (
+          <>
+            <DocsCode>renderActions</DocsCode> fills the slot the meta label
+            sits in: the timestamp at rest, the controls on hover — or on{" "}
+            <DocsCode>focus-visible</DocsCode>, so the keyboard reaches every
+            one of them. They render beside the row button rather than inside
+            it, because a button inside a button is not a button. Rows marked{" "}
+            <DocsCode>recede</DocsCode> dim until you hover them: background
+            work should not compete with the row that is waiting on you.
+          </>
+        ),
+        example: {
+          name: "sidebar-actions-example",
+          node: <SidebarActionsExample />,
+        },
+      },
+      {
+        title: "Rows that move",
+        description: (
+          <>
+            <DocsCode>motion</DocsCode> animates the list between layouts with
+            the Web Animations API: displaced rows translate, arrivals and
+            departures fade, and a removed row is replaced by an{" "}
+            <DocsCode>inert</DocsCode> clone for the length of its fade so React
+            keeps owning the real one. An interrupted animation resumes from its
+            own computed progress instead of snapping.
+          </>
+        ),
+        example: {
+          name: "sidebar-motion-example",
+          node: <SidebarMotionExample />,
+        },
+      },
+      {
         title: "Rich rows",
         description: (
           <>
@@ -722,6 +912,21 @@ const items = sessions.map((session) => ({
       },
     ],
     notes: [
+      {
+        title: "Status dots do not loop",
+        description: (
+          <>
+            A streaming row paints a saturated dot and pings once when the
+            status changes, rather than pulsing for as long as the answer takes:
+            a looping animation per row repaints the sidebar continuously, and a
+            state that has not changed has nothing left to announce. The ping is
+            hidden under <DocsCode>prefers-reduced-motion</DocsCode>, and the
+            built-in palette stays at three colors — primary for this app&apos;s
+            own work, amber for something waiting on the user, destructive for a
+            failure.
+          </>
+        ),
+      },
       {
         title: "Stable callbacks",
         description: (
@@ -827,6 +1032,31 @@ export function Nav() {
             description: "Drag lifecycle hooks.",
           },
           {
+            name: "canDrop",
+            type: "(itemId: string, overId: string) => boolean",
+            description: (
+              <>
+                Rejects a target while it is only hovered. A rejected target
+                falls back to the <em>source</em>, never to the next-nearest
+                droppable, so sliding past a forbidden row cannot drop the item
+                two rows further down. Answers are cached per target for the
+                length of one drag.
+              </>
+            ),
+          },
+          {
+            name: "resolveDropVerb",
+            type: "(fromListId, toListId) => { label, icon? } | null",
+            description: (
+              <>
+                Names what a drop that crosses lists would do. The lifted row
+                renders it as a badge in place of its meta label; return{" "}
+                <DocsCode>null</DocsCode> for a move that needs no explaining. A
+                reorder inside one list never asks.
+              </>
+            ),
+          },
+          {
             name: "activationDistance",
             type: "number",
             default: "6",
@@ -929,6 +1159,16 @@ export function Nav() {
             description:
               "Landed on a droppable that is neither a zone nor a registered list item.",
           },
+          {
+            name: "SidebarDropVerb",
+            type: "{ label: string; icon?: React.ReactNode }",
+            description: (
+              <>
+                What <DocsCode>resolveDropVerb</DocsCode> returns, and what the
+                badge on the lifted row renders.
+              </>
+            ),
+          },
         ],
       },
       {
@@ -965,6 +1205,17 @@ export function Nav() {
             type: "{ activeId, zones, edgeZones, … }",
             description:
               "Read the drag state — mount inline zones only while activeId is set.",
+          },
+          {
+            name: "useSidebarDropVerb()",
+            type: "SidebarDropVerb | null",
+            description: (
+              <>
+                The verb for the drag in progress. Its own context, so only the
+                badge on the lifted row re-renders as the pointer crosses lists;{" "}
+                <DocsCode>ChatSidebarItem</DocsCode> already reads it.
+              </>
+            ),
           },
           {
             name: "useSidebarDndList(listId, itemIds)",
@@ -1016,6 +1267,23 @@ export function Nav() {
     }
   }
 }`,
+        },
+      },
+      {
+        title: "Say what the drop will do",
+        description: (
+          <>
+            A drag that crosses lists is not a reorder — it pins, archives, or
+            moves. <DocsCode>resolveDropVerb</DocsCode> names the one that
+            applies and the lifted row wears it, while{" "}
+            <DocsCode>canDrop</DocsCode> refuses the drops that make no sense:
+            the archived row below cannot be dragged anywhere, and rejecting it
+            falls back to the source instead of quietly choosing a neighbour.
+          </>
+        ),
+        example: {
+          name: "sidebar-drop-verb-example",
+          node: <SidebarDropVerbExample />,
         },
       },
       {
@@ -1224,6 +1492,248 @@ export function ArchiveZone() {
   surfaceClassName="rounded-full border-solid py-2 text-[11px] uppercase tracking-wide"
 />`,
         },
+      },
+    ],
+  },
+
+  "sidebar-resize-rail": {
+    title: "Sidebar Resize Rail",
+    description:
+      "A drag handle for the sidebar's width that never re-renders React: one CSS variable, written once per frame, with keyboard resizing and a veto.",
+    registry: "sidebar-resize-rail",
+    registryDependencies: ["chat-sidebar"],
+    preview: {
+      name: "sidebar-resize-example",
+      node: <SidebarResizeExample />,
+      align: "stretch",
+    },
+    usage: `"use client"
+
+import {
+  ChatSidebar,
+  SidebarResizeRail,
+} from "@/components/ui/chat-sidebar"
+
+export function Nav() {
+  const [collapsed, setCollapsed] = useState(false)
+  const [width, setWidth] = useState(() => readStoredWidth())
+
+  return (
+    <ChatSidebar
+      collapsed={collapsed}
+      onCollapsedChange={setCollapsed}
+      overlays={
+        <SidebarResizeRail
+          width={width}
+          minWidth={240}
+          maxWidth={420}
+          onWidthChange={(next) => {
+            setWidth(next)
+            localStorage.setItem("sidebar-width", String(next))
+          }}
+        />
+      }
+    >
+      {children}
+    </ChatSidebar>
+  )
+}`,
+    props: [
+      {
+        caption: "SidebarResizeRail",
+        rows: [
+          {
+            name: "width",
+            type: "number",
+            description: (
+              <>
+                Width to hydrate before the first paint — a persisted one,
+                usually. The rail reads no storage itself; it is written in a
+                layout effect, so a restored sidebar never flashes at the
+                default width first.
+              </>
+            ),
+          },
+          {
+            name: "onWidthChange",
+            type: "(width: number) => void",
+            description:
+              "Fired on release, on the double-click reset and on every keyboard step — never per frame. Persist here.",
+          },
+          {
+            name: "defaultWidth",
+            type: "number",
+            default: "290",
+            description: "Double-click (or Enter) resets to this.",
+          },
+          {
+            name: "minWidth / maxWidth",
+            type: "number",
+            default: "208 / 480",
+            description: "Hard limits on the drag.",
+          },
+          {
+            name: "contentMinWidth",
+            type: "number",
+            default: "420",
+            description:
+              "Room the rest of the layout keeps: on a narrow viewport the maximum shrinks to leave it, and minWidth still wins over that.",
+          },
+          {
+            name: "targetRef",
+            type: "RefObject<HTMLElement | null>",
+            description: (
+              <>
+                Element the variable is written on. Defaults to the closest{" "}
+                <DocsCode>[data-slot=&quot;chat-sidebar&quot;]</DocsCode>, then
+                to the rail&apos;s own parent.
+              </>
+            ),
+          },
+          {
+            name: "cssVar",
+            type: "string",
+            default: '"--chat-sidebar-width"',
+            description: (
+              <>
+                Custom property to drive. Match it with the sidebar&apos;s{" "}
+                <DocsCode>width</DocsCode> if you change it.
+              </>
+            ),
+          },
+          {
+            name: "shouldAcceptWidth",
+            type: "(info) => boolean",
+            description: (
+              <>
+                Veto a width mid-drag — the pointer keeps moving, the panel does
+                not. <DocsCode>info</DocsCode> is{" "}
+                <DocsCode>{"{ currentWidth, nextWidth, target, side }"}</DocsCode>
+                .
+              </>
+            ),
+          },
+          {
+            name: "side",
+            type: '"left" | "right"',
+            default: '"left"',
+            description:
+              "Which side of the panel the rail sits on; it flips the drag direction and the keyboard keys.",
+          },
+          {
+            name: "step",
+            type: "number",
+            default: "16",
+            description: "Keyboard increment. Shift multiplies it by four.",
+          },
+          {
+            name: "disabled",
+            type: "boolean",
+            default: "false",
+            description: "Makes the rail inert — a collapsed sidebar, usually.",
+          },
+        ],
+      },
+      {
+        caption: "Width math (pure)",
+        rows: [
+          {
+            name: "resolveSidebarWidthBounds(viewportWidth, options?)",
+            type: "{ min, max }",
+            description:
+              "The pair the rail clamps to. The viewport caps the maximum so the conversation keeps contentMin; min still wins over that.",
+          },
+          {
+            name: "clampSidebarWidth(width, bounds)",
+            type: "number",
+            description: "Clamps one width into those bounds.",
+          },
+          {
+            name: "resolveInitialSidebarWidth(stored, viewportWidth, defaultWidth, options?)",
+            type: "number",
+            description:
+              "First-paint width: the stored value when there is one, the default otherwise, clamped into what this viewport allows.",
+          },
+          {
+            name: "SIDEBAR_WIDTH_VAR",
+            type: '"--chat-sidebar-width"',
+            description: (
+              <>
+                The variable the rail writes and{" "}
+                <DocsCode>ChatSidebar</DocsCode> reads.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: ["sidebar-rail"],
+    examples: [
+      {
+        title: "Why a CSS variable",
+        description: (
+          <>
+            A width in React state re-renders the sidebar — and every memoized
+            row in it — on every pointer move. The rail writes one custom
+            property inside a <DocsCode>requestAnimationFrame</DocsCode>{" "}
+            instead, so a drag costs a style recalculation and nothing else, and
+            forces the target&apos;s transitions to{" "}
+            <DocsCode>0ms</DocsCode> while the pointer is down: an animated
+            width would trail the cursor by a whole easing curve. React hears
+            about it once, on release.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `// The panel already reads the variable:
+//   width: var(--chat-sidebar-width, 290px)
+// so the rail only has to write it.
+
+<ChatSidebar
+  collapsed={collapsed}
+  onCollapsedChange={setCollapsed}
+  widthExpanded={290}
+  overlays={<SidebarResizeRail onWidthChange={persist} />}
+>
+  {children}
+</ChatSidebar>`,
+        },
+      },
+      {
+        title: "Refuse a width",
+        description: (
+          <>
+            <DocsCode>shouldAcceptWidth</DocsCode> runs inside the same frame,
+            before the write. Return <DocsCode>false</DocsCode> and the panel
+            simply stays where it is — useful when something else on the page
+            (a file panel, a table) has a width of its own to defend.
+          </>
+        ),
+        code: {
+          lang: "tsx",
+          code: `<SidebarResizeRail
+  onWidthChange={persist}
+  shouldAcceptWidth={({ nextWidth }) =>
+    window.innerWidth - nextWidth >= 640
+  }
+/>`,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Keyboard resizing",
+        description: (
+          <>
+            The rail is a <DocsCode>separator</DocsCode> in the tab order:
+            arrow keys resize by <DocsCode>step</DocsCode> (Shift for four
+            times as much), Home and End jump to the limits, Enter resets to{" "}
+            <DocsCode>defaultWidth</DocsCode> — the same thing a double-click
+            does. <DocsCode>aria-valuenow</DocsCode> is kept up to date on the
+            element itself rather than through state, for the same reason the
+            width is.
+          </>
+        ),
       },
     ],
   },

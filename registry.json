@@ -113,13 +113,17 @@
       "name": "chat-input",
       "type": "registry:ui",
       "title": "Chat Input",
-      "description": "Composer with attachments, drag-and-drop, a skills/slash menu, @-mentions, a mid-turn message queue, collapsed long pastes, and Enter-to-send.",
+      "description": "Composer with attachments, drag-and-drop, $-skills, a slash menu whose provider commands are offered only at the head of a message, @-mentions, a mid-turn message queue, collapsed long pastes, shell-style prompt recall on the arrow keys, and Enter-to-send.",
       "dependencies": ["lucide-react", "class-variance-authority"],
       "registryDependencies": ["miskibin/chat-components/file-icon"],
       "files": [
         {
           "path": "components/ui/chat-input.tsx",
           "type": "registry:ui"
+        },
+        {
+          "path": "lib/prompt-history.ts",
+          "type": "registry:lib"
         }
       ]
     },
@@ -190,10 +194,22 @@
       ]
     },
     {
+      "name": "render-error-boundary",
+      "type": "registry:ui",
+      "title": "Render Error Boundary",
+      "description": "Isolates one render: a block that throws falls back to plain text instead of unmounting the message around it, and retries when its resetKeys change.",
+      "files": [
+        {
+          "path": "components/ui/render-error-boundary.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "message-markdown",
       "type": "registry:ui",
       "title": "Message Markdown",
-      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, KaTeX, inline data: images, clickable file references — inline paths and relative links — with their line, and a right-click menu per file.",
+      "description": "Streamdown renderer for assistant markdown: GFM, GitHub alerts, code, Mermaid, KaTeX, inline data: images, clickable file references — inline paths and relative links — with their line, a right-click menu per file, per-block render isolation, and copy-as-markdown.",
       "dependencies": [
         "streamdown",
         "@streamdown/code",
@@ -205,7 +221,8 @@
       ],
       "registryDependencies": [
         "miskibin/chat-components/file-icon",
-        "miskibin/chat-components/change-summary"
+        "miskibin/chat-components/change-summary",
+        "miskibin/chat-components/render-error-boundary"
       ],
       "files": [
         {
@@ -216,6 +233,22 @@
           "path": "components/ui/message-markdown.css",
           "type": "registry:file",
           "target": "@ui/message-markdown.css"
+        },
+        {
+          "path": "lib/markdown-file-paths.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "lib/markdown-clipboard.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "lib/markdown-github-alerts.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "lib/markdown-list-indentation.ts",
+          "type": "registry:lib"
         }
       ],
       "css": {
@@ -258,7 +291,7 @@
       "name": "message-parts",
       "type": "registry:ui",
       "title": "Message Parts",
-      "description": "Atomic assistant parts: the \"Worked for 12s\" process group, reasoning, tool calls, ask questions, highlighted code, and artifacts.",
+      "description": "Atomic assistant parts: the \"Worked for 12s\" process group, reasoning, tool calls that headline the program a shell command really ran, a semantic summary above a folded group, ask questions, highlighted code, and artifacts.",
       "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
       "registryDependencies": [
         "collapsible",
@@ -267,12 +300,21 @@
         "miskibin/chat-components/change-summary",
         "miskibin/chat-components/file-icon",
         "miskibin/chat-components/todo-list",
-        "miskibin/chat-components/plan-card"
+        "miskibin/chat-components/plan-card",
+        "miskibin/chat-components/render-error-boundary"
       ],
       "files": [
         {
           "path": "components/ui/message-parts.tsx",
           "type": "registry:ui"
+        },
+        {
+          "path": "lib/command-label.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "lib/lru-cache.ts",
+          "type": "registry:lib"
         }
       ]
     },
@@ -280,17 +322,67 @@
       "name": "file-preview",
       "type": "registry:ui",
       "title": "File Preview",
-      "description": "Side panel that shows a file an agent touched: its diff (unified or split), the whole file with the edited lines marked and scrolled into view, or the picture when it is an image — with copy-path, line wrapping and a file actions menu.",
-      "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
+      "description": "Side panel that shows a file an agent touched: its diff (unified or split), the whole file with the edited lines marked and scrolled into view, or the picture when it is an image — with copy-path, line wrapping, line comments and a file actions menu.",
+      "dependencies": ["lucide-react"],
       "registryDependencies": [
         "dropdown-menu",
         "miskibin/chat-components/message-parts",
         "miskibin/chat-components/file-icon",
-        "miskibin/chat-components/change-summary"
+        "miskibin/chat-components/change-summary",
+        "miskibin/chat-components/diff-view"
       ],
       "files": [
         {
           "path": "components/ui/file-preview.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "diff-worker-pool",
+      "type": "registry:ui",
+      "title": "Diff Worker Pool",
+      "description": "Reference-counted Web Worker pool that moves syntax highlighting for every Diff View under it off the main thread, kept warm for 30s after the last panel closes.",
+      "dependencies": ["@pierre/diffs", "next-themes"],
+      "files": [
+        {
+          "path": "components/ui/diff-worker-pool.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "lib/syntax-highlighting.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
+      "name": "diff-view",
+      "type": "registry:ui",
+      "title": "Diff View",
+      "description": "A file or a diff rendered by @pierre/diffs — virtualized, syntax highlighted, split or unified, with a focus line, per-line tints and line selection that hands a picked range back with its text — bound to the app's own tokens.",
+      "dependencies": ["@pierre/diffs", "lucide-react", "next-themes"],
+      "registryDependencies": ["miskibin/chat-components/diff-worker-pool"],
+      "files": [
+        {
+          "path": "components/ui/diff-view.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "lib/syntax-highlighting.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
+      "name": "file-tree",
+      "type": "registry:ui",
+      "title": "File Tree",
+      "description": "Directory tree over a flat file list: git status colours, +/- counts, keyboard navigation, type-to-filter and per-node menus, virtualized by @pierre/trees, with an optional lazy loader per folder.",
+      "dependencies": ["@pierre/trees", "lucide-react", "next-themes"],
+      "registryDependencies": ["miskibin/chat-components/change-summary"],
+      "files": [
+        {
+          "path": "components/ui/file-tree.tsx",
           "type": "registry:ui"
         }
       ]
@@ -365,7 +457,7 @@
       "name": "sidebar-item",
       "type": "registry:ui",
       "title": "Sidebar Item",
-      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta, folder/branch badge) or fully custom content, rename, pin, delete, Shift-click range select with bulk pin/delete, status dots, context menu, drag and drag-to-reorder.",
+      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta, folder/branch badge) or fully custom content, hover actions that swap with the meta label, receding background rows, rename, pin, delete, Shift-click range select with bulk pin/delete, status dots, context menu, drag and drag-to-reorder, FLIP row motion and content-visibility.",
       "dependencies": [
         "lucide-react",
         "@dnd-kit/core",
@@ -381,6 +473,22 @@
         {
           "path": "components/ui/sidebar-item.tsx",
           "type": "registry:ui"
+        },
+        {
+          "path": "components/ui/sidebar-motion.ts",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "sidebar-resize-rail",
+      "type": "registry:ui",
+      "title": "Sidebar Resize Rail",
+      "description": "Drag handle for the sidebar width: pointer capture, rAF-batched writes to one CSS variable, keyboard resizing, a width veto and pure min/max math.",
+      "files": [
+        {
+          "path": "components/ui/sidebar-resize-rail.tsx",
+          "type": "registry:ui"
         }
       ]
     },
@@ -388,17 +496,22 @@
       "name": "chat-sidebar",
       "type": "registry:ui",
       "title": "Chat Sidebar",
-      "description": "Collapsible sidebar chrome with slot-based composition and generic drag-and-drop zones (pin, trash, custom).",
+      "description": "Collapsible sidebar chrome with slot-based composition, section headers as rules with a live dot, a resizable width variable, and generic drag-and-drop zones (pin, trash, custom).",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/sidebar-item",
         "miskibin/chat-components/sidebar-dnd",
-        "miskibin/chat-components/sidebar-drop-zones"
+        "miskibin/chat-components/sidebar-drop-zones",
+        "miskibin/chat-components/sidebar-resize-rail"
       ],
       "files": [
         {
           "path": "components/ui/chat-sidebar.tsx",
           "type": "registry:ui"
+        },
+        {
+          "path": "lib/visible-animation.ts",
+          "type": "registry:lib"
         }
       ]
     },

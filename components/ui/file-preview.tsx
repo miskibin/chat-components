@@ -8,6 +8,10 @@ import {
   type FileActionItem,
 } from "@/components/ui/change-summary"
 import {
+  DiffView,
+  type DiffLineCommentRange,
+} from "@/components/ui/diff-view"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -16,7 +20,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { FileIcon } from "@/components/ui/file-icon"
 import {
-  CodeLine,
   DiffStats,
   buildDiffLines,
   extractReadFile,
@@ -26,7 +29,6 @@ import {
   langFromPath,
   parseToolArgs,
   parseUnifiedPatch,
-  useHighlightedLines,
   type MessageToolCallData,
   type ToolDiffLine,
 } from "@/components/ui/message-parts"
@@ -68,6 +70,8 @@ export type FilePreviewFile = {
   imageSrc?: string
 }
 
+export type { DiffLineCommentRange }
+
 export type FilePreviewView = "file" | "diff"
 
 export type FilePreviewDiffLayout = "unified" | "split"
@@ -92,6 +96,11 @@ export type FilePreviewProps = Omit<React.ComponentProps<"div">, "children"> & {
   onCopyPath?: (path: string) => void
   /** Renders the close button. Escape closes the panel whenever this is set. */
   onClose?: () => void
+  /**
+   * Turns on line selection in both bodies and offers "Comment on lines" over
+   * the picked range — the host decides what a comment is for.
+   */
+  onLineComment?: (range: DiffLineCommentRange) => void
   classNames?: {
     root?: string
     header?: string
@@ -99,14 +108,8 @@ export type FilePreviewProps = Omit<React.ComponentProps<"div">, "children"> & {
   }
 }
 
-/** Past this, syntax highlighting costs more than it is worth. */
-const HIGHLIGHT_MAX_CHARS = 150_000
-
 /** How long the header says "Copied" before falling back to the path. */
 const COPIED_MS = 1200
-
-/** A whole file is up to a megabyte of rows; the rest is one click away. */
-const PREVIEW_LINE_CAP = 300
 
 /** Quiet square button shared by every header control. */
 const filePreviewButton =
@@ -137,42 +140,97 @@ function lineOfMatch(haystack: string, needle: string) {
   return line
 }
 
+/**
+ * Already-parsed lines back into a unified patch — the one shape the viewer
+ * reads. Hunks break wherever the numbering jumps, and lines that carry no
+ * numbers at all (a diff synthesized from an old/new pair) number themselves
+ * from 1, exactly as the old renderer drew them.
+ */
+function patchFromDiffLines(path: string, lines: ToolDiffLine[]) {
+  // No `a/`/`b/` prefixes: Pierre reads those as two different names and calls
+  // the result a rename.
+  const out = [`--- ${path}`, `+++ ${path}`]
+  const rows: string[] = []
+  let hunkOld = 1
+  let hunkNew = 1
+  let oldCount = 0
+  let newCount = 0
+  let nextOld = 0
+  let nextNew = 0
+
+  const flush = () => {
+    if (rows.length === 0) return
+    out.push(`@@ -${hunkOld},${oldCount} +${hunkNew},${newCount} @@`, ...rows)
+    rows.length = 0
+    oldCount = 0
+    newCount = 0
+  }
+
+  for (const line of lines) {
+    const oldLine = line.type === "add" ? undefined : line.oldLine
+    const newLine = line.type === "remove" ? undefined : line.newLine
+    if (
+      rows.length > 0 &&
+      ((oldLine != null && nextOld > 0 && oldLine !== nextOld) ||
+        (newLine != null && nextNew > 0 && newLine !== nextNew))
+    ) {
+      flush()
+    }
+    if (rows.length === 0) {
+      hunkOld = oldLine ?? (nextOld > 0 ? nextOld : 1)
+      hunkNew = newLine ?? (nextNew > 0 ? nextNew : 1)
+    }
+    rows.push(
+      `${line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}${line.text}`
+    )
+    if (line.type !== "add") {
+      oldCount++
+      nextOld = (oldLine ?? nextOld) + 1
+    }
+    if (line.type !== "remove") {
+      newCount++
+      nextNew = (newLine ?? nextNew) + 1
+    }
+  }
+  flush()
+
+  return out.length > 2 ? `${out.join("\n")}\n` : null
+}
+
 type FilePreviewModel = {
-  diffLines: ToolDiffLine[]
-  fileLines: string[] | null
+  /** What the diff view renders — a patch, else the before/after pair. */
+  patch: string | null
+  oldText?: string
+  newText?: string
+  hasDiff: boolean
   added: number
   removed: number
-  /** Absolute new-file line numbers the agent touched — highlighted in the File view. */
+  /** Absolute new-file line numbers the agent touched — tinted in the File view. */
   changed: Set<number>
-  /** A diff came in but nothing (or not all of it) could be parsed. */
-  unparsed: boolean
 }
 
 /**
- * One pass over whatever the app handed us: parsed diff, file body, stats and
- * the set of changed lines. Tolerates a truncated or malformed patch — it
- * renders what parsed and says so, rather than throwing.
+ * One pass over whatever the app handed us: the patch the viewer will render,
+ * the stats for the header, and the set of changed lines. Tolerates a truncated
+ * or malformed patch — it is handed on as text and the viewer says so, rather
+ * than throwing.
  */
 function buildModel(file: FilePreviewFile): FilePreviewModel {
   let diffLines: ToolDiffLine[] = []
-  let unparsed = false
+  let patch: string | null = null
 
   if (file.diffLines?.length) {
     diffLines = file.diffLines
+    patch = patchFromDiffLines(file.path, diffLines)
   } else if (file.diff?.trim()) {
-    const parsed = parseUnifiedPatch(file.diff)
-    if (parsed?.length) diffLines = parsed
-    else unparsed = true
+    patch = file.diff
+    diffLines = parseUnifiedPatch(file.diff) ?? []
   }
 
-  if (
-    diffLines.length === 0 &&
-    file.oldText !== undefined &&
-    file.newText !== undefined
-  ) {
-    diffLines = buildDiffLines(file.oldText, file.newText)
-    unparsed = false
-  }
+  const { oldText, newText } = file
+  const pair =
+    patch === null && oldText !== undefined && newText !== undefined
+  if (pair) diffLines = buildDiffLines(oldText, newText)
 
   const fileLines = file.content !== undefined ? splitLines(file.content) : null
   const startLine = file.startLine ?? 1
@@ -191,8 +249,8 @@ function buildModel(file: FilePreviewFile): FilePreviewModel {
    * `@@` hunks carry real file line numbers, so their adds land as they are —
    * checked against the body rather than trusted. A diff synthesized from an
    * old/new pair numbers itself from 1 inside that snippet instead, so fall
-   * back to locating the snippet. When neither lines up nothing is
-   * highlighted — a wrong line is worse than none.
+   * back to locating the snippet. When neither lines up nothing is tinted — a
+   * wrong line is worse than none.
    */
   let changed = new Set<number>()
   if (fileLines && adds.length > 0) {
@@ -203,62 +261,23 @@ function buildModel(file: FilePreviewFile): FilePreviewModel {
       changed = new Set(adds.map((add) => add.line))
     }
   }
-  if (
-    fileLines &&
-    changed.size === 0 &&
-    file.content !== undefined &&
-    file.newText !== undefined
-  ) {
-    const at = lineOfMatch(file.content, file.newText)
+  if (fileLines && changed.size === 0 && file.content && newText) {
+    const at = lineOfMatch(file.content, newText)
     if (at != null) {
-      const span = splitLines(file.newText).length
+      const span = splitLines(newText).length
       for (let i = 0; i < span; i++) changed.add(startLine + at - 1 + i)
     }
   }
 
   return {
-    diffLines,
-    fileLines,
+    patch,
+    oldText: pair ? oldText : undefined,
+    newText: pair ? newText : undefined,
+    hasDiff: patch !== null || (pair && diffLines.length > 0),
     added: file.added ?? added,
     removed: file.removed ?? removed,
     changed,
-    unparsed,
   }
-}
-
-/** One side of a split row: the diff line plus its index in `diffLines`. */
-type SplitSide = { line: ToolDiffLine; index: number }
-type SplitPair = { left?: SplitSide; right?: SplitSide }
-
-/**
- * Unified lines → side-by-side rows. A run of removes followed by a run of
- * adds is the shape of a replacement, so those pair up index by index; the
- * longer side leaves the other cell empty. Context shows on both sides.
- */
-function pairDiffLines(lines: ToolDiffLine[]): SplitPair[] {
-  const rows: SplitPair[] = []
-  let i = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    if (line.type === "context") {
-      rows.push({ left: { line, index: i }, right: { line, index: i } })
-      i++
-      continue
-    }
-    const removes: SplitSide[] = []
-    while (i < lines.length && lines[i].type === "remove") {
-      removes.push({ line: lines[i], index: i })
-      i++
-    }
-    const adds: SplitSide[] = []
-    while (i < lines.length && lines[i].type === "add") {
-      adds.push({ line: lines[i], index: i })
-      i++
-    }
-    const span = Math.max(removes.length, adds.length)
-    for (let j = 0; j < span; j++) rows.push({ left: removes[j], right: adds[j] })
-  }
-  return rows
 }
 
 /**
@@ -275,235 +294,6 @@ function useStableCallback<A extends unknown[], R>(
   return React.useCallback((...args: A) => ref.current?.(...args), [])
 }
 
-const gutter =
-  "shrink-0 select-none border-r border-border/50 pr-2 text-right text-[11px] tabular-nums text-muted-foreground/45"
-
-/**
- * Unwrapped rows grow past the panel and let the body scroll sideways as one
- * block; wrapped rows stay inside it. Both keep the gutter column fixed.
- */
-function rowClass(wrap: boolean) {
-  return wrap ? "flex" : "flex w-max min-w-full"
-}
-
-function codeClass(wrap: boolean) {
-  return wrap
-    ? "min-w-0 flex-1 break-words whitespace-pre-wrap"
-    : "shrink-0 whitespace-pre"
-}
-
-/** Word chips when the differ produced them, highlighted source otherwise. */
-function DiffText({
-  line,
-  tokens,
-}: {
-  line: ToolDiffLine
-  tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
-}) {
-  if (!line.segments) return <CodeLine text={line.text} tokens={tokens} />
-  return (
-    <>
-      {line.segments.map((segment, index) => (
-        <span
-          key={index}
-          className={cn(
-            segment.highlight &&
-              (line.type === "add"
-                ? "rounded-[2px] bg-emerald-500/25"
-                : "rounded-[2px] bg-red-500/25")
-          )}
-        >
-          {segment.text}
-        </span>
-      ))}
-    </>
-  )
-}
-
-/** One diff row — same colours and word chips as the inline tool diff. */
-const DiffRow = React.memo(function FilePreviewDiffRow({
-  line,
-  tokens,
-  wrap,
-}: {
-  line: ToolDiffLine
-  tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
-  wrap: boolean
-}) {
-  const lineNo =
-    line.type === "remove" ? line.oldLine : (line.newLine ?? line.oldLine)
-  return (
-    <div
-      data-slot="file-preview-line"
-      data-line-type={line.type}
-      className={cn(
-        rowClass(wrap),
-        line.type === "add" && "bg-emerald-500/10",
-        line.type === "remove" && "bg-red-500/10"
-      )}
-    >
-      <span data-slot="file-preview-gutter" className={cn(gutter, "w-11")}>
-        {lineNo ?? ""}
-      </span>
-      <span
-        className={cn(
-          "w-5 shrink-0 select-none text-center",
-          line.type === "add" && "text-emerald-600/80 dark:text-emerald-400/80",
-          line.type === "remove" && "text-red-500/80 dark:text-red-400/80",
-          line.type === "context" && "text-muted-foreground/40"
-        )}
-      >
-        {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
-      </span>
-      <span className={cn(codeClass(wrap), "px-1 text-foreground/90")}>
-        <DiffText line={line} tokens={tokens} />
-      </span>
-    </div>
-  )
-})
-
-/**
- * One half of a split row. An unwrapped cell scrolls on its own rather than
- * widening the row — the other column must not be pushed off the panel.
- */
-function SplitCell({
-  side,
-  entry,
-  tokens,
-  wrap,
-}: {
-  side: "old" | "new"
-  entry?: SplitSide
-  tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
-  wrap: boolean
-}) {
-  const line = entry?.line
-  const lineNo = side === "old" ? line?.oldLine : line?.newLine
-  return (
-    <div
-      data-slot="file-preview-side"
-      data-side={side}
-      data-line-type={line?.type ?? "empty"}
-      className={cn(
-        "flex min-w-0 flex-1 basis-1/2",
-        !line && "bg-muted/40",
-        side === "old" && line?.type === "remove" && "bg-red-500/10",
-        side === "new" && line?.type === "add" && "bg-emerald-500/10"
-      )}
-    >
-      <span data-slot="file-preview-gutter" className={cn(gutter, "w-9")}>
-        {lineNo ?? ""}
-      </span>
-      <span
-        className={cn(
-          "px-1 text-foreground/90",
-          wrap
-            ? "min-w-0 flex-1 break-words whitespace-pre-wrap"
-            : "min-w-0 flex-1 overflow-x-auto whitespace-pre"
-        )}
-      >
-        {line ? <DiffText line={line} tokens={tokens} /> : " "}
-      </span>
-    </div>
-  )
-}
-
-const SplitRow = React.memo(function FilePreviewSplitRow({
-  row,
-  leftTokens,
-  rightTokens,
-  wrap,
-}: {
-  row: SplitPair
-  leftTokens?: React.ComponentProps<typeof CodeLine>["tokens"]
-  rightTokens?: React.ComponentProps<typeof CodeLine>["tokens"]
-  wrap: boolean
-}) {
-  const type =
-    row.left?.line.type === "context"
-      ? "context"
-      : row.left && row.right
-        ? "replace"
-        : row.right
-          ? "add"
-          : "remove"
-  return (
-    <div data-slot="file-preview-line" data-line-type={type} className="flex">
-      <SplitCell side="old" entry={row.left} tokens={leftTokens} wrap={wrap} />
-      <div aria-hidden className="w-px shrink-0 bg-border/60" />
-      <SplitCell side="new" entry={row.right} tokens={rightTokens} wrap={wrap} />
-    </div>
-  )
-})
-
-/** One file row; changed lines carry the add tint, the focused line its own. */
-const FileRow = React.memo(function FilePreviewFileRow({
-  text,
-  lineNumber,
-  changed,
-  focused,
-  tokens,
-  wrap,
-}: {
-  text: string
-  lineNumber: number
-  changed: boolean
-  focused: boolean
-  tokens?: React.ComponentProps<typeof CodeLine>["tokens"]
-  wrap: boolean
-}) {
-  return (
-    <div
-      data-slot="file-preview-line"
-      data-line-type={changed ? "add" : "context"}
-      data-line={lineNumber}
-      data-focused={focused || undefined}
-      className={cn(
-        rowClass(wrap),
-        changed && "bg-emerald-500/10",
-        focused && "bg-primary/10"
-      )}
-    >
-      <span data-slot="file-preview-gutter" className={cn(gutter, "w-11")}>
-        {lineNumber}
-      </span>
-      <span
-        aria-hidden
-        className={cn(
-          "w-5 shrink-0 select-none text-center",
-          changed
-            ? "text-emerald-600/80 dark:text-emerald-400/80"
-            : "text-transparent"
-        )}
-      >
-        {changed ? "+" : " "}
-      </span>
-      <span className={cn(codeClass(wrap), "px-1 text-foreground/90")}>
-        <CodeLine text={text} tokens={tokens} />
-      </span>
-    </div>
-  )
-})
-
-function ShowAllLines({
-  total,
-  onShowAll,
-}: {
-  total: number
-  onShowAll: () => void
-}) {
-  return (
-    <button
-      type="button"
-      data-slot="file-preview-show-all"
-      onClick={onShowAll}
-      className="w-full border-t border-border/50 bg-muted/40 py-1 text-center text-[12px] text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-    >
-      Show all {total.toLocaleString()} lines
-    </button>
-  )
-}
-
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return (
     <p
@@ -517,8 +307,10 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 
 /**
  * Right-side file panel: the agent's diff, or the file itself with the edited
- * lines marked. Non-modal by design (`role="dialog"` without `aria-modal`) —
- * the conversation next to it stays live.
+ * lines marked. Both bodies are one `DiffView`, so a megabyte costs the same as
+ * a page — only the rows on screen are rendered. Non-modal by design
+ * (`role="dialog"` without `aria-modal`) — the conversation next to it stays
+ * live.
  */
 export function FilePreview({
   file,
@@ -532,11 +324,11 @@ export function FilePreview({
   actions,
   onCopyPath,
   onClose,
+  onLineComment,
   className,
   classNames,
   ...props
 }: FilePreviewProps) {
-  const bodyRef = React.useRef<HTMLDivElement>(null)
   /** Parsing a whole file is the expensive bit; let a streaming prop skip frames. */
   const deferredFile = React.useDeferredValue(file)
   const model = React.useMemo(() => buildModel(deferredFile), [deferredFile])
@@ -545,8 +337,8 @@ export function FilePreview({
   const focusLine = deferredFile.focusLine
 
   const image = deferredFile.imageSrc
-  const hasFile = !image && !!model.fileLines
-  const hasDiff = !image && model.diffLines.length > 0
+  const hasFile = !image && deferredFile.content !== undefined
+  const hasDiff = !image && model.hasDiff
   const canToggle = hasFile && hasDiff
   // A focus request is about the file body, so it decides the opening view.
   const preferred: FilePreviewView =
@@ -560,7 +352,6 @@ export function FilePreview({
   const [shownPath, setShownPath] = React.useState(deferredFile.path)
   const [shownHasFile, setShownHasFile] = React.useState(hasFile)
   const [shownFocus, setShownFocus] = React.useState(focusKey)
-  const [showAllLines, setShowAllLines] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
 
   // Adjust while rendering rather than in an effect: a newly opened file never
@@ -569,7 +360,6 @@ export function FilePreview({
     setShownPath(deferredFile.path)
     setShownHasFile(hasFile)
     setShownFocus(focusKey)
-    setShowAllLines(false)
     setRequested(preferred)
     setCopied(false)
   } else if (hasFile !== shownHasFile || focusKey !== shownFocus) {
@@ -598,84 +388,17 @@ export function FilePreview({
   const wrapped = wrap ?? internalWrap
 
   /** Row the File view centres on — the focus request first, else the first change. */
-  const fileTarget = React.useMemo(() => {
-    if (focusLine != null) return focusLine - startLine
-    if (model.changed.size === 0) return -1
+  const fileFocus = React.useMemo(() => {
+    if (focusLine != null) return focusLine
+    if (model.changed.size === 0) return undefined
     // Iterated rather than spread into Math.min: a whole-file write marks
     // every line, and that set can be enormous.
     let first = Number.POSITIVE_INFINITY
     for (const line of model.changed) if (line < first) first = line
-    return first - startLine
-  }, [focusLine, model.changed, startLine])
-
-  // A file the app hands over can be a megabyte, so the File view renders
-  // behind the same cap a tool row uses — never one that would hide the row we
-  // are about to centre on.
-  const fileCapped =
-    !showAllLines &&
-    !!model.fileLines &&
-    model.fileLines.length > PREVIEW_LINE_CAP &&
-    fileTarget < PREVIEW_LINE_CAP
-  const fileLines = React.useMemo(
-    () =>
-      fileCapped && model.fileLines
-        ? model.fileLines.slice(0, PREVIEW_LINE_CAP)
-        : model.fileLines,
-    [fileCapped, model.fileLines]
-  )
-
-  const source = React.useMemo(() => {
-    const text =
-      view === "diff"
-        ? model.diffLines.map((line) => line.text).join("\n")
-        : (fileLines?.join("\n") ?? "")
-    return text.length > HIGHLIGHT_MAX_CHARS ? "" : text
-  }, [fileLines, model.diffLines, view])
-  const highlighted = useHighlightedLines(source, language)
-
-  const splitRows = React.useMemo(
-    () =>
-      view === "diff" && layout === "split" && hasDiff
-        ? pairDiffLines(model.diffLines)
-        : null,
-    [hasDiff, layout, model.diffLines, view]
-  )
+    return first
+  }, [focusLine, model.changed])
 
   const { dir, name } = splitPath(deferredFile.path)
-
-  /** Row index to centre — the focus request first, else the first change. */
-  const scrollTarget = React.useMemo(() => {
-    if (view === "diff") {
-      if (splitRows) {
-        return splitRows.findIndex(
-          (row) =>
-            row.left?.line.type === "remove" || row.right?.line.type === "add"
-        )
-      }
-      return model.diffLines.findIndex((line) => line.type !== "context")
-    }
-    return fileTarget
-  }, [fileTarget, model.diffLines, splitRows, view])
-
-  /**
-   * Centre the target line in the panel's own scroller — once per file, view
-   * and request, so a re-render never yanks the reader back. `scrollIntoView`
-   * would drag the page's other scroll containers along with it.
-   */
-  const scrollKey = `${deferredFile.path}\0${startLine}\0${view}\0${layout}\0${focusKey}\0${scrollTarget}`
-  const scrolledRef = React.useRef("")
-  React.useEffect(() => {
-    const container = bodyRef.current
-    if (!container || scrollTarget < 0) return
-    if (scrolledRef.current === scrollKey) return
-    scrolledRef.current = scrollKey
-    const row = container.children[scrollTarget]
-    if (!(row instanceof HTMLElement)) return
-    container.scrollTop = Math.max(
-      0,
-      row.offsetTop - container.clientHeight / 2 + row.offsetHeight / 2
-    )
-  }, [scrollKey, scrollTarget])
 
   const close = useStableCallback(onClose)
   const canClose = !!onClose
@@ -722,7 +445,6 @@ export function FilePreview({
 
   const showFile = React.useCallback(() => setRequested("file"), [])
   const showDiff = React.useCallback(() => setRequested("diff"), [])
-  const revealAllLines = React.useCallback(() => setShowAllLines(true), [])
 
   const layoutChanged = useStableCallback(onDiffLayoutChange)
   const toggleLayout = React.useCallback(() => {
@@ -905,17 +627,13 @@ export function FilePreview({
       </FileContextMenu>
 
       <div
-        ref={bodyRef}
         data-slot="file-preview-body"
-        className={cn(
-          "relative min-h-0 flex-1 overflow-auto font-mono text-[12.5px] leading-[1.7]",
-          classNames?.body
-        )}
+        className={cn("relative min-h-0 flex-1", classNames?.body)}
       >
         {image ? (
           <div
             data-slot="file-preview-image"
-            className="flex min-h-full items-center justify-center p-3"
+            className="flex h-full items-center justify-center overflow-auto p-3"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- a local file served by the host, not an optimizable asset */}
             <img
@@ -925,62 +643,34 @@ export function FilePreview({
               className="max-h-full max-w-full object-contain"
             />
           </div>
-        ) : null}
-        {!image && view === "file" && fileLines
-          ? fileLines.map((text, index) => (
-              <FileRow
-                key={index}
-                text={text}
-                lineNumber={startLine + index}
-                changed={model.changed.has(startLine + index)}
-                focused={focusLine === startLine + index}
-                tokens={highlighted?.[index]}
-                wrap={wrapped}
-              />
-            ))
-          : null}
-        {!image && view === "file" && fileCapped && model.fileLines ? (
-          <ShowAllLines
-            total={model.fileLines.length}
-            onShowAll={revealAllLines}
+        ) : view === "file" && hasFile ? (
+          <DiffView
+            key={`${deferredFile.path}\0file`}
+            path={deferredFile.path}
+            language={language}
+            content={deferredFile.content}
+            startLine={startLine}
+            highlightLines={model.changed}
+            focusLine={fileFocus}
+            focusNonce={deferredFile.focusNonce}
+            wrap={wrapped}
+            {...(onLineComment ? { onLineComment } : null)}
           />
-        ) : null}
-        {view === "diff" && splitRows
-          ? splitRows.map((row, index) => (
-              <SplitRow
-                key={index}
-                row={row}
-                leftTokens={
-                  row.left ? highlighted?.[row.left.index] : undefined
-                }
-                rightTokens={
-                  row.right ? highlighted?.[row.right.index] : undefined
-                }
-                wrap={wrapped}
-              />
-            ))
-          : null}
-        {!image && view === "diff" && hasDiff && !splitRows
-          ? model.diffLines.map((line, index) => (
-              <DiffRow
-                key={index}
-                line={line}
-                tokens={highlighted?.[index]}
-                wrap={wrapped}
-              />
-            ))
-          : null}
-        {!image && view === "diff" && !hasDiff && model.unparsed ? (
-          <EmptyNote>
-            This diff could not be parsed — it may have been truncated.
-          </EmptyNote>
-        ) : null}
-        {!image && !hasFile && !hasDiff && !model.unparsed ? (
+        ) : view === "diff" && hasDiff ? (
+          <DiffView
+            key={`${deferredFile.path}\0diff`}
+            path={deferredFile.path}
+            language={language}
+            patch={model.patch ?? undefined}
+            oldText={model.oldText}
+            newText={model.newText}
+            mode={layout}
+            wrap={wrapped}
+            {...(onLineComment ? { onLineComment } : null)}
+          />
+        ) : (
           <EmptyNote>No preview available for this file.</EmptyNote>
-        ) : null}
-        {!image && view === "diff" && hasDiff && model.unparsed ? (
-          <EmptyNote>Part of this diff could not be parsed.</EmptyNote>
-        ) : null}
+        )}
       </div>
     </div>
   )

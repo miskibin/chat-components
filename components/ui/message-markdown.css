@@ -231,3 +231,58 @@
   overflow-x: auto;
   line-height: 1.5;
 }
+
+/*
+ * GitHub alerts — a blockquote whose first line was `[!NOTE]`, marked by
+ * `remarkGithubAlerts`. The five hues are deliberate raw values, the same
+ * exception the diff +/- counts take: no theme token carries "tip" or
+ * "warning", and a mid-lightness oklch reads on both surfaces. Everything else
+ * — the tint, the text — is mixed from that one hue and the theme's own
+ * foreground, so a callout still belongs to whatever theme is on.
+ */
+.lc-markdown blockquote[data-alert] {
+  --lc-alert: var(--muted-foreground);
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--lc-alert);
+  border-radius: calc(var(--radius) * 0.6);
+  background: color-mix(in oklab, var(--lc-alert) 9%, transparent);
+  color: var(--foreground);
+  /* The renderer italicizes quotes; a callout is not one. */
+  font-style: normal;
+}
+
+.lc-markdown blockquote[data-alert]::before {
+  content: attr(data-alert);
+  display: block;
+  margin-bottom: 4px;
+  color: var(--lc-alert);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.lc-markdown blockquote[data-alert] > :last-child {
+  margin-bottom: 0;
+}
+
+.lc-markdown blockquote[data-alert="note"] {
+  --lc-alert: oklch(0.62 0.14 250);
+}
+
+.lc-markdown blockquote[data-alert="tip"] {
+  --lc-alert: oklch(0.62 0.13 155);
+}
+
+.lc-markdown blockquote[data-alert="important"] {
+  --lc-alert: oklch(0.62 0.16 300);
+}
+
+.lc-markdown blockquote[data-alert="warning"] {
+  --lc-alert: oklch(0.68 0.14 75);
+}
+
+.lc-markdown blockquote[data-alert="caution"] {
+  --lc-alert: var(--destructive);
+}

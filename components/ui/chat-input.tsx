@@ -14,22 +14,46 @@ import {
 import * as React from "react"
 
 import { FileIcon } from "@/components/ui/file-icon"
+import {
+  promptHistoryEntries,
+  stepPromptHistory,
+  type PromptHistoryPosition,
+} from "@/lib/prompt-history"
 import { cn } from "@/lib/utils"
 
 export type ChatSkill = {
   name: string
   description?: string
+  /** Where it was found. Shown in the menu, so two of one name read apart. */
+  scope?: "project" | "user"
+  /**
+   * `false` keeps it out of the menus: the provider reserves that skill for
+   * the agent, and a user invocation of it is refused.
+   */
+  userInvocable?: boolean
 }
 
 export type ChatSlashCommand = {
   name: string
   description?: string
   argHint?: string
+  /**
+   * The command runs only when it opens the message — what a provider's own
+   * commands do, since anywhere else the text reaches the agent verbatim.
+   * Such a command is offered only while the `/` sits at offset 0.
+   * Defaults to `commandsMustStartMessage`.
+   */
+  mustStartMessage?: boolean
 }
 
 export type ChatInputPayload = {
   text: string
   files: File[]
+  /**
+   * The skills this message names: every `$mention` in the text that matches
+   * `skills`, plus whatever the host put there through `setDraft`. The text
+   * keeps the mentions — this is the same list, already parsed.
+   */
   skills: string[]
 }
 
@@ -76,8 +100,17 @@ export type ChatInputProps = {
    * is for a host that has to react to it, such as a context meter.
    */
   onTextChange?: (text: string) => void
+  /**
+   * What `$` offers, and what the `/` menu lists above the commands. Picking
+   * one writes a `$name` mention into the draft.
+   */
   skills?: ChatSkill[]
   slashCommands?: ChatSlashCommand[]
+  /**
+   * Default for `ChatSlashCommand.mustStartMessage` — set it when the list is
+   * a provider's own commands, which only run at the head of a message.
+   */
+  commandsMustStartMessage?: boolean
   className?: string
   disabled?: boolean
   /** Max textarea height in px before it scrolls. */
@@ -100,16 +133,26 @@ export type ChatInputProps = {
   ) => Promise<ChatInputMentionItem[]> | ChatInputMentionItem[]
   /** ⌘S / Ctrl+S hands the draft over and clears the composer. */
   onStash?: (payload: ChatInputPayload) => void
+  /**
+   * Prompts already sent in this conversation, oldest first — the host's user
+   * messages, and nothing the composer has to know about transcripts. With it,
+   * ArrowUp at the start of an untouched composer recalls the previous prompt
+   * and ArrowDown walks back down, the way a shell does; one step past the
+   * newest empties the composer again.
+   *
+   * Blank sends are skipped and consecutive duplicates collapse. Keep the
+   * array stable — a new identity per render re-derives the entries.
+   */
+  history?: readonly { id: string; text: string }[]
 }
 
 type SlashMenuItem =
-  | { kind: "skill"; name: string; description: string }
+  | { kind: "skill"; name: string; description: string; scope?: ChatSkill["scope"] }
   | { kind: "command"; name: string; description: string; argHint?: string }
 
 /** A pasted block held out of the textarea, represented there by `token`. */
 type PasteEntry = { id: string; n: number; token: string; text: string }
 
-const MAX_FORCED_SKILLS = 5
 const EMPTY_SKILLS: ChatSkill[] = []
 const EMPTY_COMMANDS: ChatSlashCommand[] = []
 const EMPTY_QUEUE: ChatInputQueuedMessage[] = []
@@ -117,11 +160,14 @@ const EMPTY_MENTIONS: ChatInputMentionItem[] = []
 const EMPTY_FILES: File[] = []
 const EMPTY_STRINGS: string[] = []
 const EMPTY_PASTES: PasteEntry[] = []
+const EMPTY_HISTORY: readonly { id: string; text: string }[] = []
 
 /** Long enough that a chip beats a wall of text in a one-line composer. */
 const PASTE_MAX_CHARS = 800
 const PASTE_MAX_LINES = 3
 const MENTION_DEBOUNCE_MS = 120
+/** The `$` menu is a picker, not a browser: past this it stops being scannable. */
+const MAX_SKILL_MATCHES = 50
 
 /**
  * Every control in the composer row shares one height and radius, so the
@@ -150,10 +196,205 @@ const menuListClass = "max-h-[min(50vh,28rem)] overflow-y-auto overscroll-contai
 const menuOptionClass =
   "col-span-full grid w-full grid-cols-subgrid items-start rounded-md px-1 py-2 text-left transition-colors"
 
-function parseSlashQuery(text: string): string | null {
-  if (!text.startsWith("/")) return null
-  if (text.includes("\n") || text.includes(" ")) return null
-  return text.slice(1)
+/*
+ * The `$skill` machinery below — the token shape, the money exclusion and the
+ * tiered ranking — is adapted from T3 Code
+ * (github.com/pingdotgg/t3code, MIT License).
+ */
+
+/**
+ * A `$name` that is a skill mention and not an amount of money. A name may
+ * open with a digit, so the exclusion is explicit: `$20`, `$20k`, `$100M` and
+ * `$1e6` stay prose, and every match has to carry at least one letter.
+ */
+const SKILL_TOKEN_REGEX =
+  /(^|\s)\$(?![0-9][0-9_]*(?:[kKmMbBtT]|[eE][0-9]+)?(?:\s|$))(?=[a-zA-Z0-9:_-]*[a-zA-Z])([a-zA-Z0-9][a-zA-Z0-9:_-]*)(?=\s|$)/g
+
+/** The same exclusion, for a token still being typed at the caret. */
+const MONEY_TOKEN_REGEX = /^[0-9][0-9_]*(?:[kKmMbBtT]|[eE][0-9]+)?$/
+
+/** The `$token` the caret sits in, if any. Shaped like `findMentionToken`. */
+function findSkillToken(text: string, caret: number) {
+  const position = Math.max(0, Math.min(caret, text.length))
+  const match = /(^|\s)\$([a-zA-Z0-9:_-]*)$/.exec(text.slice(0, position))
+  if (!match) return null
+  if (MONEY_TOKEN_REGEX.test(match[2])) return null
+  const start = match.index + match[1].length
+  const tail = /^[a-zA-Z0-9:_-]*/.exec(text.slice(position))?.[0] ?? ""
+  return { query: match[2], start, end: position + tail.length }
+}
+
+/** Every known skill the text names, in the order it names them, once each. */
+function skillMentionsIn(text: string, known: ReadonlySet<string>) {
+  const names: string[] = []
+  for (const match of text.matchAll(SKILL_TOKEN_REGEX)) {
+    const name = match[2]
+    if (known.has(name) && !names.includes(name)) names.push(name)
+  }
+  return names
+}
+
+/** Drops every `$name` mention of one skill, and the space that carried it. */
+function removeSkillMention(text: string, name: string) {
+  return text.replace(SKILL_TOKEN_REGEX, (match, _prefix: string, found: string) =>
+    found === name ? "" : match
+  )
+}
+
+/**
+ * How well a scattered subsequence of `query` sits in `value` — the last
+ * resort, so `mgd` still finds `migrate-database`. Lower is better: an early,
+ * tight, short match wins.
+ */
+function scoreSubsequenceMatch(value: string, query: string): number | null {
+  if (!query) return 0
+  let queryIndex = 0
+  let first = -1
+  let previous = -1
+  let gaps = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== query[queryIndex]) continue
+    if (first === -1) first = index
+    if (previous !== -1) gaps += index - previous - 1
+    previous = index
+    queryIndex += 1
+    if (queryIndex === query.length) {
+      const span = index - first + 1 - query.length
+      return first * 2 + gaps * 3 + span + Math.min(64, value.length - query.length)
+    }
+  }
+  return null
+}
+
+function lengthPenalty(value: string, query: string) {
+  return Math.min(64, Math.max(0, value.length - query.length))
+}
+
+function boundaryMatchIndex(
+  value: string,
+  query: string,
+  markers: readonly string[]
+) {
+  let best: number | null = null
+  for (const marker of markers) {
+    const index = value.indexOf(`${marker}${query}`)
+    if (index === -1) continue
+    const at = index + marker.length
+    if (best === null || at < best) best = at
+  }
+  return best
+}
+
+/**
+ * Tiered match scoring — exact, then prefix, then a word boundary, then
+ * anywhere, then a subsequence. Each tier's base is far enough above the last
+ * that no within-tier refinement can cross it, which is what keeps the order
+ * of a menu predictable. Both inputs must already be trimmed and lowercased.
+ */
+function scoreQueryMatch(input: {
+  value: string
+  query: string
+  exactBase: number
+  prefixBase?: number
+  boundaryBase?: number
+  includesBase?: number
+  fuzzyBase?: number
+  boundaryMarkers?: readonly string[]
+}): number | null {
+  const { value, query } = input
+  if (!value || !query) return null
+  if (value === query) return input.exactBase
+  if (input.prefixBase !== undefined && value.startsWith(query)) {
+    return input.prefixBase + lengthPenalty(value, query)
+  }
+  if (input.boundaryBase !== undefined) {
+    const index = boundaryMatchIndex(
+      value,
+      query,
+      input.boundaryMarkers ?? [" ", "-", "_", "/"]
+    )
+    if (index !== null) {
+      return input.boundaryBase + index * 2 + lengthPenalty(value, query)
+    }
+  }
+  if (input.includesBase !== undefined) {
+    const index = value.indexOf(query)
+    if (index !== -1) {
+      return input.includesBase + index * 2 + lengthPenalty(value, query)
+    }
+  }
+  if (input.fuzzyBase !== undefined) {
+    const fuzzy = scoreSubsequenceMatch(value, query)
+    if (fuzzy !== null) return input.fuzzyBase + fuzzy
+  }
+  return null
+}
+
+/** The name carries the pick, so it outranks the prose around it. */
+function scoreSkill(skill: ChatSkill, query: string): number | null {
+  const scores = [
+    scoreQueryMatch({
+      value: skill.name.toLowerCase(),
+      query,
+      exactBase: 0,
+      prefixBase: 2,
+      boundaryBase: 4,
+      includesBase: 6,
+      fuzzyBase: 100,
+      boundaryMarkers: ["-", "_", ":", "/"],
+    }),
+    scoreQueryMatch({
+      value: skill.description?.toLowerCase() ?? "",
+      query,
+      exactBase: 20,
+      prefixBase: 22,
+      boundaryBase: 24,
+      includesBase: 26,
+    }),
+    scoreQueryMatch({
+      value: skill.scope ?? "",
+      query,
+      exactBase: 40,
+      prefixBase: 42,
+      includesBase: 44,
+    }),
+  ].filter((score): score is number => score !== null)
+  return scores.length === 0 ? null : Math.min(...scores)
+}
+
+/** A skill the provider reserves for the agent is not a user's to start. */
+function isUserInvocable(skill: ChatSkill) {
+  return skill.userInvocable !== false
+}
+
+function rankSkills(skills: ChatSkill[], query: string, limit: number) {
+  const offered = skills.filter(isUserInvocable)
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return offered.slice(0, limit)
+  return offered
+    .flatMap((skill) => {
+      const score = scoreSkill(skill, normalized)
+      return score === null ? [] : [{ skill, score }]
+    })
+    .sort(
+      (left, right) =>
+        left.score - right.score || left.skill.name.localeCompare(right.skill.name)
+    )
+    .slice(0, limit)
+    .map((entry) => entry.skill)
+}
+
+/**
+ * The `/token` the caret sits in, if any. A `/` mid-word is a path, not a
+ * command, so the token has to open the text or follow a space.
+ */
+function findSlashToken(text: string, caret: number) {
+  const position = Math.max(0, Math.min(caret, text.length))
+  const match = /(^|\s)\/([^\s/]*)$/.exec(text.slice(0, position))
+  if (!match) return null
+  const start = match.index + match[1].length
+  const tail = /^[^\s/]*/.exec(text.slice(position))?.[0] ?? ""
+  return { query: match[2], start, end: position + tail.length }
 }
 
 /** The `@token` the caret sits in, if any. */
@@ -197,6 +438,7 @@ export function ChatInput({
   onTextChange,
   skills = EMPTY_SKILLS,
   slashCommands = EMPTY_COMMANDS,
+  commandsMustStartMessage = false,
   className,
   disabled = false,
   maxHeight = 200,
@@ -208,6 +450,7 @@ export function ChatInput({
   onQueueEdit,
   mentions,
   onStash,
+  history = EMPTY_HISTORY,
 }: ChatInputProps) {
   const [text, setText] = React.useState(defaultValue)
   const [pending, setPending] = React.useState<File[]>(EMPTY_FILES)
@@ -216,11 +459,14 @@ export function ChatInput({
   const [dragOver, setDragOver] = React.useState(false)
   const [caret, setCaret] = React.useState(defaultValue.length)
   const [slashIndex, setSlashIndex] = React.useState(0)
-  const [slashDismissedText, setSlashDismissedText] = React.useState<
-    string | null
-  >(null)
-  // Both keyed by the token they belong to, so a new token starts fresh
-  // without an effect resetting them.
+  // Every menu's selection and dismissal is keyed by the token it belongs to,
+  // so a new token starts fresh without an effect resetting anything.
+  const [slashDismissed, setSlashDismissed] = React.useState<string | null>(null)
+  const [skillSelection, setSkillSelection] = React.useState<{
+    key: string
+    index: number
+  } | null>(null)
+  const [skillDismissed, setSkillDismissed] = React.useState<string | null>(null)
   const [mentionSelection, setMentionSelection] = React.useState<{
     key: string
     index: number
@@ -232,12 +478,18 @@ export function ChatInput({
     query: string
     items: ChatInputMentionItem[]
   } | null>(null)
+  /* Where the reader is in the sent prompts, as an entry id plus the text that
+     was put in the composer — never an index, which a list that grows
+     underneath would silently move. */
+  const [historyPosition, setHistoryPosition] =
+    React.useState<PromptHistoryPosition | null>(null)
   const taRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const pasteIdRef = React.useRef(0)
   const mentionSeqRef = React.useRef(0)
   const uid = React.useId()
   const slashMenuId = `${uid}-slash`
+  const skillMenuId = `${uid}-skill`
   const mentionMenuId = `${uid}-mention`
 
   /**
@@ -266,6 +518,26 @@ export function ChatInput({
   React.useEffect(() => {
     mentionProvider.current = mentions
   }, [mentions])
+
+  /** The catalog as a set, for reading mentions out of the text. */
+  const skillNames = React.useMemo(
+    () => new Set(skills.map((skill) => skill.name)),
+    [skills]
+  )
+  const skillNamesRef = React.useRef(skillNames)
+  React.useEffect(() => {
+    skillNamesRef.current = skillNames
+  }, [skillNames])
+
+  /**
+   * What a payload reports: the mentions the text carries, after whatever the
+   * host set through `setDraft`. One list, whichever way a skill got there.
+   */
+  const collectSkills = React.useCallback((value: string) => {
+    const named = skillMentionsIn(value, skillNamesRef.current)
+    if (named.length === 0) return skillsRef.current
+    return [...new Set([...skillsRef.current, ...named])]
+  }, [])
 
   const changeText = React.useCallback((value: string) => {
     textRef.current = value
@@ -329,27 +601,43 @@ export function ChatInput({
     })
   }, [])
 
+  const historyEntries = React.useMemo(
+    () => promptHistoryEntries(history),
+    [history]
+  )
+
   const slashEnabled = skills.length > 0 || slashCommands.length > 0
-  const slashQuery = slashEnabled ? parseSlashQuery(text) : null
-  const slashVisible =
-    slashQuery !== null && slashDismissedText !== text && slashEnabled
+  const slashToken = React.useMemo(
+    () => (slashEnabled ? findSlashToken(text, caret) : null),
+    [caret, slashEnabled, text]
+  )
+  const slashQuery = slashToken?.query ?? null
+  const slashKey =
+    slashToken === null ? null : `${slashToken.start}:${slashToken.query}`
+  const slashVisible = slashToken !== null && slashDismissed !== slashKey
 
   const slashMatches = React.useMemo(() => {
     if (!slashVisible || slashQuery === null) return [] as SlashMenuItem[]
     const q = slashQuery.toLowerCase()
-    const matches = (name: string, description?: string) =>
-      name.toLowerCase().startsWith(q) ||
-      (description?.toLowerCase().includes(q) ?? false)
+    /* A provider expands its own command only when the command opens the
+       message; anywhere else it reaches the agent as literal text, so it is
+       not offered there. Skills insert a mention the agent reads from any
+       position, and so stay on the menu. */
+    const atStart = slashToken?.start === 0
     return [
-      ...skills
-        .filter((s) => matches(s.name, s.description))
-        .map<SlashMenuItem>((s) => ({
-          kind: "skill",
-          name: s.name,
-          description: s.description ?? "",
-        })),
+      ...rankSkills(skills, q, MAX_SKILL_MATCHES).map<SlashMenuItem>((s) => ({
+        kind: "skill",
+        name: s.name,
+        description: s.description ?? "",
+        scope: s.scope,
+      })),
       ...slashCommands
-        .filter((c) => matches(c.name, c.description))
+        .filter(
+          (c) =>
+            (atStart || !(c.mustStartMessage ?? commandsMustStartMessage)) &&
+            (c.name.toLowerCase().startsWith(q) ||
+              (c.description?.toLowerCase().includes(q) ?? false))
+        )
         .map<SlashMenuItem>((c) => ({
           kind: "command",
           name: c.name,
@@ -357,7 +645,14 @@ export function ChatInput({
           argHint: c.argHint,
         })),
     ]
-  }, [skills, slashCommands, slashQuery, slashVisible])
+  }, [
+    commandsMustStartMessage,
+    skills,
+    slashCommands,
+    slashQuery,
+    slashToken?.start,
+    slashVisible,
+  ])
 
   const slashOpen = slashVisible && slashMatches.length > 0
   // The index outlives the query that shrinks the list under it, so clamp on
@@ -365,6 +660,50 @@ export function ChatInput({
   const slashSelected = Math.min(
     slashIndex,
     Math.max(0, slashMatches.length - 1)
+  )
+
+  /* The `$` menu. Its own trigger rather than a corner of the slash one: a
+     skill is named inside a sentence ("rewrite this with $changelog"), which
+     is exactly where a `/` cannot go. */
+  const skillsEnabled = skills.length > 0
+  const skillToken = React.useMemo(
+    () => (skillsEnabled ? findSkillToken(text, caret) : null),
+    [caret, skillsEnabled, text]
+  )
+  const skillKey =
+    skillToken === null ? null : `${skillToken.start}:${skillToken.query}`
+  const skillMatches = React.useMemo(
+    () =>
+      skillToken === null
+        ? EMPTY_SKILLS
+        : rankSkills(skills, skillToken.query, MAX_SKILL_MATCHES),
+    [skillToken, skills]
+  )
+  const skillOpen =
+    !slashOpen &&
+    skillMatches.length > 0 &&
+    skillKey !== null &&
+    skillDismissed !== skillKey
+  const skillIndex =
+    skillSelection && skillSelection.key === skillKey
+      ? Math.min(skillSelection.index, skillMatches.length - 1)
+      : 0
+
+  const moveSkill = React.useCallback(
+    (delta: number) => {
+      if (skillKey === null || skillMatches.length === 0) return
+      const next =
+        (skillIndex + delta + skillMatches.length) % skillMatches.length
+      setSkillSelection({ key: skillKey, index: next })
+    },
+    [skillIndex, skillKey, skillMatches.length]
+  )
+
+  /* The chips are a reading of the text, not a second store beside it: the
+     mention *is* the value, so editing it away takes the chip with it. */
+  const mentionedSkills = React.useMemo(
+    () => skillMentionsIn(text, skillNames),
+    [skillNames, text]
   )
 
   const mentionsEnabled = !!mentions
@@ -406,6 +745,7 @@ export function ChatInput({
       : EMPTY_MENTIONS
   const mentionOpen =
     !slashOpen &&
+    !skillOpen &&
     mentionMatches.length > 0 &&
     mentionKey !== null &&
     mentionDismissed !== mentionKey
@@ -459,7 +799,7 @@ export function ChatInput({
     const payload: ChatInputPayload = {
       text: value,
       files: pending,
-      skills: forcedSkills,
+      skills: collectSkills(value),
     }
     if (isGenerating) {
       if (!onQueue) return
@@ -470,8 +810,8 @@ export function ChatInput({
     clearDraft()
   }, [
     clearDraft,
+    collectSkills,
     disabled,
-    forcedSkills,
     isGenerating,
     onQueue,
     onSend,
@@ -484,9 +824,34 @@ export function ChatInput({
     if (disabled || !onStash) return
     const value = expandPastes(text, pastes).trim()
     if (!value && pending.length === 0) return
-    onStash({ text: value, files: pending, skills: forcedSkills })
+    onStash({ text: value, files: pending, skills: collectSkills(value) })
     clearDraft()
-  }, [clearDraft, disabled, forcedSkills, onStash, pastes, pending, text])
+  }, [clearDraft, collectSkills, disabled, onStash, pastes, pending, text])
+
+  /**
+   * One shell-style step through the sent prompts. Returns false when the key
+   * should fall through to ordinary caret movement — which is most of the
+   * time, and is why this reads the step first and only then prevents.
+   */
+  const recallPrompt = React.useCallback(
+    (direction: "backward" | "forward") => {
+      const step = stepPromptHistory({
+        direction,
+        entries: historyEntries,
+        position: historyPosition,
+        currentPrompt: textRef.current,
+      })
+      if (!step) return false
+      setHistoryPosition(step.position)
+      changeText(step.prompt)
+      // The recalled text arrives whole, so any paste chips it replaced are gone.
+      updatePastes(EMPTY_PASTES)
+      setCaret(step.prompt.length)
+      focusCaret(step.prompt.length)
+      return true
+    },
+    [changeText, focusCaret, historyEntries, historyPosition, updatePastes]
+  )
 
   const insertAtCaret = React.useCallback(
     (value: string) => {
@@ -513,11 +878,14 @@ export function ChatInput({
     ref,
     () => ({
       focus: () => taRef.current?.focus(),
-      getDraft: () => ({
-        text: expandPastes(textRef.current, pastesRef.current),
-        files: pendingRef.current,
-        skills: skillsRef.current,
-      }),
+      getDraft: () => {
+        const value = expandPastes(textRef.current, pastesRef.current)
+        return {
+          text: value,
+          files: pendingRef.current,
+          skills: collectSkills(value),
+        }
+      },
       setDraft: (draft) => {
         if (draft.text !== undefined) {
           // The text arrives expanded, so the chips it may have carried are gone.
@@ -530,28 +898,52 @@ export function ChatInput({
       },
       insertText: insertAtCaret,
     }),
-    [changeText, insertAtCaret, updatePastes, updatePending, updateSkills]
+    [
+      changeText,
+      collectSkills,
+      insertAtCaret,
+      updatePastes,
+      updatePending,
+      updateSkills,
+    ]
+  )
+
+  /** Writes `insert` over the token the caret sits in, and lands after it. */
+  const replaceToken = React.useCallback(
+    (token: { start: number; end: number }, insert: string) => {
+      const current = textRef.current
+      const next = current.slice(0, token.start) + insert + current.slice(token.end)
+      const position = token.start + insert.length
+      changeText(next)
+      setCaret(position)
+      focusCaret(position)
+    },
+    [changeText, focusCaret]
   )
 
   const selectSlashItem = React.useCallback(
     (item: SlashMenuItem) => {
-      if (item.kind === "command") {
-        changeText(`/${item.name} `)
-        setCaret(item.name.length + 2)
-      } else {
-        updateSkills((prev) =>
-          prev.includes(item.name) || prev.length >= MAX_FORCED_SKILLS
-            ? prev
-            : [...prev, item.name]
-        )
-        changeText("")
-        setCaret(0)
-      }
+      if (!slashToken) return
+      // A skill is a mention wherever it is picked, so the two menus can never
+      // disagree about what choosing one puts in the draft.
+      replaceToken(
+        slashToken,
+        item.kind === "command" ? `/${item.name} ` : `$${item.name} `
+      )
       setSlashIndex(0)
-      setSlashDismissedText(null)
-      requestAnimationFrame(() => taRef.current?.focus())
+      setSlashDismissed(null)
     },
-    [changeText, updateSkills]
+    [replaceToken, slashToken]
+  )
+
+  const selectSkillItem = React.useCallback(
+    (skill: ChatSkill) => {
+      if (!skillToken) return
+      replaceToken(skillToken, `$${skill.name} `)
+      setSkillSelection(null)
+      setSkillDismissed(null)
+    },
+    [replaceToken, skillToken]
   )
 
   const selectMentionItem = React.useCallback(
@@ -650,14 +1042,42 @@ export function ChatInput({
       if (event.key === "Escape") {
         event.preventDefault()
         setSlashIndex(0)
-        setSlashDismissedText(text)
+        setSlashDismissed(slashKey)
         return
       }
       if (event.key === "Enter" && !event.shiftKey) {
         const item = slashMatches[slashSelected]
+        // Enter picks only while the command is the whole message — mid-text
+        // it is Tab's job, and Enter still sends what was written.
         if (item && text.trim() === `/${slashQuery ?? ""}`) {
           event.preventDefault()
           selectSlashItem(item)
+          return
+        }
+      }
+    }
+
+    if (skillOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        moveSkill(1)
+        return
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault()
+        moveSkill(-1)
+        return
+      }
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setSkillDismissed(skillKey)
+        return
+      }
+      if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
+        const item = skillMatches[skillIndex]
+        if (item) {
+          event.preventDefault()
+          selectSkillItem(item)
           return
         }
       }
@@ -689,6 +1109,33 @@ export function ChatInput({
       }
     }
 
+    /* Prompt recall comes after both menus on purpose: while one is open the
+       arrows are choosing an item, and only a plain arrow at the very start or
+       the very end of the text is a request for history. Anything the reader
+       has typed is left alone — a backward step out of a non-empty composer
+       returns nothing, so the draft is never overwritten. */
+    if (
+      historyEntries.length > 0 &&
+      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      const ta = event.currentTarget
+      const collapsed = ta.selectionStart === ta.selectionEnd
+      const backward = event.key === "ArrowUp"
+      const atEdge =
+        collapsed &&
+        (backward
+          ? ta.selectionStart === 0
+          : ta.selectionStart === ta.value.length)
+      if (atEdge && recallPrompt(backward ? "backward" : "forward")) {
+        event.preventDefault()
+        return
+      }
+    }
+
     // Enter sends (or queues), Shift+Enter inserts a newline.
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
@@ -705,7 +1152,10 @@ export function ChatInput({
   // While queueing the textarea stays live — only a plain generating turn locks it.
   const inputLocked = disabled || (isGenerating && !queueing)
   const hasAttachments =
-    pending.length > 0 || forcedSkills.length > 0 || pastes.length > 0
+    pending.length > 0 ||
+    forcedSkills.length > 0 ||
+    mentionedSkills.length > 0 ||
+    pastes.length > 0
   const resolvedPlaceholder =
     placeholder ?? (queueing ? "Queue a message… (Enter)" : "Ask anything")
 
@@ -725,6 +1175,19 @@ export function ChatInput({
             selectedIndex={slashSelected}
             onHover={setSlashIndex}
             onSelect={selectSlashItem}
+          />
+        ) : null}
+        {skillOpen ? (
+          <SkillMenu
+            menuId={skillMenuId}
+            items={skillMatches}
+            selectedIndex={skillIndex}
+            onHover={(index) =>
+              setSkillSelection(
+                skillKey === null ? null : { key: skillKey, index }
+              )
+            }
+            onSelect={selectSkillItem}
           />
         ) : null}
         {mentionOpen ? (
@@ -841,6 +1304,18 @@ export function ChatInput({
                   }
                 />
               ))}
+              {mentionedSkills
+                .filter((name) => !forcedSkills.includes(name))
+                .map((name) => (
+                  <Chip
+                    key={`mention-${name}`}
+                    icon={<Sparkles className="size-3.5 text-primary" />}
+                    label={`$${name}`}
+                    title="Named in the message — removing it edits the text"
+                    accent
+                    onRemove={() => changeText(removeSkillMention(text, name))}
+                  />
+                ))}
               {pastes.map((paste) => (
                 <Chip
                   key={paste.id}
@@ -887,17 +1362,25 @@ export function ChatInput({
             placeholder={resolvedPlaceholder}
             aria-label="Message"
             role="combobox"
-            aria-expanded={slashOpen || mentionOpen}
+            aria-expanded={slashOpen || skillOpen || mentionOpen}
             aria-autocomplete="list"
             aria-controls={
-              slashOpen ? slashMenuId : mentionOpen ? mentionMenuId : undefined
+              slashOpen
+                ? slashMenuId
+                : skillOpen
+                  ? skillMenuId
+                  : mentionOpen
+                    ? mentionMenuId
+                    : undefined
             }
             aria-activedescendant={
               slashOpen
                 ? `${slashMenuId}-opt-${slashSelected}`
-                : mentionOpen
-                  ? `${mentionMenuId}-opt-${mentionIndex}`
-                  : undefined
+                : skillOpen
+                  ? `${skillMenuId}-opt-${skillIndex}`
+                  : mentionOpen
+                    ? `${mentionMenuId}-opt-${mentionIndex}`
+                    : undefined
             }
             disabled={inputLocked}
             /* text-base on mobile keeps iOS from zooming the viewport on focus. */
@@ -1125,7 +1608,8 @@ function SlashGroup({
                   item.kind === "skill" ? "text-primary" : "text-foreground"
                 )}
               >
-                /{item.name}
+                {item.kind === "skill" ? "$" : "/"}
+                {item.name}
                 {item.kind === "command" && item.argHint ? (
                   <span className="text-[11px] text-muted-foreground">
                     {" "}
@@ -1139,6 +1623,84 @@ function SlashGroup({
             </button>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function SkillMenu({
+  menuId,
+  items,
+  selectedIndex,
+  onHover,
+  onSelect,
+}: {
+  menuId: string
+  items: ChatSkill[]
+  selectedIndex: number
+  onHover: (index: number) => void
+  onSelect: (skill: ChatSkill) => void
+}) {
+  const listRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    listRef.current
+      ?.querySelector(`[data-skill-option="${selectedIndex}"]`)
+      ?.scrollIntoView({ block: "nearest" })
+  }, [selectedIndex, items.length])
+
+  return (
+    <div
+      id={menuId}
+      data-slot="chat-input-skill-menu"
+      className={menuSurfaceClass}
+      role="listbox"
+      aria-label="Skills"
+    >
+      <div ref={listRef} className={menuListClass}>
+        <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-popover px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          <Sparkles className="size-3" />
+          Skills
+        </div>
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)] px-2 pb-1">
+          {items.map((item, index) => {
+            const selected = index === selectedIndex
+            return (
+              <button
+                key={item.name}
+                id={`${menuId}-opt-${index}`}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                data-skill-option={index}
+                data-scope={item.scope}
+                onMouseEnter={() => onHover(index)}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onSelect(item)
+                }}
+                className={cn(
+                  menuOptionClass,
+                  selected ? "bg-muted" : "bg-transparent"
+                )}
+              >
+                <span className="whitespace-nowrap text-[12px] text-primary">
+                  ${item.name}
+                </span>
+                <span className="flex min-w-0 items-baseline gap-2 pl-2">
+                  <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+                    {item.description}
+                  </span>
+                  {item.scope ? (
+                    <span className="ml-auto shrink-0 text-[10px] tracking-wide text-muted-foreground/70 uppercase">
+                      {item.scope}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

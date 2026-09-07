@@ -1,10 +1,11 @@
 import "server-only"
 
-import { spawn, type ChildProcess } from "child_process"
+import { execFile, spawn, type ChildProcess } from "child_process"
 import { createHash, type Hash } from "crypto"
 import { createInterface } from "readline"
 
 import { resolveAgentCommand } from "@/lib/agent-runtime"
+import { CursorTransportFailure } from "@/lib/cursor-transport-failure"
 import type {
   AgentStreamEvent,
   AgentTokenUsage,
@@ -58,6 +59,13 @@ export type CursorCliEvent = {
 const MAX_FIELD = 50_000
 const STDERR_TAIL_MAX = 64 * 1024
 
+/**
+ * What a tool row is closed with when the turn ends underneath it. A row left
+ * `running` spins forever and, worse, reads in the transcript as a call that
+ * is still going.
+ */
+const UNFINISHED_TOOL_OUTPUT = "Interrupted"
+
 export async function* runCursorAgent(
   options: AgentRunOptions
 ): AsyncGenerator<AgentStreamEvent> {
@@ -101,7 +109,11 @@ export async function* runCursorAgent(
     env: process.env,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
+    // Its own process group, so stopping the turn can take down whatever the
+    // agent's shell tool started rather than only the CLI in front of it.
+    detached: DETACH_CHILDREN,
   })
+  trackAgent(child)
 
   // A process that never starts emits `error`, not `exit`, and an unhandled
   // `error` on a child process is thrown at the whole server rather than at
@@ -143,6 +155,23 @@ export async function* runCursorAgent(
     // repeating the whole turn is dropped instead of printed twice.
     const emittedHash = createHash("sha256")
     let emittedLength = 0
+    // Tool calls the CLI started and never closed, so an abnormal end can say
+    // so on the rows themselves.
+    const openTools = new Map<string, string>()
+
+    /**
+     * A reply that is nothing but a transport dump is a failed turn, not an
+     * answer — so its text is withheld while it could still turn out to be
+     * one, and released the moment the reply says anything else. For an
+     * ordinary answer that is its first chunk, so nothing is delayed.
+     */
+    const reply = new CursorTransportFailure()
+    let held: string[] = []
+    function* flushHeld(): Generator<AgentStreamEvent> {
+      const pending = held
+      held = []
+      for (const text of pending) yield { type: "text", text }
+    }
 
     for await (const line of readLines(child.stdout)) {
       if (options.signal?.aborted) break
@@ -175,18 +204,36 @@ export async function* runCursorAgent(
           gotText = true
           emittedHash.update(text)
           emittedLength += text.length
-          yield { type: "text", text }
+          reply.push(text)
+          held.push(text)
+          if (!reply.candidate) yield* flushHeld()
         }
         continue
       }
 
       if (event.type === "tool_call" && event.call_id) {
-        yield mapToolEvent(event)
+        const mapped = mapToolEvent(event)
+        if (mapped.type === "tool") {
+          if (mapped.status === "running") openTools.set(mapped.id, mapped.name)
+          else openTools.delete(mapped.id)
+        }
+        yield mapped
         continue
       }
 
       if (event.type === "result") {
         gotResult = true
+        // The CLI exits 0 on a transport failure, so the turn only fails here.
+        // A stopped turn is not one of these: the dump is what a cancelled
+        // connection prints on its way out.
+        const transport = options.signal?.aborted ? undefined : reply.failure
+        if (transport) {
+          held = []
+          yield* finishOpenTools(openTools)
+          yield { type: "error", message: transport }
+          return
+        }
+        yield* flushHeld()
         if (event.is_error) {
           yield {
             type: "error",
@@ -201,6 +248,9 @@ export async function* runCursorAgent(
           emittedLength += event.result.length
           yield { type: "text", text: event.result }
         }
+        // The CLI closed the turn without closing a row it had opened; say so
+        // on the row before `done`, which is where a consumer stops reading.
+        yield* finishOpenTools(openTools)
         const usage = readUsage(event)
         yield {
           type: "done",
@@ -215,9 +265,13 @@ export async function* runCursorAgent(
 
     const exitCode = await exited
 
-    if (options.signal?.aborted) return
+    if (options.signal?.aborted) {
+      yield* finishOpenTools(openTools)
+      return
+    }
 
     if (failure.error) {
+      yield* finishOpenTools(openTools)
       yield {
         type: "error",
         message: describeSpawnFailure(failure.error, cmd, prefix),
@@ -225,12 +279,29 @@ export async function* runCursorAgent(
       return
     }
 
+    // The stream ended without a closing `result`, so the decision the result
+    // branch would have made is made here instead.
+    const transport = reply.failure
+    if (transport) {
+      held = []
+      yield* finishOpenTools(openTools)
+      yield { type: "error", message: transport }
+      return
+    }
+    yield* flushHeld()
+
     if (exitCode !== 0 && !gotResult) {
       const err =
         cleanStderr(stderrTail) ||
         `agent exited with code ${exitCode}`
+      yield* finishOpenTools(openTools)
       yield { type: "error", message: err.slice(0, MAX_FIELD) }
+      return
     }
+
+    // A clean exit that still left rows spinning — the stream stopped between
+    // a tool's start and its completion.
+    yield* finishOpenTools(openTools)
   } finally {
     options.signal?.removeEventListener("abort", onAbort)
     killAgent(child)
@@ -284,7 +355,11 @@ export async function listCursorModels(): Promise<
     env: process.env,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
+    // Same group as the run path, so the timeout below kills by group too and
+    // never has to guess whether this child leads one.
+    detached: DETACH_CHILDREN,
   })
+  trackAgent(child)
 
   let stdout = ""
   let stderr = ""
@@ -583,11 +658,109 @@ function capLargeToolFields(value: unknown): unknown {
   return record
 }
 
-function killAgent(child: ChildProcess) {
-  if (child.killed || child.exitCode != null) return
-  try {
-    child.kill()
-  } catch {
-    /* already gone */
+/**
+ * Every tool row the turn started and never closed, as one terminal event
+ * each. `lib/message-stream` upserts tool parts by id, so these refine the
+ * rows already on screen instead of adding new ones.
+ */
+function* finishOpenTools(
+  open: Map<string, string>
+): Generator<AgentStreamEvent> {
+  for (const [id, name] of open) {
+    yield {
+      type: "tool",
+      id,
+      name,
+      status: "error",
+      output: UNFINISHED_TOOL_OUTPUT,
+    }
   }
+  open.clear()
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             process teardown                               */
+/* -------------------------------------------------------------------------- */
+
+// Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.
+
+/**
+ * `child.kill()` reaches the CLI and nothing else, so a `npm run dev`, a
+ * `pytest` or a `tail -f` the agent's shell tool started keeps running — and
+ * keeps holding the port — long after the turn was stopped. Spawning
+ * `detached` puts the CLI at the head of its own process group, and signalling
+ * the *negative* pid then reaches everything in it.
+ *
+ * Windows has no process groups to signal; `taskkill /T /F` walks the tree
+ * instead.
+ */
+const DETACH_CHILDREN = process.platform !== "win32"
+
+/** How long the group gets to unwind on SIGTERM before SIGKILL. */
+const FORCE_KILL_MS = 1000
+
+/** One escalation per child: a second kill must not restart the clock. */
+const killing = new WeakSet<ChildProcess>()
+
+function killAgent(child: ChildProcess) {
+  if (child.exitCode != null || child.signalCode != null) return
+  if (killing.has(child)) return
+  killing.add(child)
+
+  if (!DETACH_CHILDREN) {
+    execFile("taskkill", ["/T", "/F", "/PID", String(child.pid)], () => {
+      // Best effort: the tree may already be gone, and there is nothing left
+      // to report it to.
+    })
+    return
+  }
+
+  signalGroup(child, "SIGTERM")
+  const timer = setTimeout(() => signalGroup(child, "SIGKILL"), FORCE_KILL_MS)
+  timer.unref?.()
+  child.once("close", () => clearTimeout(timer))
+}
+
+function signalGroup(child: ChildProcess, signal: NodeJS.Signals) {
+  const pid = child.pid
+  if (pid === undefined) return
+  if (child.exitCode != null || child.signalCode != null) return
+  try {
+    process.kill(-pid, signal)
+  } catch {
+    // The group is already gone, or this child never got one (a spawn that
+    // failed has no pid to lead one). Fall back to the direct child.
+    try {
+      child.kill(signal)
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/**
+ * A detached child is in its own process group, so the Ctrl-C that reaches
+ * this process does not reach it. Nothing else would then ever kill it, so the
+ * server's own exit sweeps whatever it still has running.
+ */
+const liveAgents = new Set<ChildProcess>()
+let exitHookInstalled = false
+
+function trackAgent(child: ChildProcess) {
+  liveAgents.add(child)
+  child.once("close", () => liveAgents.delete(child))
+  if (exitHookInstalled) return
+  exitHookInstalled = true
+  process.once("exit", () => {
+    // An `exit` handler may only do synchronous work; `process.kill` is.
+    for (const agent of liveAgents) {
+      if (agent.pid === undefined) continue
+      try {
+        process.kill(DETACH_CHILDREN ? -agent.pid : agent.pid, "SIGKILL")
+      } catch {
+        /* already gone */
+      }
+    }
+    liveAgents.clear()
+  })
 }

@@ -23,7 +23,18 @@ import {
 } from "@/components/ui/message"
 import type { FileActionItem } from "@/components/ui/change-summary"
 
+// Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.
+/** How close to the end still counts as "at the bottom" for the jump button. */
 const BOTTOM_SCROLL_THRESHOLD_PX = 48
+/**
+ * The band inside which following re-arms itself. Strict on purpose, and
+ * deliberately tighter than the button's own threshold: a generous "near the
+ * end" test re-arms live-follow while the reader is a paragraph up reading
+ * history, and the next streamed chunk yanks them back down. A few pixels of
+ * slack — rather than an exact `distance <= 0` — is still needed, because the
+ * content under the viewport is growing while the test runs.
+ */
+const FOLLOW_REARM_THRESHOLD_PX = 40
 const EMPTY_PATTERNS: PatternHandler[] = []
 const OFFSCREEN_ITEM_STYLE: React.CSSProperties = {
   contentVisibility: "auto",
@@ -149,6 +160,11 @@ function useStableFileActions(actions?: FileActionItem[]) {
   return sameFileActions(held, actions) ? held : actions
 }
 
+/** Pixels between the bottom of the visible area and the end of the content. */
+function distanceFromEnd(node: HTMLElement) {
+  return node.scrollHeight - node.scrollTop - node.clientHeight
+}
+
 export function useChatAutoScroll(
   messages: ReadonlyArray<unknown>,
   conversationKey?: string
@@ -171,9 +187,7 @@ export function useChatAutoScroll(
       bottomFrameRef.current = 0
       const node = scrollRef.current
       if (!node) return
-      const near =
-        node.scrollHeight - node.scrollTop - node.clientHeight <=
-        BOTTOM_SCROLL_THRESHOLD_PX
+      const near = distanceFromEnd(node) <= BOTTOM_SCROLL_THRESHOLD_PX
       if (near === atBottomRef.current) return
       atBottomRef.current = near
       setAtBottom(near)
@@ -183,10 +197,10 @@ export function useChatAutoScroll(
   const handleMessageScroll = React.useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    const nearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight <=
-      BOTTOM_SCROLL_THRESHOLD_PX
-    if (nearBottom) {
+    /* Two different questions, two different bands. Whether the jump button
+       shows is a matter of taste; whether the next token drags the reader down
+       is not, so following only comes back on inside the tighter one. */
+    if (distanceFromEnd(el) <= FOLLOW_REARM_THRESHOLD_PX) {
       autoScrollRef.current = true
     } else if (Date.now() > programmaticScrollUntilRef.current) {
       autoScrollRef.current = false
@@ -258,8 +272,7 @@ export function useChatAutoScroll(
       frameRef.current = 0
       const node = scrollRef.current
       if (!node) return
-      const distance = node.scrollHeight - node.scrollTop - node.clientHeight
-      if (distance <= 1) return
+      if (distanceFromEnd(node) <= 1) return
       programmaticScrollUntilRef.current = Date.now() + 500
       node.scrollTo({
         top: node.scrollHeight,
@@ -291,8 +304,7 @@ export function useChatAutoScroll(
       if (!autoScrollRef.current) return
       const node = scrollRef.current
       if (!node) return
-      const distance = node.scrollHeight - node.scrollTop - node.clientHeight
-      if (distance <= 1) return
+      if (distanceFromEnd(node) <= 1) return
       programmaticScrollUntilRef.current = Date.now() + 500
       node.scrollTo({ top: node.scrollHeight, behavior: "auto" })
     })

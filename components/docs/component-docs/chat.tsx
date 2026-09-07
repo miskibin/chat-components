@@ -7,9 +7,11 @@ import { ChatInputStyledExample } from "@/components/examples/chat-input-styled-
 import { ChatInputToolsExample } from "@/components/examples/chat-input-tools-example"
 import { ChatInputGeneratingExample } from "@/components/examples/chat-input-generating-example"
 import { ChatInputHandleExample } from "@/components/examples/chat-input-handle-example"
+import { ChatInputHistoryExample } from "@/components/examples/chat-input-history-example"
 import { ChatInputMentionsExample } from "@/components/examples/chat-input-mentions-example"
 import { ChatInputPasteExample } from "@/components/examples/chat-input-paste-example"
 import { ChatInputQueueExample } from "@/components/examples/chat-input-queue-example"
+import { ChatInputSkillsExample } from "@/components/examples/chat-input-skills-example"
 import { ChatNavbarExample } from "@/components/examples/chat-navbar-example"
 import { ChatNavbarStyledExample } from "@/components/examples/chat-navbar-styled-example"
 import { PromptSuggestionsExample } from "@/components/examples/prompt-suggestions-example"
@@ -165,7 +167,7 @@ export default function Page() {
   "chat-input": {
     title: "Chat Input",
     description:
-      "Composer with auto-growing textarea, attachments (button, paste, drag-and-drop), a slash menu for skills and commands, @-mentions, a queue for messages typed mid-turn, and Enter-to-send.",
+      "Composer with auto-growing textarea, attachments (button, paste, drag-and-drop), $-skills and a slash menu for commands, @-mentions, a queue for messages typed mid-turn, and Enter-to-send.",
     registry: "chat-input",
     registryDependencies: ["file-icon"],
     preview: { name: "chat-input-example", node: <ChatInputExample /> },
@@ -178,7 +180,10 @@ export function Composer() {
     <ChatInput
       placeholder="Ask anything"
       skills={[{ name: "summarize", description: "Condense long text" }]}
-      slashCommands={[{ name: "help", description: "Show commands" }]}
+      slashCommands={[
+        { name: "help", description: "Show commands" },
+        { name: "compact", description: "Summarize so far", mustStartMessage: true },
+      ]}
       onSend={({ text, files, skills }) => {
         // send to your API
       }}
@@ -310,6 +315,22 @@ export function Composer() {
             ),
           },
           {
+            name: "history",
+            type: "readonly { id: string; text: string }[]",
+            default: "[]",
+            description: (
+              <>
+                Prompts already sent in this conversation, oldest first — your
+                own user messages, so the composer never has to know what a
+                transcript is. With it, ArrowUp at the start of an untouched
+                composer recalls the previous prompt and ArrowDown walks back
+                down; one step past the newest empties it again. Blank sends are
+                skipped and consecutive duplicates collapse. Keep the array
+                stable.
+              </>
+            ),
+          },
+          {
             name: "tools",
             type: "React.ReactNode",
             description:
@@ -321,9 +342,15 @@ export function Composer() {
             default: "[]",
             description: (
               <>
-                Entries in the <DocsCode>/</DocsCode> menu. Picking one adds a
-                chip and reports it back in{" "}
-                <DocsCode>payload.skills</DocsCode> (max 5).
+                What <DocsCode>$</DocsCode> offers, ranked by name first and
+                then by description, and what the <DocsCode>/</DocsCode> menu
+                lists above the commands. Picking one writes a{" "}
+                <DocsCode>$name</DocsCode> mention into the draft and shows it
+                as a chip; the mention is the value, so deleting either takes
+                the other with it. Every mention that names one of these comes
+                back in <DocsCode>payload.skills</DocsCode>. A skill marked{" "}
+                <DocsCode>userInvocable: false</DocsCode> is left out of both
+                menus.
               </>
             ),
           },
@@ -333,8 +360,23 @@ export function Composer() {
             default: "[]",
             description: (
               <>
-                Commands in the same menu. Picking one writes{" "}
-                <DocsCode>/name</DocsCode> into the textarea.
+                Commands in the <DocsCode>/</DocsCode> menu, which opens on a{" "}
+                <DocsCode>/</DocsCode> that starts the text or follows a space.
+                Picking one writes <DocsCode>/name</DocsCode> over that token.
+              </>
+            ),
+          },
+          {
+            name: "commandsMustStartMessage",
+            type: "boolean",
+            default: "false",
+            description: (
+              <>
+                Default for <DocsCode>ChatSlashCommand.mustStartMessage</DocsCode>
+                : a command an agent expands only at the head of a message —
+                anywhere else it arrives as literal text — is offered only
+                while the <DocsCode>/</DocsCode> sits at offset 0. Skills and
+                the host&rsquo;s own commands stay on the menu everywhere.
               </>
             ),
           },
@@ -370,17 +412,29 @@ export function Composer() {
           {
             name: "ChatInputPayload",
             type: "{ text: string; files: File[]; skills: string[] }",
-            description: "What onSend receives.",
+            description: (
+              <>
+                What onSend receives. <DocsCode>skills</DocsCode> is the list of{" "}
+                <DocsCode>$</DocsCode> mentions the text carries, which stay in{" "}
+                <DocsCode>text</DocsCode> as well.
+              </>
+            ),
           },
           {
             name: "ChatSkill",
-            type: "{ name: string; description?: string }",
-            description: "Slash-menu skill.",
+            type: '{ name: string; description?: string; scope?: "project" | "user"; userInvocable?: boolean }',
+            description: (
+              <>
+                One row of the <DocsCode>$</DocsCode> menu.{" "}
+                <DocsCode>scope</DocsCode> is shown beside the description, so
+                a project skill and a personal one of the same name read apart.
+              </>
+            ),
           },
           {
             name: "ChatSlashCommand",
-            type: "{ name: string; description?: string; argHint?: string }",
-            description: "Slash-menu command.",
+            type: "{ name: string; description?: string; argHint?: string; mustStartMessage?: boolean }",
+            description: "One row of the / menu.",
           },
           {
             name: "ChatInputHandle",
@@ -421,11 +475,32 @@ export function Composer() {
       "chat-input-chips",
       "chat-input-chip",
       "chat-input-slash-menu",
+      "chat-input-slash-group",
+      "chat-input-skill-menu",
       "chat-input-mention-menu",
       "chat-input-queue",
       "chat-input-queue-item",
     ],
     examples: [
+      {
+        title: "Recall what was already sent",
+        description: (
+          <>
+            Press ArrowUp in the empty composer to walk back through the
+            conversation&rsquo;s own prompts, ArrowDown to come forward again,
+            and once more past the newest to clear it. It is the shell&rsquo;s
+            behaviour, including <DocsCode>HISTCONTROL=ignoredups</DocsCode>:
+            re-sending the same prompt twice leaves one entry. Type anything
+            first and the arrows go back to moving the caret, so a draft can
+            never be lost to a stray key.
+          </>
+        ),
+        example: {
+          name: "chat-input-history-example",
+          node: <ChatInputHistoryExample />,
+          align: "stretch" as const,
+        },
+      },
       {
         title: "Stop a streaming answer",
         description: (
@@ -468,6 +543,29 @@ export function Composer() {
         example: {
           name: "chat-input-mentions-example",
           node: <ChatInputMentionsExample />,
+        },
+      },
+      {
+        title: "Skills on $, commands on /",
+        description: (
+          <>
+            <DocsCode>$</DocsCode> names a skill inside the sentence you are
+            already writing, ranked by name and then by description, so{" "}
+            <DocsCode>$mgd</DocsCode> still finds{" "}
+            <DocsCode>migrate-database</DocsCode>. The pick writes{" "}
+            <DocsCode>$name</DocsCode> into the draft and the chip above the
+            textarea is a reading of that text, not a second copy of it —
+            delete either and both go. Prices are left alone:{" "}
+            <DocsCode>$20</DocsCode>, <DocsCode>$20k</DocsCode> and{" "}
+            <DocsCode>$1e6</DocsCode> open nothing. The two{" "}
+            <DocsCode>mustStartMessage</DocsCode> commands here leave the{" "}
+            <DocsCode>/</DocsCode> menu as soon as the slash is not the first
+            character.
+          </>
+        ),
+        example: {
+          name: "chat-input-skills-example",
+          node: <ChatInputSkillsExample />,
         },
       },
       {
@@ -551,7 +649,11 @@ export function Composer() {
           <>
             Enter sends and Shift+Enter inserts a newline. While the slash menu
             is open, arrows move the selection, Tab or Enter picks, and Escape
-            dismisses it for the current text. IME composition is never
+            dismisses it for the current text. With{" "}
+            <DocsCode>history</DocsCode>, a plain ArrowUp at the very start of
+            the text — or ArrowDown at the very end — steps through what was
+            already sent; both menus take the arrows first, and a composer the
+            reader has typed into is never overwritten. IME composition is never
             interrupted.
           </>
         ),

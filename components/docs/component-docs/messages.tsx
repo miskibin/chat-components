@@ -8,12 +8,17 @@ import { AskQuestionStyledExample } from "@/components/examples/ask-question-sty
 import { ChangeSummaryActionsExample } from "@/components/examples/change-summary-actions-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
 import { ChangeSummaryStyledExample } from "@/components/examples/change-summary-styled-example"
+import { DiffViewCommentsExample } from "@/components/examples/diff-view-comments-example"
+import { DiffViewExample } from "@/components/examples/diff-view-example"
+import { DiffViewLargeExample } from "@/components/examples/diff-view-large-example"
 import { FileIconExample } from "@/components/examples/file-icon-example"
 import { FilePreviewActionsExample } from "@/components/examples/file-preview-actions-example"
 import { FilePreviewExample } from "@/components/examples/file-preview-example"
 import { FilePreviewFocusExample } from "@/components/examples/file-preview-focus-example"
 import { FilePreviewImageExample } from "@/components/examples/file-preview-image-example"
 import { FilePreviewSplitExample } from "@/components/examples/file-preview-split-example"
+import { FileTreeExample } from "@/components/examples/file-tree-example"
+import { FileTreeLazyExample } from "@/components/examples/file-tree-lazy-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { GenerationStatusStyledExample } from "@/components/examples/generation-status-styled-example"
 import { MessageActionsExample } from "@/components/examples/message-actions-example"
@@ -26,10 +31,13 @@ import { MessageListEmptyExample } from "@/components/examples/message-list-empt
 import { MessageListExample } from "@/components/examples/message-list-example"
 import { MessageListJumpExample } from "@/components/examples/message-list-jump-example"
 import { MessageListStreamingExample } from "@/components/examples/message-list-streaming-example"
+import { MessageMarkdownAlertsExample } from "@/components/examples/message-markdown-alerts-example"
+import { MessageMarkdownCopyExample } from "@/components/examples/message-markdown-copy-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
 import { MessageMarkdownImagesExample } from "@/components/examples/message-markdown-images-example"
 import { MessageMarkdownLinksExample } from "@/components/examples/message-markdown-links-example"
 import { MessageMarkdownMermaidExample } from "@/components/examples/message-markdown-mermaid-example"
+import { MessageMarkdownPathsExample } from "@/components/examples/message-markdown-paths-example"
 import { MessageMarkdownStyledExample } from "@/components/examples/message-markdown-styled-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
 import { MessagePartsOutputExample } from "@/components/examples/message-parts-output-example"
@@ -42,7 +50,9 @@ import { MessageToolImageExample } from "@/components/examples/message-tool-imag
 import { MessageToolsCollapsedExample } from "@/components/examples/message-tools-collapsed-example"
 import { MessageToolsCommandsExample } from "@/components/examples/message-tools-commands-example"
 import { MessageToolsStatusExample } from "@/components/examples/message-tools-status-example"
+import { MessageToolsSummaryExample } from "@/components/examples/message-tools-summary-example"
 import { MessageToolsTodoExample } from "@/components/examples/message-tools-todo-example"
+import { RenderErrorBoundaryExample } from "@/components/examples/render-error-boundary-example"
 
 export const messageDocs = {
   message: {
@@ -723,6 +733,23 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
           </>
         ),
       },
+      {
+        title: "When following comes back on",
+        description: (
+          <>
+            Two different bands, because they answer two different questions.
+            The jump button appears within 48px of the end — a matter of taste.
+            Following only re-arms inside a stricter 40px band, measured against
+            the real distance to the end: a generous &ldquo;near the
+            bottom&rdquo; test re-arms while the reader is a paragraph up
+            reading history, and the next streamed chunk yanks them back down.
+            The band is not zero because the content under the viewport is still
+            growing while the test runs. A <DocsCode>ResizeObserver</DocsCode>{" "}
+            on the content box re-pins a follower when late height arrives — a
+            diagram mounting, Shiki replacing a plain block, an image loading.
+          </>
+        ),
+      },
     ],
     examples: [
       {
@@ -1130,6 +1157,7 @@ export function Answer() {
       "message-code",
       "message-code-header",
       "message-code-copy",
+      "message-code-fallback",
       "message-artifact",
       "message-artifact-trigger",
       "message-artifact-content",
@@ -1265,6 +1293,29 @@ export function Answer() {
           node: <MessageToolsCollapsedExample />,
         },
       },
+      {
+        title: "The folded row says what happened",
+        description: (
+          <>
+            A folded stack summarizes the work rather than counting the calls:
+            each row is classified as a read, an edit, a command, a search, a
+            browser step or a plan update, edits are deduped by file path, and
+            the sentence comes out as &ldquo;Read 2 files, changed 1 file, and
+            ran 2 commands&rdquo; — in the order the turn first did each of
+            them, and one file rather than the two edits it took. The glyph
+            follows the same classification —
+            one kind of work gets its own, a mixed group gets the generic one —
+            and <DocsCode>data-kind</DocsCode> carries it for styling.{" "}
+            <DocsCode>summarizeToolGroup</DocsCode> and{" "}
+            <DocsCode>toolGroupAction</DocsCode> are exported for a custom
+            trigger.
+          </>
+        ),
+        example: {
+          name: "message-tools-summary-example",
+          node: <MessageToolsSummaryExample />,
+        },
+      },
     ],
     notes: [
       {
@@ -1277,7 +1328,62 @@ export function Answer() {
             tokenized one block at a time rather than one line at a time — a
             500-line file is a single Shiki pass, not 500 — and both cap the
             preview at 300 lines behind a Show all button. Unknown languages fall
-            back to plain text.
+            back to plain text. Shiki runs on its Oniguruma WASM engine, which is
+            the default for <DocsCode>codeToHtml</DocsCode> and{" "}
+            <DocsCode>codeToTokens</DocsCode> and the one to stay on: the
+            JavaScript regex engine backtracks catastrophically on a few real
+            grammars and takes the tokenizing thread with it.
+          </>
+        ),
+      },
+      {
+        title: "What the highlight cache holds",
+        description: (
+          <>
+            Both caches are bounded by entry count <em>and</em> by bytes (500
+            entries, 50MB, in <DocsCode>lib/lru-cache.ts</DocsCode>): 200
+            three-line snippets are nothing, and 200 renders of a
+            four-thousand-line file is a hundred megabytes held for a transcript
+            nobody is reading. Keys are{" "}
+            <DocsCode>fnv1a32(code):length:lang:theme</DocsCode> rather than the
+            source itself, so a lookup compares two short strings. Nothing is
+            written while a block is still streaming — pass{" "}
+            <DocsCode>streaming</DocsCode> to <DocsCode>MessageCode</DocsCode>{" "}
+            (tool rows set it from their own status) and the highlighter still
+            runs, it just does not fill the cache with a hundred throwaway
+            versions of a fence that is still growing.
+          </>
+        ),
+      },
+      {
+        title: "One block cannot take down the turn",
+        description: (
+          <>
+            Every code block and every mermaid diagram renders inside a{" "}
+            <DocsCode>RenderErrorBoundary</DocsCode> keyed on its own source. A
+            half-streamed diagram or a fence the highlighter chokes on falls
+            back to a plain <DocsCode>&lt;pre&gt;</DocsCode>, and the answer
+            around it keeps its render — instead of the throw unmounting the
+            whole message.
+          </>
+        ),
+      },
+      {
+        title: "Naming a command",
+        description: (
+          <>
+            The headline names the program a shell tool actually ran, through{" "}
+            <DocsCode>commandProgramName</DocsCode> in{" "}
+            <DocsCode>lib/command-label.ts</DocsCode> — a real tokenizer that
+            understands quoting, <DocsCode>$(…)</DocsCode>, heredocs,
+            redirections and comments, and walks past the wrappers that are
+            setup rather than work. So{" "}
+            <DocsCode>
+              sudo -u ci env CI=1 bash -lc &apos;npm test | tee log&apos;
+            </DocsCode>{" "}
+            reads as &ldquo;Ran npm test&rdquo;, and{" "}
+            <DocsCode>if [ -f x ]; then …</DocsCode> reads as &ldquo;Ran
+            command&rdquo; rather than &ldquo;Ran if&rdquo;.
           </>
         ),
       },
@@ -1724,6 +1830,20 @@ export function Answer({ text }: { text: string }) {
               </>
             ),
           },
+          {
+            name: "copyAsMarkdown",
+            type: "boolean",
+            default: "true",
+            description: (
+              <>
+                Copying a selection out of the answer writes markdown to the
+                clipboard instead of the flattened text the browser would put
+                there, with a sanitized copy of the rendered HTML beside it for
+                rich-paste targets. Set it false to hand the clipboard back to
+                the browser.
+              </>
+            ),
+          },
         ],
       },
     ],
@@ -1731,6 +1851,7 @@ export function Answer({ text }: { text: string }) {
       "message-markdown",
       "message-file-ref",
       "message-markdown-image",
+      "message-markdown-block-fallback",
       "file-context-menu",
       "file-icon",
     ],
@@ -1753,16 +1874,46 @@ export function Answer({ text }: { text: string }) {
             renderers. Everything else renders as ordinary inline code.
           </>
         ),
-        code: {
-          lang: "tsx",
-          code: `<MessageMarkdown onFileClick={(path, line) => setPreviewFile({ path, focusLine: line })}>
-  {"Renamed \`lib/store/reducer.ts\`; the call site is \`app/page.tsx:120\`."}
-</MessageMarkdown>
-
-// Restyle them from the outside:
-<MessageMarkdown className="[&_[data-slot=message-file-ref]]:border-primary/40">
-  {text}
-</MessageMarkdown>`,
+        example: {
+          name: "message-markdown-paths-example",
+          node: <MessageMarkdownPathsExample />,
+        },
+      },
+      {
+        title: "GitHub alerts",
+        description: (
+          <>
+            A blockquote whose first line is <DocsCode>[!NOTE]</DocsCode> — or
+            TIP, IMPORTANT, WARNING, CAUTION — renders as a titled callout.
+            They are GitHub&rsquo;s own extension rather than GFM, so a small
+            remark plugin lifts the marker onto the quote as{" "}
+            <DocsCode>data-alert</DocsCode> and{" "}
+            <DocsCode>message-markdown.css</DocsCode> styles it. GitHub&rsquo;s
+            own rule applies: the marker has to be alone on its line, so{" "}
+            <DocsCode>&gt; [!NOTE] aside</DocsCode> stays an ordinary quote.
+          </>
+        ),
+        example: {
+          name: "message-markdown-alerts-example",
+          node: <MessageMarkdownAlertsExample />,
+        },
+      },
+      {
+        title: "Copy keeps the markdown",
+        description: (
+          <>
+            Highlighting part of an answer and copying it writes markdown, not
+            the flattened text a browser hands over: headings, emphasis, links,
+            lists, tables and fences all survive, a file chip copies as the code
+            span it renders, and a selection that never leaves a code block
+            copies as plain code rather than coming back fenced. Turn it off
+            with <DocsCode>copyAsMarkdown={"{false}"}</DocsCode>.
+          </>
+        ),
+        example: {
+          name: "message-markdown-copy-example",
+          node: <MessageMarkdownCopyExample />,
+          align: "stretch" as const,
         },
       },
       {
@@ -1851,6 +2002,124 @@ export function Answer({ text }: { text: string }) {
             Next.js needs the packages in{" "}
             <DocsCode>transpilePackages</DocsCode>. Both snippets are on the{" "}
             <a href="/docs/installation">Installation</a> page.
+          </>
+        ),
+      },
+      {
+        title: "What counts as a path",
+        description: (
+          <>
+            <DocsCode>lib/markdown-file-paths.ts</DocsCode> owns the rules, for
+            inline code (<DocsCode>inlineCodeFileReference</DocsCode>) and for
+            link destinations (<DocsCode>parseMarkdownFileLink</DocsCode>)
+            alike. Windows absolute paths keep their backslashes and everything
+            else is normalized; a <DocsCode>:line[:col]</DocsCode> suffix admits
+            any extension, which is what makes{" "}
+            <DocsCode>main.pl:42</DocsCode> a file and{" "}
+            <DocsCode>example.pl</DocsCode> a hostname; a POSIX root has to look
+            like a filesystem rather than a route, so{" "}
+            <DocsCode>/etc/hosts</DocsCode> is a file and{" "}
+            <DocsCode>/chat/settings</DocsCode> is not; extension-less names
+            like <DocsCode>Makefile</DocsCode> and{" "}
+            <DocsCode>CODEOWNERS</DocsCode> are enumerated; and{" "}
+            <DocsCode>file://</DocsCode> hrefs, UNC shares included, are read as
+            host paths. <DocsCode>splitFilePathPosition</DocsCode> is what hands
+            the line to a file panel&rsquo;s <DocsCode>focusLine</DocsCode>.
+          </>
+        ),
+      },
+      {
+        title: "One block cannot take down the answer",
+        description: (
+          <>
+            Each markdown block renders inside a{" "}
+            <DocsCode>RenderErrorBoundary</DocsCode> keyed on its own source, so
+            a malformed fence, an unbalanced KaTeX brace or a half-streamed
+            mermaid diagram falls back to a plain{" "}
+            <DocsCode>&lt;pre&gt;</DocsCode> of that block instead of throwing
+            the whole message away.
+          </>
+        ),
+      },
+      {
+        title: "Tables already carry their own copy menu",
+        description: (
+          <>
+            Streamdown renders copy and download controls under every table
+            (Markdown, CSV and TSV) through its <DocsCode>controls</DocsCode>{" "}
+            config, which is on by default — so there is no second menu here.
+            For a table you rendered yourself,{" "}
+            <DocsCode>serializeTableElementToMarkdown</DocsCode> and{" "}
+            <DocsCode>serializeTableElementToCsv</DocsCode> in{" "}
+            <DocsCode>lib/markdown-clipboard.ts</DocsCode> are the same
+            serializers the selection copy uses.
+          </>
+        ),
+      },
+    ],
+  },
+
+  "render-error-boundary": {
+    title: "Render Error Boundary",
+    description:
+      "One block, isolated: a render that throws falls back to plain text instead of unmounting the message around it, and retries when its inputs change.",
+    registry: "render-error-boundary",
+    preview: {
+      name: "render-error-boundary-example",
+      node: <RenderErrorBoundaryExample />,
+    },
+    usage: `import { RenderErrorBoundary } from "@/components/ui/render-error-boundary"
+
+export function Fence({ code }: { code: string }) {
+  return (
+    <RenderErrorBoundary resetKeys={[code]} fallback={<pre>{code}</pre>}>
+      <HighlightedCode code={code} />
+    </RenderErrorBoundary>
+  )
+}`,
+    props: [
+      {
+        caption: "RenderErrorBoundary",
+        rows: [
+          {
+            name: "children",
+            type: "React.ReactNode",
+            required: true,
+            description: "The render to isolate.",
+          },
+          {
+            name: "fallback",
+            type: "React.ReactNode",
+            required: true,
+            description:
+              "What replaces the children once one of them throws. Keep it dumb — a <pre> of the source the failed render was given.",
+          },
+          {
+            name: "resetKeys",
+            type: "readonly unknown[]",
+            description: (
+              <>
+                Inputs the failed render depended on. When any of them changes
+                by <DocsCode>Object.is</DocsCode> the boundary tries again,
+                without remounting healthy siblings or losing the scroll
+                position of the row it sits in.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    notes: [
+      {
+        title: "Where the message family already uses it",
+        description: (
+          <>
+            <DocsCode>MessageMarkdown</DocsCode> wraps every block,{" "}
+            <DocsCode>MessageCode</DocsCode> wraps its highlighted body and its
+            mermaid branch. All of them key the boundary on the source, so the
+            next streamed chunk is a fresh attempt rather than a permanent
+            fallback. It catches render errors only — an async failure inside a
+            diagram library is still that library&rsquo;s to report.
           </>
         ),
       },
@@ -2091,9 +2360,15 @@ export function AfterTurn() {
   "file-preview": {
     title: "File Preview",
     description:
-      "The right-hand panel Cursor opens when you click an edited file: the agent's diff, or the whole file with the edited lines marked and scrolled into view.",
+      "The right-hand panel Cursor opens when you click an edited file: the agent's diff, or the whole file with the edited lines marked and scrolled into view — both rendered by Diff View, so a megabyte costs the same as a page.",
     registry: "file-preview",
-    registryDependencies: ["message-parts", "file-icon", "change-summary", "dropdown-menu"],
+    registryDependencies: [
+      "message-parts",
+      "file-icon",
+      "change-summary",
+      "diff-view",
+      "dropdown-menu",
+    ],
     preview: {
       name: "file-preview-example",
       node: <FilePreviewExample />,
@@ -2214,6 +2489,19 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
               "Renders the close button. While it is set, Escape closes the panel too.",
           },
           {
+            name: "onLineComment",
+            type: "(range: DiffLineCommentRange) => void",
+            description: (
+              <>
+                Line selection in both bodies, forwarded to{" "}
+                <Link href="/docs/components/diff-view">Diff View</Link>: the
+                reader picks a range and the panel hands back the lines with
+                their text, for a host that quotes them into a prompt or a
+                review.
+              </>
+            ),
+          },
+          {
             name: "classNames",
             type: "{ root?, header?, body? }",
             description: "Per-part overrides, merged after the defaults.",
@@ -2307,8 +2595,7 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
                 1-based line of the File view to centre and mark — where a{" "}
                 <DocsCode>file.ts:42</DocsCode> reference pointed. Outranks the
                 first changed line, and opens the File view as soon as there is
-                content — including when the content lands after the path. A
-                line past the render cap reveals the whole file.
+                content — including when the content lands after the path.
               </>
             ),
           },
@@ -2372,11 +2659,10 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
       "file-preview-close",
       "file-preview-body",
       "file-preview-image",
-      "file-preview-line",
-      "file-preview-side",
-      "file-preview-gutter",
       "file-preview-note",
-      "file-preview-show-all",
+      "diff-view",
+      "diff-view-surface",
+      "diff-view-line-comment",
       "file-icon",
     ],
     examples: [
@@ -2413,15 +2699,15 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
         },
       },
       {
-        title: "A line to land on, in a file too long to render",
+        title: "A line to land on, in a file of any size",
         description: (
           <>
             An app that opens the panel from a <DocsCode>file.ts:412</DocsCode>{" "}
             reference has the path before it has the body, so the view a{" "}
             <DocsCode>focusLine</DocsCode> asks for is settled when the text
-            actually lands. Long files render 300 rows behind{" "}
-            <DocsCode>Show all N lines</DocsCode> — except when the line to
-            centre on lies past that, which reveals the rest. Bump{" "}
+            actually lands. There is no length to worry about — the body is a{" "}
+            <Link href="/docs/components/diff-view">Diff View</Link>, so only
+            the rows on screen are rendered. Bump{" "}
             <DocsCode>focusNonce</DocsCode> to ask for the same line twice.
           </>
         ),
@@ -2783,6 +3069,460 @@ export function Pending({ busy }: { busy: boolean }) {
             only mount it yourself in custom layouts.
           </>
         ),
+      },
+    ],
+  },
+  "diff-view": {
+    title: "Diff View",
+    description:
+      "A file or a diff rendered by @pierre/diffs — virtualized, syntax highlighted, split or unified — bound to the app's own tokens.",
+    registry: "diff-view",
+    registryDependencies: ["diff-worker-pool"],
+    preview: {
+      name: "diff-view-example",
+      node: <DiffViewExample />,
+      align: "stretch",
+    },
+    usage: `"use client"
+
+import { DiffView } from "@/components/ui/diff-view"
+
+export function Review({ file }: { file: ChangedFile }) {
+  // The viewer owns its scroll container, so give it a height.
+  return (
+    <div className="h-full min-h-0">
+      <DiffView
+        path={file.path}
+        oldText={file.before}
+        newText={file.after}
+        mode="split"
+        wrap={false}
+      />
+    </div>
+  )
+}`,
+    props: [
+      {
+        caption: "DiffView",
+        rows: [
+          {
+            name: "path",
+            required: true,
+            type: "string",
+            description:
+              "Names the file, and picks the language when none is given.",
+          },
+          {
+            name: "patch",
+            type: "string",
+            description: (
+              <>
+                Unified diff text. Outranks <DocsCode>oldText</DocsCode> /{" "}
+                <DocsCode>newText</DocsCode>. A patch that will not parse is
+                shown as its own text with a note above it, rather than as a
+                blank panel — a reader would rather see the patch.
+              </>
+            ),
+          },
+          {
+            name: "oldText / newText",
+            type: "string",
+            description:
+              "Before and after. The diff is computed for you, in the worker when there is a pool.",
+          },
+          {
+            name: "content",
+            type: "string",
+            description:
+              "No diff at all: the file itself, highlighted and virtualized the same way.",
+          },
+          {
+            name: "startLine",
+            type: "number",
+            default: "1",
+            description: (
+              <>
+                First line of <DocsCode>content</DocsCode>, for a partial read.
+                The excerpt is rendered as its own hunk so the gutter keeps the
+                real numbers, with an “N unmodified lines” marker above it.
+              </>
+            ),
+          },
+          {
+            name: "mode",
+            type: '"unified" | "split"',
+            default: '"unified"',
+            description: "Side by side or one column. Ignored without a diff.",
+          },
+          {
+            name: "wrap",
+            type: "boolean",
+            default: "true",
+            description:
+              "Soft-wrap long lines; off, the code scrolls sideways instead.",
+          },
+          {
+            name: "lineNumbers",
+            type: "boolean",
+            default: "true",
+            description: "The gutter.",
+          },
+          {
+            name: "fileHeader",
+            type: "boolean",
+            default: "false",
+            description:
+              "Pierre's own per-file header, with the name and the +/- counts. Off, because the host usually has a header of its own.",
+          },
+          {
+            name: "highlightLines",
+            type: "Iterable<number>",
+            description: (
+              <>
+                Lines to tint, in the file&apos;s own numbering — the lines an
+                agent touched, a search&apos;s hits. Emitted as one rule per
+                line into the viewer&apos;s stylesheet, so it lands on a
+                virtualized row the moment it mounts; past 400 lines the tint is
+                dropped rather than costing more than it says.
+              </>
+            ),
+          },
+          {
+            name: "focusLine / focusNonce",
+            type: "number",
+            description: (
+              <>
+                Centre a line, once per request. Bump{" "}
+                <DocsCode>focusNonce</DocsCode> to ask for the same line again —
+                clicking one <DocsCode>file.ts:42</DocsCode> chip twice is two
+                requests, and only the host can tell them apart.
+              </>
+            ),
+          },
+          {
+            name: "onLineComment",
+            type: "(range: DiffLineCommentRange) => void",
+            description: (
+              <>
+                Turns on line selection. Drag the gutter and a{" "}
+                <DocsCode>Comment on lines</DocsCode> button appears over the
+                selection; clicking it hands back{" "}
+                <DocsCode>
+                  {"{ path, startLine, endLine, side?, excerpt }"}
+                </DocsCode>{" "}
+                — the numbers in the numbering of the side they were picked on,
+                and the text of those lines, read back out of the patch so the
+                quote survives leaving the viewer.
+              </>
+            ),
+          },
+          {
+            name: "theme",
+            type: "DiffsThemeNames | ThemesType",
+            default: '{ light: "pierre-light", dark: "pierre-dark" }',
+            description: (
+              <>
+                Any Shiki theme, or a light/dark pair. The backgrounds, gutter
+                and row tints are overridden with your own tokens either way —
+                only the token colours come from here.
+              </>
+            ),
+          },
+          {
+            name: "unsafeCSS",
+            type: "string",
+            description:
+              "Appended inside the viewer's shadow root, after the token bindings. The escape hatch for chrome the viewer owns.",
+          },
+          {
+            name: "options",
+            type: "DiffViewOptions",
+            description: (
+              <>
+                Everything <DocsCode>DiffView</DocsCode> does not own, forwarded
+                to <DocsCode>CodeView</DocsCode>. The options it does own are
+                removed from the type, so passing one fails to compile instead of
+                being silently overwritten.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "DiffWorkerPoolProvider",
+        rows: [
+          {
+            name: "poolSize",
+            type: "number",
+            default: "clamp(cores / 2, 2, 6)",
+            description:
+              "Workers to spawn — enough to keep a scrolling file list highlighted without starving the app.",
+          },
+          {
+            name: "workerFactory",
+            type: "() => Worker",
+            description: (
+              <>
+                Replaces how a worker is constructed, for a bundler that cannot
+                follow the built-in{" "}
+                <DocsCode>
+                  new URL(&quot;@pierre/diffs/worker/worker.js&quot;,
+                  import.meta.url)
+                </DocsCode>
+                .
+              </>
+            ),
+          },
+          {
+            name: "fallback",
+            type: "React.ReactNode",
+            description:
+              "Shown while the workers start. Defaults to a quiet status line.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "diff-view",
+      "diff-view-surface",
+      "diff-view-line-comment",
+      "diff-view-note",
+      "diff-view-empty",
+      "diff-worker-pool-fallback",
+    ],
+    notes: [
+      {
+        title: "Theming",
+        description: (
+          <>
+            The viewer paints inside a shadow root, but custom properties cross
+            that boundary — so every surface is bound to{" "}
+            <DocsCode>--background</DocsCode>, <DocsCode>--foreground</DocsCode>,{" "}
+            <DocsCode>--border</DocsCode> and friends, and a theme swap needs no
+            re-render. Additions and deletions have no semantic token to borrow:
+            set <DocsCode>--chat-diff-added</DocsCode> and{" "}
+            <DocsCode>--chat-diff-removed</DocsCode> anywhere above the viewer to
+            replace the defaults.
+          </>
+        ),
+      },
+    ],
+    examples: [
+      {
+        title: "Comment on the lines you picked",
+        description: (
+          <>
+            <DocsCode>onLineComment</DocsCode> is what turns a viewer into a
+            review surface: the reader drags a range in the gutter, and the host
+            gets the lines <em>and</em> their text. A range dragged across the
+            two columns of a split diff belongs to the side it ended on, so the
+            numbers and the quote always agree.
+          </>
+        ),
+        example: {
+          name: "diff-view-comments-example",
+          node: <DiffViewCommentsExample />,
+          align: "stretch",
+        },
+      },
+      {
+        title: "Four thousand lines, sixteen changed",
+        description: (
+          <>
+            Only the rows on screen exist, so the size of the file stops
+            mattering. <DocsCode>DiffWorkerPoolProvider</DocsCode> moves the
+            highlighting off the main thread as well — mount it once, high in the
+            app; the pool is shared, reference counted, and kept warm for 30s
+            after the last panel closes. Without it a{" "}
+            <DocsCode>DiffView</DocsCode> highlights inline instead, which is
+            slower but never broken.
+          </>
+        ),
+        example: {
+          name: "diff-view-large-example",
+          node: <DiffViewLargeExample />,
+          align: "stretch",
+        },
+      },
+      {
+        title: "Install the pool separately",
+        description: (
+          <>
+            The provider ships as its own registry item so it can be mounted at
+            the app root, far from any panel.
+          </>
+        ),
+        code: {
+          lang: "bash",
+          code: `npx shadcn@latest add miskibin/chat-components/diff-worker-pool`,
+        },
+      },
+    ],
+  },
+
+  "file-tree": {
+    title: "File Tree",
+    description:
+      "A directory tree over a flat file list — git status colours, +/- counts, keyboard navigation, type-to-filter and per-node menus, virtualized by @pierre/trees.",
+    registry: "file-tree",
+    registryDependencies: ["change-summary"],
+    preview: {
+      name: "file-tree-example",
+      node: <FileTreeExample />,
+      align: "stretch",
+    },
+    usage: `"use client"
+
+import { FileTree, type FileTreeEntry } from "@/components/ui/file-tree"
+
+export function ChangedFiles({ entries }: { entries: FileTreeEntry[] }) {
+  const [selected, setSelected] = useState<string | null>(null)
+
+  // The tree owns its scroll container, so give it a height.
+  return (
+    <div className="h-full min-h-0 w-72">
+      <FileTree
+        entries={entries}
+        selectedPath={selected}
+        onSelect={setSelected}
+      />
+    </div>
+  )
+}`,
+    props: [
+      {
+        caption: "FileTree",
+        rows: [
+          {
+            name: "entries",
+            type: "FileTreeEntry[]",
+            description: (
+              <>
+                The files, flat: <DocsCode>{"{ path, status?, additions?, deletions? }"}</DocsCode>.
+                Directories are inferred from the slashes, so a git status list
+                is a valid tree on its own. A path ending in{" "}
+                <DocsCode>/</DocsCode> is a directory.
+              </>
+            ),
+          },
+          {
+            name: "loadChildren",
+            type: "(dir: string) => Promise<FileTreeEntry[]>",
+            description: (
+              <>
+                Lazy mode. Called with <DocsCode>&quot;&quot;</DocsCode> for the
+                root, and with a directory path — trailing slash included — the
+                first time the reader opens it. Return that level only. A level
+                that rejects is asked for again on the next open.
+              </>
+            ),
+          },
+          {
+            name: "selectedPath / revealNonce",
+            type: "string | null / number",
+            description:
+              "The file the host is showing, kept selected and scrolled into view. Revealing happens once per path and nonce, so a list that changes underneath never drags the reader back.",
+          },
+          {
+            name: "onSelect",
+            type: "(path: string) => void",
+            description:
+              "Fires when the reader picks a file — never for a directory, and never for the echo of selectedPath.",
+          },
+          {
+            name: "search",
+            type: "boolean",
+            default: "true",
+            description:
+              "The type-to-filter box above the tree. Matches expand; everything else folds away.",
+          },
+          {
+            name: "fileActions",
+            type: "FileActionItem[]",
+            description: (
+              <>
+                Right-click menu per node, from the same shape{" "}
+                <DocsCode>change-summary</DocsCode> and the file panel use — so
+                every file in the app answers a right-click the same way.
+              </>
+            ),
+          },
+          {
+            name: "renderNodeMenu",
+            type: "(node, context) => React.ReactNode",
+            description:
+              "Full control of that menu. Outranks fileActions; call context.close() when an item is chosen.",
+          },
+          {
+            name: "initialExpansion",
+            type: '"closed" | "open" | number',
+            default: '"open"',
+            description:
+              "A diff is a short list and the reader came for the files, so it opens; a whole checkout usually wants \"closed\" or a level count.",
+          },
+          {
+            name: "icons",
+            type: "FileTreeIcons",
+            default: '{ set: "standard", colored: true }',
+            description:
+              "Pierre's built-in icon sets, or a custom sprite sheet with per-name and per-extension rules.",
+          },
+          {
+            name: "density",
+            type: '"compact" | "default" | "relaxed" | number',
+            default: '"compact"',
+            description: "Row height preset, or a scale factor.",
+          },
+          {
+            name: "header",
+            type: "React.ReactNode",
+            description:
+              "A row above the filter box — a title, a count, a collapse-all button.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "file-tree",
+      "file-tree-header",
+      "file-tree-search",
+      "file-tree-search-clear",
+      "file-tree-empty",
+      "file-tree-menu",
+      "file-tree-menu-item",
+    ],
+    notes: [
+      {
+        title: "Keyboard",
+        description: (
+          <>
+            Arrow keys move, <DocsCode>←</DocsCode> / <DocsCode>→</DocsCode>{" "}
+            collapse and expand, <DocsCode>Home</DocsCode> /{" "}
+            <DocsCode>End</DocsCode> jump, <DocsCode>Enter</DocsCode> selects,
+            and typing in the filter box narrows without leaving it — all of it
+            from <DocsCode>@pierre/trees</DocsCode>, on a real tree role.
+          </>
+        ),
+      },
+    ],
+    examples: [
+      {
+        title: "One level at a time",
+        description: (
+          <>
+            A whole checkout is too much to send at once, so hand the tree a{" "}
+            <DocsCode>loadChildren</DocsCode> instead of a list: it asks for the
+            root, then for each folder the first time it opens. An unloaded
+            folder is a path ending in <DocsCode>/</DocsCode> with nothing under
+            it yet, which is why empty directories are not folded away in this
+            mode.
+          </>
+        ),
+        example: {
+          name: "file-tree-lazy-example",
+          node: <FileTreeLazyExample />,
+          align: "stretch",
+        },
       },
     ],
   },

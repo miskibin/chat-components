@@ -10,7 +10,7 @@ import {
 const TOTAL = 900
 const FOCUS_LINE = 412
 
-/** Long enough to meet the render cap, boring enough to scroll past. */
+/** Long enough to need virtualizing, boring enough to scroll past. */
 const CONTENT = Array.from({ length: TOTAL }, (_, index) => {
   const line = index + 1
   return line === FOCUS_LINE
@@ -68,8 +68,9 @@ export function FilePreviewFocusExample() {
         <p className="min-w-0 flex-1 text-[12.5px] text-muted-foreground">
           The body arrives after the path, and the File view is what a focus
           request asks for — so the panel switches to it when the text lands,
-          not before. {TOTAL.toLocaleString()} lines render behind a cap;
-          scroll away and click again to be brought back.
+          not before. All {TOTAL.toLocaleString()} lines are there, but only the
+          ones on screen are rendered; scroll away and click again to be brought
+          back.
         </p>
       </div>
     </div>
