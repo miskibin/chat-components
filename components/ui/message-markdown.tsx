@@ -6,6 +6,7 @@ import {
   Block,
   Streamdown,
   defaultRehypePlugins,
+  defaultRemarkPlugins,
   type BlockProps,
 } from "streamdown"
 import { code } from "@streamdown/code"
@@ -94,7 +95,12 @@ type RemarkPlugins = React.ComponentProps<typeof Streamdown>["remarkPlugins"]
  * undoes the CommonMark rule that turns `-       aligned text` into a code
  * block, which an agent's own alignment hits constantly.
  */
+// Streamdown's `remarkPlugins` REPLACES its default chain rather than
+// extending it, and that chain is where GFM comes from — hand it only these
+// two and every table renders as pipe-separated text. So the defaults come
+// first, then ours, which both expect the tree GFM has already shaped.
 const remarkPlugins = [
+  ...Object.values(defaultRemarkPlugins),
   remarkGithubAlerts,
   remarkNormalizeListItemIndentation,
 ] as unknown as RemarkPlugins
