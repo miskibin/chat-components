@@ -72,18 +72,51 @@ function windowsBundleRoot() {
   return path.join(process.env.LOCALAPPDATA ?? "", "cursor-agent")
 }
 
+/**
+ * The newest installed CLI bundle, as `node.exe index.js`.
+ *
+ * Windows ships the agent as a PowerShell script with a `.cmd` shim, and Node
+ * cannot spawn either without a shell — so the bundle's own runtime and entry
+ * point are what get spawned. `%LOCALAPPDATA%\cursor-agent\versions` holds one
+ * directory per installed version (`2026.09.02-c22c1a3`) beside the download
+ * archives, which the date prefix filters out.
+ *
+ * Newest is decided by comparing the date parts as numbers, never as strings:
+ * the CLI does not promise to zero-pad them, and `"2026.9.2" > "2026.10.1"` in
+ * code-point order would pin the app to an older bundle after an update. The
+ * candidates are then walked newest-first rather than only the top one being
+ * tried, so a half-finished download does not hide a working install.
+ */
 function resolveWindowsBundle(
   root: string
 ): { cmd: string; args: string[] } | null {
   const versionsRoot = path.join(root, "versions")
   if (!existsSync(versionsRoot)) return null
-  const latest = readdirSync(versionsRoot)
-    .filter((name) => /^\d{4}\.\d{1,2}\.\d{1,2}/.test(name))
-    .sort()
-    .at(-1)
-  if (!latest) return null
-  const cmd = path.join(versionsRoot, latest, "node.exe")
-  const entry = path.join(versionsRoot, latest, "index.js")
-  if (!existsSync(cmd) || !existsSync(entry)) return null
-  return { cmd, args: [entry] }
+  const candidates = readdirSync(versionsRoot)
+    .map((name) => ({ name, version: versionParts(name) }))
+    .filter((entry): entry is { name: string; version: number[] } =>
+      Boolean(entry.version)
+    )
+    .sort((a, b) => compareVersions(b.version, a.version))
+  for (const { name } of candidates) {
+    const cmd = path.join(versionsRoot, name, "node.exe")
+    const entry = path.join(versionsRoot, name, "index.js")
+    if (existsSync(cmd) && existsSync(entry)) return { cmd, args: [entry] }
+  }
+  return null
+}
+
+/** `2026.09.02-c22c1a3` → `[2026, 9, 2]`; anything else → null. */
+export function versionParts(name: string): number[] | null {
+  const match = /^(\d{4})\.(\d{1,2})\.(\d{1,2})/.exec(name)
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null
+}
+
+/** Ascending, part by part — `[2026, 10, 1]` after `[2026, 9, 2]`. */
+export function compareVersions(a: number[], b: number[]): number {
+  for (let index = 0; index < Math.max(a.length, b.length); index++) {
+    const diff = (a[index] ?? 0) - (b[index] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
 }

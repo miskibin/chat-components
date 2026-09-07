@@ -5,7 +5,10 @@ import { createHash, type Hash } from "crypto"
 import { createInterface } from "readline"
 
 import { resolveAgentCommand } from "@/lib/agent-runtime"
-import type { AgentStreamEvent } from "@/lib/cursor-agent-types"
+import type {
+  AgentStreamEvent,
+  AgentTokenUsage,
+} from "@/lib/cursor-agent-types"
 
 export type { AgentStreamEvent }
 
@@ -26,7 +29,15 @@ export type AgentRunOptions = {
   signal?: AbortSignal
 }
 
-type CliEvent = {
+/**
+ * One line of `--output-format stream-json`. Only the fields something here
+ * reads are named; the CLI sends more (`request_id`, `duration_api_ms`, the
+ * `system`/`user` bookend events) and every one of them is ignored.
+ *
+ * Exported, with the two pure translators below, so the protocol mapping can
+ * be exercised from fixtures rather than by spawning the binary.
+ */
+export type CursorCliEvent = {
   type?: string
   subtype?: string
   session_id?: string
@@ -41,6 +52,7 @@ type CliEvent = {
   }
   tool_call?: Record<string, unknown>
   text?: string
+  usage?: Record<string, unknown>
 }
 
 const MAX_FIELD = 50_000
@@ -137,9 +149,9 @@ export async function* runCursorAgent(
       const trimmed = line.trim()
       if (!trimmed.startsWith("{")) continue
 
-      let event: CliEvent
+      let event: CursorCliEvent
       try {
-        event = JSON.parse(trimmed) as CliEvent
+        event = JSON.parse(trimmed) as CursorCliEvent
       } catch {
         continue
       }
@@ -189,12 +201,14 @@ export async function* runCursorAgent(
           emittedLength += event.result.length
           yield { type: "text", text: event.result }
         }
+        const usage = readUsage(event)
         yield {
           type: "done",
           sessionId:
             typeof event.session_id === "string" ? event.session_id : undefined,
           durationMs:
             typeof event.duration_ms === "number" ? event.duration_ms : undefined,
+          ...(usage ? { usage } : null),
         }
       }
     }
@@ -323,7 +337,7 @@ function repeatsWholeTurn(hash: Hash, length: number, text: string) {
   return candidate === hash.copy().digest("hex")
 }
 
-function assistantText(event: CliEvent, sawStreamingDelta: boolean): string {
+function assistantText(event: CursorCliEvent, sawStreamingDelta: boolean): string {
   const hasTimestamp = typeof event.timestamp_ms === "number"
   const hasCallId = Boolean(event.model_call_id)
   if (hasCallId) return ""
@@ -336,10 +350,41 @@ function assistantText(event: CliEvent, sawStreamingDelta: boolean): string {
   )
 }
 
-function mapToolEvent(event: CliEvent): AgentStreamEvent {
+/**
+ * The turn's token counts, off the closing `result` event.
+ *
+ * Cache reads and writes are left out on purpose: `AgentTokenUsage` is input
+ * and output, and folding a 24k cache read into "input" would put a number
+ * under the answer that bears no relation to what the next turn's context has
+ * to fit.
+ */
+export function readUsage(event: CursorCliEvent): AgentTokenUsage | undefined {
+  const raw = event.usage
+  if (!raw) return undefined
+  const input = numberAt(raw, "inputTokens")
+  const output = numberAt(raw, "outputTokens")
+  if (input == null && output == null) return undefined
+  return {
+    ...(input == null ? null : { input }),
+    ...(output == null ? null : { output }),
+  }
+}
+
+function numberAt(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  return typeof value === "number" ? value : null
+}
+
+/**
+ * One `tool_call` line as the UI's own tool row: the call's human name, the
+ * arguments with the completed diff folded in, its result rendered for the
+ * disclosure, and — where the call was a shell — the exit status it reported.
+ */
+export function mapToolEvent(event: CursorCliEvent): AgentStreamEvent {
   const parsed = parseToolPayload(event.tool_call)
   const running = event.subtype === "started"
   const failed = !running && isToolFailure(parsed.result)
+  const exitCode = running ? undefined : exitCodeFrom(parsed.result)
   return {
     type: "tool",
     id: event.call_id as string,
@@ -347,7 +392,25 @@ function mapToolEvent(event: CliEvent): AgentStreamEvent {
     status: running ? "running" : failed ? "error" : "done",
     input: stringifyField(enrichToolArgs(parsed.args, parsed.result)),
     output: running ? undefined : formatToolResult(parsed.result),
+    ...(exitCode === undefined ? null : { exitCode }),
   }
+}
+
+/**
+ * The process exit status the shell tool published, and nothing else.
+ *
+ * `shellToolCall` puts it on `result.success.exitCode`. A code is never
+ * inferred from output text and never invented for a call that merely
+ * succeeded — `status` already says that much, and a fabricated `0` would be
+ * worse than no code at all where the reader has to tell "the tests ran and
+ * failed" from "the tool itself broke".
+ */
+function exitCodeFrom(result: unknown): number | undefined {
+  if (!result || typeof result !== "object") return undefined
+  const success = (result as Record<string, unknown>).success
+  if (!success || typeof success !== "object") return undefined
+  const code = (success as Record<string, unknown>).exitCode
+  return typeof code === "number" && Number.isInteger(code) ? code : undefined
 }
 
 /**
@@ -394,7 +457,12 @@ function parseToolPayload(toolCall: Record<string, unknown> | undefined): {
     }
   }
 
-  const key = Object.keys(toolCall)[0]
+  // The call is one `<name>ToolCall` key beside the CLI's own bookkeeping
+  // (`toolCallId`, `startedAtMs`, `hookAdditionalContexts`), and JSON key
+  // order is not a contract — so name the key that says what it is, and only
+  // fall back to the first one when nothing matches.
+  const keys = Object.keys(toolCall)
+  const key = keys.find((name) => name.endsWith("ToolCall")) ?? keys[0]
   if (!key) return { name: "tool" }
   const payload = toolCall[key] as { args?: unknown; result?: unknown } | undefined
   return {
@@ -434,6 +502,20 @@ function formatToolResult(result: unknown): string | undefined {
   const success = record.success
   if (success && typeof success === "object") {
     const s = success as Record<string, unknown>
+    // A shell call: what the command printed is the result. The raw payload
+    // repeats the command, its cwd and its timings — all of which the row
+    // already shows — and burying stdout inside that JSON is how "ran the
+    // tests" stops saying which ones failed.
+    if (typeof s.exitCode === "number") {
+      const streams = [s.stdout, s.stderr]
+        .filter((part): part is string => typeof part === "string")
+        // Each stream ends in its own newline; joined as they come, stderr
+        // arrives one blank line below stdout instead of under it.
+        .map((part) => part.replace(/\r?\n+$/, ""))
+        .filter((part) => part !== "")
+        .join("\n")
+      return streams ? streams.slice(0, MAX_FIELD) : `exit ${s.exitCode}`
+    }
     if (typeof s.totalLines === "number") {
       const body =
         typeof s.content === "string"
