@@ -193,7 +193,7 @@
       "name": "message-markdown",
       "type": "registry:ui",
       "title": "Message Markdown",
-      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, KaTeX, inline data: images, clickable file references with their line, and a right-click menu per file.",
+      "description": "Streamdown renderer for assistant markdown: GFM, code, Mermaid, KaTeX, inline data: images, clickable file references — inline paths and relative links — with their line, and a right-click menu per file.",
       "dependencies": [
         "streamdown",
         "@streamdown/code",

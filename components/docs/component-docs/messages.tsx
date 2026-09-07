@@ -28,6 +28,7 @@ import { MessageListJumpExample } from "@/components/examples/message-list-jump-
 import { MessageListStreamingExample } from "@/components/examples/message-list-streaming-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
 import { MessageMarkdownImagesExample } from "@/components/examples/message-markdown-images-example"
+import { MessageMarkdownLinksExample } from "@/components/examples/message-markdown-links-example"
 import { MessageMarkdownMermaidExample } from "@/components/examples/message-markdown-mermaid-example"
 import { MessageMarkdownStyledExample } from "@/components/examples/message-markdown-styled-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
@@ -1703,10 +1704,12 @@ export function Answer({ text }: { text: string }) {
             type: "(path: string, line?: number) => void",
             description: (
               <>
-                Makes every detected file chip a button. The path arrives with
-                any <DocsCode>:line:col</DocsCode> suffix stripped, and the line
-                beside it. Keep the handler stable — it is read through context
-                so the inline renderer stays memoized while text streams.
+                Makes every detected file chip a button — an inline-code path
+                and a relative markdown link alike. The path arrives with any{" "}
+                <DocsCode>:line:col</DocsCode> or <DocsCode>#L42</DocsCode>{" "}
+                suffix stripped, and the line beside it. Keep the handler stable
+                — it is read through context so the inline renderer stays
+                memoized while text streams.
               </>
             ),
           },
@@ -1760,6 +1763,33 @@ export function Answer({ text }: { text: string }) {
 <MessageMarkdown className="[&_[data-slot=message-file-ref]]:border-primary/40">
   {text}
 </MessageMarkdown>`,
+        },
+      },
+      {
+        title: "Relative links are file references",
+        description: (
+          <>
+            A relative link names a file in the workspace, not a page on the site
+            the transcript is rendered on, so{" "}
+            <DocsCode>[the hook](app/use-turn.ts)</DocsCode> renders as the same{" "}
+            <DocsCode>data-slot=&quot;message-file-ref&quot;</DocsCode> chip an
+            inline-code path does, and reaches the same{" "}
+            <DocsCode>onFileClick</DocsCode>. A{" "}
+            <DocsCode>#L88</DocsCode> or <DocsCode>:88</DocsCode> suffix arrives
+            as the line. Otherwise the hardening pass, which has no origin to
+            resolve a relative href against, would render{" "}
+            <DocsCode>[README](README.md)</DocsCode> as a grey{" "}
+            <DocsCode>[blocked]</DocsCode> marker and quietly turn{" "}
+            <DocsCode>./docs/setup.md</DocsCode> into a link off the page.
+            Absolute <DocsCode>http(s)</DocsCode> and{" "}
+            <DocsCode>mailto:</DocsCode> links are hardened exactly as before; a
+            relative href that names no path (<DocsCode>?tab=logs</DocsCode>)
+            degrades to the text it wrapped.
+          </>
+        ),
+        example: {
+          name: "message-markdown-links-example",
+          node: <MessageMarkdownLinksExample />,
         },
       },
       {
