@@ -7,6 +7,7 @@ import { ChatInputStyledExample } from "@/components/examples/chat-input-styled-
 import { ChatInputToolsExample } from "@/components/examples/chat-input-tools-example"
 import { ChatInputGeneratingExample } from "@/components/examples/chat-input-generating-example"
 import { ChatInputHandleExample } from "@/components/examples/chat-input-handle-example"
+import { ChatInputHistoryExample } from "@/components/examples/chat-input-history-example"
 import { ChatInputMentionsExample } from "@/components/examples/chat-input-mentions-example"
 import { ChatInputPasteExample } from "@/components/examples/chat-input-paste-example"
 import { ChatInputQueueExample } from "@/components/examples/chat-input-queue-example"
@@ -310,6 +311,22 @@ export function Composer() {
             ),
           },
           {
+            name: "history",
+            type: "readonly { id: string; text: string }[]",
+            default: "[]",
+            description: (
+              <>
+                Prompts already sent in this conversation, oldest first — your
+                own user messages, so the composer never has to know what a
+                transcript is. With it, ArrowUp at the start of an untouched
+                composer recalls the previous prompt and ArrowDown walks back
+                down; one step past the newest empties it again. Blank sends are
+                skipped and consecutive duplicates collapse. Keep the array
+                stable.
+              </>
+            ),
+          },
+          {
             name: "tools",
             type: "React.ReactNode",
             description:
@@ -424,6 +441,25 @@ export function Composer() {
       "chat-input-queue-item",
     ],
     examples: [
+      {
+        title: "Recall what was already sent",
+        description: (
+          <>
+            Press ArrowUp in the empty composer to walk back through the
+            conversation&rsquo;s own prompts, ArrowDown to come forward again,
+            and once more past the newest to clear it. It is the shell&rsquo;s
+            behaviour, including <DocsCode>HISTCONTROL=ignoredups</DocsCode>:
+            re-sending the same prompt twice leaves one entry. Type anything
+            first and the arrows go back to moving the caret, so a draft can
+            never be lost to a stray key.
+          </>
+        ),
+        example: {
+          name: "chat-input-history-example",
+          node: <ChatInputHistoryExample />,
+          align: "stretch" as const,
+        },
+      },
       {
         title: "Stop a streaming answer",
         description: (
@@ -549,7 +585,11 @@ export function Composer() {
           <>
             Enter sends and Shift+Enter inserts a newline. While the slash menu
             is open, arrows move the selection, Tab or Enter picks, and Escape
-            dismisses it for the current text. IME composition is never
+            dismisses it for the current text. With{" "}
+            <DocsCode>history</DocsCode>, a plain ArrowUp at the very start of
+            the text — or ArrowDown at the very end — steps through what was
+            already sent; both menus take the arrows first, and a composer the
+            reader has typed into is never overwritten. IME composition is never
             interrupted.
           </>
         ),

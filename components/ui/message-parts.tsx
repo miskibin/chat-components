@@ -6,10 +6,16 @@ import {
   Check,
   ChevronDown,
   Copy,
+  FilePenLine,
   FileText,
+  Globe,
+  ListChecks,
   Loader2,
+  Search,
   Table2,
+  Terminal,
   TriangleAlert,
+  Wrench,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import * as React from "react"
@@ -50,6 +56,9 @@ import {
   type FileActionItem,
 } from "@/components/ui/change-summary"
 import { FileIcon } from "@/components/ui/file-icon"
+import { RenderErrorBoundary } from "@/components/ui/render-error-boundary"
+import { commandProgramName } from "@/lib/command-label"
+import { fnv1a32, LRUCache } from "@/lib/lru-cache"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
 
@@ -341,13 +350,14 @@ const SHELL_WRAPPER_RE =
 /** `cd packages/web && …` is where the command ran, not what it did. */
 const CD_PREFIX_RE = /^cd\s+(?:'[^']*'|"[^"]*"|[^\s;&|]+)\s*(?:&&|;)\s*/
 
-/** Interpreters and runners whose second word is the real verb. */
+/**
+ * Runners whose bare name says nothing: `npm` alone is not a headline, `npm
+ * test` is. The wrappers that used to be in this list — `sudo`, `env`, `time`,
+ * `nohup` — are gone, because `commandProgramName` walks past them to the
+ * program that actually ran rather than naming the wrapper.
+ */
 const COMMAND_HOSTS = new Set([
-  "sudo",
   "npx",
-  "env",
-  "time",
-  "nohup",
   "uv",
   "uvx",
   "pnpm",
@@ -357,6 +367,7 @@ const COMMAND_HOSTS = new Set([
   "python",
   "python3",
   "node",
+  "deno",
   "cargo",
   "go",
   "git",
@@ -375,15 +386,31 @@ function unwrapShell(command: string) {
   return rest
 }
 
+/** The word after `program` in `display`, when it is a subcommand and not a flag. */
+function subcommandOf(display: string, program: string): string | undefined {
+  const words = display.split(" ")
+  const index = words.findIndex(
+    (word) => word.replace(/^.*[\\/]/, "").replace(/\.exe$/i, "") === program
+  )
+  if (index < 0) return undefined
+  const next = words[index + 1]
+  return next && !next.startsWith("-") ? next : undefined
+}
+
 /**
  * What the headline says a shell tool did. `display` is the command with the
- * harness's wrapper and `cd` prefix peeled off; `label` is how it is named —
- * the binary, plus its subcommand where the binary alone says nothing
- * (`npm test`, `git status`, `cargo build`).
+ * harness's wrapper and `cd` prefix peeled off; `program` is the binary that
+ * actually ran, found by the shell-aware reader in `lib/command-label` rather
+ * than by taking the first word — so `sudo -u ci env CI=1 bash -lc 'npm test |
+ * tee log'` is `npm`, and `if [ -f x ]; then …` is nothing at all rather than
+ * "if". `label` is how the row names it: the program, plus its subcommand
+ * where the program alone says nothing (`npm test`, `git status`).
  */
 export function summarizeCommand(command: string): {
   display: string
   label: string
+  /** Null when nothing in the command reads as a program the row can name. */
+  program: string | null
 } {
   let display = unwrapShell(command)
   let next = display.replace(CD_PREFIX_RE, "")
@@ -393,15 +420,12 @@ export function summarizeCommand(command: string): {
   }
   display = display.replace(/\s+/g, " ").trim()
 
-  const words = display.split(" ")
-  const first = (words[0] ?? "").replace(/^.*[\\/]/, "")
-  if (!first) return { display, label: "command" }
-  const second = words[1]
-  const label =
-    COMMAND_HOSTS.has(first.toLowerCase()) && second && !second.startsWith("-")
-      ? `${first} ${second}`
-      : first
-  return { display, label }
+  const program = commandProgramName(command) ?? commandProgramName(display)
+  if (!program) return { display, label: "command", program: null }
+  const second = COMMAND_HOSTS.has(program.toLowerCase())
+    ? subcommandOf(display, program)
+    : undefined
+  return { display, label: second ? `${program} ${second}` : program, program }
 }
 
 type ToolHeadline = {
@@ -454,13 +478,16 @@ function toolHeadline(tool: MessageToolCallData): ToolHeadline {
   }
   if (kind.includes("shell") || kind === "bash" || kind === "command") {
     const summary = command ? summarizeCommand(command) : null
-    if (!summary) {
+    if (!summary?.program) {
       return {
         label: failed
           ? "Command failed"
           : running
             ? "Running command"
             : "Ran command",
+        // Nothing to name, but the line itself is still worth showing.
+        detail: summary ? clip(summary.display) : undefined,
+        title: command,
       }
     }
     return {
@@ -991,43 +1018,85 @@ export function normalizeLang(lang?: string): HighlightLang {
 /**
  * Shiki is loaded once per page (module-level singleton) and every rendered
  * snippet is cached, so re-renders and remounts never re-run the highlighter.
+ *
+ * `shiki`'s top-level `codeToHtml` / `codeToTokens` run on the Oniguruma WASM
+ * engine, which is the one to be on: the JavaScript regex engine backtracks
+ * catastrophically on a few real grammars and takes the tokenizing thread with
+ * it. Do not swap these for a highlighter built with
+ * `createJavaScriptRegexEngine`.
  */
 let shikiModule: Promise<typeof import("shiki")> | null = null
-const highlightCache = new Map<string, string>()
-const HIGHLIGHT_CACHE_MAX = 200
 
 function loadShiki() {
   shikiModule ??= import("shiki")
   return shikiModule
 }
 
-/** Bounded, insertion-ordered cache — the oldest entry leaves when it is full. */
-function cacheSet<V>(cache: Map<string, V>, key: string, value: V, max: number) {
-  if (cache.size >= max) {
-    const oldest = cache.keys().next().value
-    if (oldest !== undefined) cache.delete(oldest)
-  }
-  cache.set(key, value)
-}
-
-async function highlight(
+/**
+ * Keyed by a hash of the code rather than the code itself: a lookup should
+ * compare two short strings, not re-walk a megabyte of file on every render.
+ * The length beside the hash is what makes a 32-bit collision harmless.
+ */
+function highlightCacheKey(
   code: string,
   lang: HighlightLang,
   theme: BundledTheme
 ) {
-  const key = `${theme}\0${lang}\0${code}`
+  return `${fnv1a32(code).toString(36)}:${code.length}:${lang}:${theme}`
+}
+
+/**
+ * Bounded by entries *and* bytes. 200 snippets of three lines each is nothing;
+ * 200 renders of a four-thousand-line file is a hundred megabytes of HTML held
+ * for transcripts nobody is looking at any more.
+ */
+const HIGHLIGHT_CACHE_MAX_ENTRIES = 500
+const HIGHLIGHT_CACHE_MAX_BYTES = 50 * 1024 * 1024
+const highlightCache = new LRUCache<string>(
+  HIGHLIGHT_CACHE_MAX_ENTRIES,
+  HIGHLIGHT_CACHE_MAX_BYTES
+)
+
+/** UTF-16 code units, doubled for bytes, against the floor the code itself sets. */
+function estimateHighlightedSize(html: string, code: string) {
+  return Math.max(html.length * 2, code.length * 3)
+}
+
+/**
+ * `store` is false while the block is still streaming. A fence that grows by a
+ * token per frame would otherwise write a hundred near-identical entries and
+ * evict everything worth keeping before the final text ever arrives.
+ */
+async function highlight(
+  code: string,
+  lang: HighlightLang,
+  theme: BundledTheme,
+  store = true
+) {
+  const key = highlightCacheKey(code, lang, theme)
   const cached = highlightCache.get(key)
   if (cached !== undefined) return cached
   const { codeToHtml } = await loadShiki()
   const html = await codeToHtml(code, { lang, theme })
-  cacheSet(highlightCache, key, html, HIGHLIGHT_CACHE_MAX)
+  if (store) {
+    highlightCache.set(key, html, estimateHighlightedSize(html, code))
+  }
   return html
 }
 
 export type ShikiToken = { content: string; color?: string }
 
-const tokenCache = new Map<string, ShikiToken[][]>()
-const TOKEN_CACHE_MAX = 32
+const TOKEN_CACHE_MAX_ENTRIES = 500
+const TOKEN_CACHE_MAX_BYTES = 50 * 1024 * 1024
+const tokenCache = new LRUCache<ShikiToken[][]>(
+  TOKEN_CACHE_MAX_ENTRIES,
+  TOKEN_CACHE_MAX_BYTES
+)
+
+/** A token line holds the source text plus a colour per span. */
+function estimateTokenSize(code: string) {
+  return code.length * 8
+}
 
 /**
  * Tokens for a whole block, one line per entry. Line-gutter views (diffs, file
@@ -1038,9 +1107,10 @@ const TOKEN_CACHE_MAX = 32
 async function highlightLines(
   code: string,
   lang: HighlightLang,
-  theme: BundledTheme
+  theme: BundledTheme,
+  store = true
 ) {
-  const key = `${theme}\0${lang}\0${code}`
+  const key = highlightCacheKey(code, lang, theme)
   const cached = tokenCache.get(key)
   if (cached !== undefined) return cached
   const { codeToTokens } = await loadShiki()
@@ -1048,16 +1118,25 @@ async function highlightLines(
   const lines = tokens.map((line) =>
     line.map((token) => ({ content: token.content, color: token.color }))
   )
-  cacheSet(tokenCache, key, lines, TOKEN_CACHE_MAX)
+  if (store) tokenCache.set(key, lines, estimateTokenSize(code))
   return lines
 }
 
-/** One Shiki pass for `code`, or null until it lands (and for plain text). */
-export function useHighlightedLines(code: string, language?: string) {
+/**
+ * One Shiki pass for `code`, or null until it lands (and for plain text).
+ *
+ * `streaming` says the block is still growing: the pass still runs, so the
+ * view is never left unhighlighted, but its result is not cached.
+ */
+export function useHighlightedLines(
+  code: string,
+  language?: string,
+  streaming = false
+) {
   const { resolvedTheme } = useTheme()
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
-  const cacheKey = `${theme}\0${lang}\0${code}`
+  const cacheKey = highlightCacheKey(code, lang, theme)
   // Keyed by the block it belongs to, so a re-keyed view never paints the
   // previous block's tokens while its own highlight is still in flight.
   const [rendered, setRendered] = React.useState<{
@@ -1068,7 +1147,7 @@ export function useHighlightedLines(code: string, language?: string) {
   React.useEffect(() => {
     if (!code || lang === "text") return
     let cancelled = false
-    highlightLines(code, lang, theme)
+    highlightLines(code, lang, theme, !streaming)
       .then((lines) => {
         if (!cancelled) setRendered({ key: cacheKey, lines })
       })
@@ -1076,7 +1155,7 @@ export function useHighlightedLines(code: string, language?: string) {
     return () => {
       cancelled = true
     }
-  }, [cacheKey, code, lang, theme])
+  }, [cacheKey, code, lang, streaming, theme])
 
   return (
     tokenCache.get(cacheKey) ??
@@ -1184,9 +1263,12 @@ const ToolText = React.memo(function ToolText({
 const ToolDiff = React.memo(function ToolDiff({
   lines,
   language,
+  streaming = false,
 }: {
   lines: ToolDiffLine[]
   language?: string
+  /** The tool is still writing — highlight, but keep it out of the cache. */
+  streaming?: boolean
 }) {
   const [showAll, setShowAll] = React.useState(false)
   const capped = !showAll && lines.length > PREVIEW_LINE_CAP
@@ -1196,7 +1278,7 @@ const ToolDiff = React.memo(function ToolDiff({
     () => visible.map((line) => line.text).join("\n"),
     [visible]
   )
-  const highlighted = useHighlightedLines(source, language)
+  const highlighted = useHighlightedLines(source, language, streaming)
   const showAllLines = React.useCallback(() => setShowAll(true), [])
 
   return (
@@ -1268,10 +1350,13 @@ const ToolFileView = React.memo(function ToolFileView({
   content,
   language,
   startLine = 1,
+  streaming = false,
 }: {
   content: string
   language?: string
   startLine?: number
+  /** The tool is still writing — highlight, but keep it out of the cache. */
+  streaming?: boolean
 }) {
   const [showAll, setShowAll] = React.useState(false)
   const lines = React.useMemo(
@@ -1281,7 +1366,7 @@ const ToolFileView = React.memo(function ToolFileView({
   const capped = !showAll && lines.length > PREVIEW_LINE_CAP
   const visible = capped ? lines.slice(0, PREVIEW_LINE_CAP) : lines
   const source = React.useMemo(() => visible.join("\n"), [visible])
-  const highlighted = useHighlightedLines(source, language)
+  const highlighted = useHighlightedLines(source, language, streaming)
   const showAllLines = React.useCallback(() => setShowAll(true), [])
 
   return (
@@ -1755,12 +1840,15 @@ export const MessageToolCall = React.memo(function MessageToolCall({
                 alt={path ? fileName(path) : "Image"}
               />
             ) : null}
-            {showDiff ? <ToolDiff lines={diff} language={language} /> : null}
+            {showDiff ? (
+              <ToolDiff lines={diff} language={language} streaming={running} />
+            ) : null}
             {showFile && readFile && !showImage ? (
               <ToolFileView
                 content={readFile.content}
                 language={language}
                 startLine={readFile.startLine}
+                streaming={running}
               />
             ) : null}
             {commandText ? (
@@ -1800,6 +1888,161 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   )
 })
 
+// Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.
+/** What a call did, in the words the group summary is written in. */
+export type ToolGroupAction =
+  | "read"
+  | "edit"
+  | "command"
+  | "search"
+  | "browser"
+  | "plan"
+  | "other"
+
+const BROWSER_TOOL_RE = /browser|playwright|puppeteer|navigate|screenshot/
+const COMMAND_TOOL_RE = /shell|bash|terminal|command|exec|process/
+const SEARCH_TOOL_RE = /grep|search|glob|find|ripgrep|list|dir/
+
+/**
+ * One call, classified. Deliberately coarse: the summary above a folded group
+ * answers “what did it spend that time on”, and six buckets say that better
+ * than twenty tool names would.
+ */
+export function toolGroupAction(tool: MessageToolCallData): ToolGroupAction {
+  if (isTodoToolName(tool.name) || isPlanToolName(tool.name)) return "plan"
+  /* An MCP tool's words belong to its server's vocabulary, not to the list
+     below — `list_issues` is not a directory listing. */
+  if (tool.name.startsWith("mcp__") || isAskToolName(tool.name)) return "other"
+  const kind = tool.name.replace(/\s+/g, "").toLowerCase()
+  if (BROWSER_TOOL_RE.test(kind)) return "browser"
+  if (isFileMutationTool(tool.name)) return "edit"
+  if (isReadTool(tool.name)) return "read"
+  if (COMMAND_TOOL_RE.test(kind) || kind === "ls") return "command"
+  if (SEARCH_TOOL_RE.test(kind)) return "search"
+  return "other"
+}
+
+function toolPath(tool: MessageToolCallData): string | undefined {
+  const args = parseToolArgs(tool.input)
+  return (
+    asString(args.path) ??
+    asString(args.filePath) ??
+    asString(args.target_file) ??
+    asString(args.file)
+  )
+}
+
+/**
+ * Four edits to one file are one changed file, which is what a reader counts.
+ * An edit whose path never arrived counts on its own — dropping it would say
+ * a turn changed nothing.
+ */
+function toolGroupActionCount(
+  action: ToolGroupAction,
+  tools: readonly MessageToolCallData[]
+) {
+  if (action !== "edit") return tools.length
+  const paths = new Set<string>()
+  let pathless = 0
+  for (const tool of tools) {
+    const path = toolPath(tool)
+    if (path) paths.add(path)
+    else pathless += 1
+  }
+  return paths.size + pathless
+}
+
+function plural(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`
+}
+
+function toolGroupActionLabel(action: ToolGroupAction, count: number) {
+  switch (action) {
+    case "read":
+      return `Read ${plural(count, "file", "files")}`
+    case "edit":
+      return `Changed ${plural(count, "file", "files")}`
+    case "command":
+      return `Ran ${plural(count, "command", "commands")}`
+    case "search":
+      return `Searched ${plural(count, "time", "times")}`
+    case "browser":
+      return `Used the browser ${plural(count, "time", "times")}`
+    case "plan":
+      return `Updated the plan ${plural(count, "time", "times")}`
+    default:
+      return `Used ${plural(count, "tool", "tools")}`
+  }
+}
+
+/**
+ * A harness that publishes a “started” marker without an id and then the call
+ * itself leaves two rows for one piece of work. The marker is dropped only
+ * when a later entry of the same name actually settled — an in-flight call
+ * keeps its row, because that is the one the reader is watching.
+ */
+function omitSupersededMarkers(
+  tools: readonly MessageToolCallData[]
+): MessageToolCallData[] {
+  const settled = new Set<string>()
+  const kept: MessageToolCallData[] = []
+  for (let index = tools.length - 1; index >= 0; index -= 1) {
+    const tool = tools[index]
+    const identity = tool.name
+    const marker = !tool.id && (!tool.status || tool.status === "pending")
+    if (marker && settled.has(identity)) continue
+    kept.push(tool)
+    if (tool.status === "done" || tool.status === "error") settled.add(identity)
+  }
+  return kept.reverse()
+}
+
+/** “Read 3 files, ran 2 commands, and changed 1 file.” */
+export function summarizeToolGroup(
+  tools: readonly MessageToolCallData[]
+): string {
+  const grouped = new Map<ToolGroupAction, MessageToolCallData[]>()
+  for (const tool of omitSupersededMarkers(tools)) {
+    const action = toolGroupAction(tool)
+    const group = grouped.get(action)
+    if (group) group.push(tool)
+    else grouped.set(action, [tool])
+  }
+  const labels = [...grouped].map(([action, actionTools]) =>
+    toolGroupActionLabel(action, toolGroupActionCount(action, actionTools))
+  )
+  // Only the first clause keeps its capital — the rest are mid-sentence.
+  const parts = labels.map((label, index) =>
+    index === 0 ? label : label.charAt(0).toLowerCase() + label.slice(1)
+  )
+  if (parts.length < 2) return parts[0] ?? ""
+  if (parts.length === 2) return parts.join(" and ")
+  return `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`
+}
+
+/** The one thing the whole group did, or "mixed" when it did several. */
+export function toolGroupSummaryKind(
+  tools: readonly MessageToolCallData[]
+): ToolGroupAction | "mixed" {
+  const actions = new Set(omitSupersededMarkers(tools).map(toolGroupAction))
+  if (actions.size !== 1) return "mixed"
+  return actions.values().next().value ?? "mixed"
+}
+
+const TOOL_GROUP_ICONS: Record<
+  ToolGroupAction | "mixed",
+  React.ComponentType<{ className?: string }>
+> = {
+  read: FileText,
+  edit: FilePenLine,
+  command: Terminal,
+  search: Search,
+  browser: Globe,
+  plan: ListChecks,
+  other: Wrench,
+  mixed: Wrench,
+}
+
 /** Stack of minimal tool rows; collapses behind “Used N tools” when many. */
 export function MessageToolCalls({
   tools,
@@ -1831,6 +2074,16 @@ export function MessageToolCalls({
   )
   const many = !pendingAsk && tools.length >= collapseAt
   const [open, setOpen] = React.useState(defaultOpen ?? !many)
+  /* Only worth computing for a group that actually folds — and only when the
+     calls change, never on the tokens streaming beside them. */
+  const summary = React.useMemo(
+    () => (many ? summarizeToolGroup(tools) : ""),
+    [many, tools]
+  )
+  const summaryKind = React.useMemo(
+    () => (many ? toolGroupSummaryKind(tools) : "mixed"),
+    [many, tools]
+  )
 
   if (tools.length === 0) return null
 
@@ -1860,6 +2113,8 @@ export function MessageToolCalls({
     )
   }
 
+  const SummaryIcon = TOOL_GROUP_ICONS[summaryKind]
+
   return (
     <Collapsible
       open={open}
@@ -1871,11 +2126,11 @@ export function MessageToolCalls({
         <button
           type="button"
           data-slot="message-tool-calls-trigger"
+          data-kind={summaryKind}
           className={cn(disclosureTrigger, "w-full")}
         >
-          <span>
-            Used {tools.length} tool{tools.length === 1 ? "" : "s"}
-          </span>
+          <SummaryIcon className="size-3.5 opacity-70" />
+          <span className="min-w-0 truncate">{summary}</span>
           <ChevronDown
             className={cn(
               "size-3.5 opacity-50 transition-transform duration-150",
@@ -1968,17 +2223,32 @@ export function MessageProcess({
   )
 }
 
+/** What a block that could not be drawn falls back to: the text, unstyled. */
+function CodeFallback({ code }: { code: string }) {
+  return (
+    <pre
+      data-slot="message-code-fallback"
+      className="m-0 overflow-x-auto bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-foreground"
+    >
+      <code>{code}</code>
+    </pre>
+  )
+}
+
 function HighlightedCode({
   code,
   language,
+  streaming = false,
 }: {
   code: string
   language?: string
+  /** The fence is still growing — highlight it, but do not cache the result. */
+  streaming?: boolean
 }) {
   const { resolvedTheme } = useTheme()
   const lang = normalizeLang(language)
   const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
-  const cacheKey = `${theme}\0${lang}\0${code}`
+  const cacheKey = highlightCacheKey(code, lang, theme)
   const [rendered, setRendered] = React.useState<{
     key: string
     html: string
@@ -1986,7 +2256,7 @@ function HighlightedCode({
 
   React.useEffect(() => {
     let cancelled = false
-    highlight(code, lang, theme)
+    highlight(code, lang, theme, !streaming)
       .then((out) => {
         if (!cancelled) setRendered({ key: cacheKey, html: out })
       })
@@ -1994,7 +2264,7 @@ function HighlightedCode({
     return () => {
       cancelled = true
     }
-  }, [cacheKey, code, lang, theme])
+  }, [cacheKey, code, lang, streaming, theme])
 
   // Paint straight from cache when we have it — no flash of unhighlighted code.
   const html =
@@ -2020,9 +2290,17 @@ function HighlightedCode({
 export const MessageCode = React.memo(function MessageCode({
   block,
   className,
+  streaming = false,
 }: {
   block: MessageCodeBlockData
   className?: string
+  /**
+   * True while the fence is still arriving. The highlighter still runs, so the
+   * block never sits unhighlighted; its output just is not cached, because a
+   * fence that grows by a token per frame would fill the cache with a hundred
+   * throwaway versions of itself.
+   */
+  streaming?: boolean
 }) {
   const [copied, setCopied] = React.useState(false)
 
@@ -2042,10 +2320,18 @@ export const MessageCode = React.memo(function MessageCode({
 
   const langLabel = (block.language ?? "text").toLowerCase()
 
+  /* A diagram is the one part of a message that renders someone else's syntax,
+     and a half-written one throws. Its own boundary keeps that failure inside
+     the block instead of taking the answer around it down. */
   if (langLabel === "mermaid") {
     return (
       <div className={cn("my-3", className)}>
-        <MessageMarkdown>{`\`\`\`mermaid\n${block.code}\n\`\`\``}</MessageMarkdown>
+        <RenderErrorBoundary
+          resetKeys={[block.code]}
+          fallback={<CodeFallback code={block.code} />}
+        >
+          <MessageMarkdown>{`\`\`\`mermaid\n${block.code}\n\`\`\``}</MessageMarkdown>
+        </RenderErrorBoundary>
       </div>
     )
   }
@@ -2084,7 +2370,16 @@ export const MessageCode = React.memo(function MessageCode({
           {copied ? <Check /> : <Copy />}
         </button>
       </div>
-      <HighlightedCode code={block.code} language={block.language} />
+      <RenderErrorBoundary
+        resetKeys={[block.code, block.language]}
+        fallback={<CodeFallback code={block.code} />}
+      >
+        <HighlightedCode
+          code={block.code}
+          language={block.language}
+          streaming={streaming}
+        />
+      </RenderErrorBoundary>
     </div>
   )
 })

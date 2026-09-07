@@ -609,8 +609,14 @@ export const Message = React.memo(function Message({
         ) : null}
         {answer}
 
+        {/* `streaming` keeps a fence that is still growing out of the
+            highlight cache — the pass still runs, so nothing renders bare. */}
         {codeBlocks.map((block, i) => (
-          <MessageCode key={`${block.language ?? "code"}-${i}`} block={block} />
+          <MessageCode
+            key={`${block.language ?? "code"}-${i}`}
+            block={block}
+            streaming={isAnimating}
+          />
         ))}
 
         {artifacts.map((artifact) => (

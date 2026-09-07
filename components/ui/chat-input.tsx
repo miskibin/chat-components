@@ -14,6 +14,11 @@ import {
 import * as React from "react"
 
 import { FileIcon } from "@/components/ui/file-icon"
+import {
+  promptHistoryEntries,
+  stepPromptHistory,
+  type PromptHistoryPosition,
+} from "@/lib/prompt-history"
 import { cn } from "@/lib/utils"
 
 export type ChatSkill = {
@@ -100,6 +105,17 @@ export type ChatInputProps = {
   ) => Promise<ChatInputMentionItem[]> | ChatInputMentionItem[]
   /** ⌘S / Ctrl+S hands the draft over and clears the composer. */
   onStash?: (payload: ChatInputPayload) => void
+  /**
+   * Prompts already sent in this conversation, oldest first — the host's user
+   * messages, and nothing the composer has to know about transcripts. With it,
+   * ArrowUp at the start of an untouched composer recalls the previous prompt
+   * and ArrowDown walks back down, the way a shell does; one step past the
+   * newest empties the composer again.
+   *
+   * Blank sends are skipped and consecutive duplicates collapse. Keep the
+   * array stable — a new identity per render re-derives the entries.
+   */
+  history?: readonly { id: string; text: string }[]
 }
 
 type SlashMenuItem =
@@ -117,6 +133,7 @@ const EMPTY_MENTIONS: ChatInputMentionItem[] = []
 const EMPTY_FILES: File[] = []
 const EMPTY_STRINGS: string[] = []
 const EMPTY_PASTES: PasteEntry[] = []
+const EMPTY_HISTORY: readonly { id: string; text: string }[] = []
 
 /** Long enough that a chip beats a wall of text in a one-line composer. */
 const PASTE_MAX_CHARS = 800
@@ -208,6 +225,7 @@ export function ChatInput({
   onQueueEdit,
   mentions,
   onStash,
+  history = EMPTY_HISTORY,
 }: ChatInputProps) {
   const [text, setText] = React.useState(defaultValue)
   const [pending, setPending] = React.useState<File[]>(EMPTY_FILES)
@@ -232,6 +250,11 @@ export function ChatInput({
     query: string
     items: ChatInputMentionItem[]
   } | null>(null)
+  /* Where the reader is in the sent prompts, as an entry id plus the text that
+     was put in the composer — never an index, which a list that grows
+     underneath would silently move. */
+  const [historyPosition, setHistoryPosition] =
+    React.useState<PromptHistoryPosition | null>(null)
   const taRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const pasteIdRef = React.useRef(0)
@@ -328,6 +351,11 @@ export function ChatInput({
       ta.setSelectionRange(position, position)
     })
   }, [])
+
+  const historyEntries = React.useMemo(
+    () => promptHistoryEntries(history),
+    [history]
+  )
 
   const slashEnabled = skills.length > 0 || slashCommands.length > 0
   const slashQuery = slashEnabled ? parseSlashQuery(text) : null
@@ -487,6 +515,31 @@ export function ChatInput({
     onStash({ text: value, files: pending, skills: forcedSkills })
     clearDraft()
   }, [clearDraft, disabled, forcedSkills, onStash, pastes, pending, text])
+
+  /**
+   * One shell-style step through the sent prompts. Returns false when the key
+   * should fall through to ordinary caret movement — which is most of the
+   * time, and is why this reads the step first and only then prevents.
+   */
+  const recallPrompt = React.useCallback(
+    (direction: "backward" | "forward") => {
+      const step = stepPromptHistory({
+        direction,
+        entries: historyEntries,
+        position: historyPosition,
+        currentPrompt: textRef.current,
+      })
+      if (!step) return false
+      setHistoryPosition(step.position)
+      changeText(step.prompt)
+      // The recalled text arrives whole, so any paste chips it replaced are gone.
+      updatePastes(EMPTY_PASTES)
+      setCaret(step.prompt.length)
+      focusCaret(step.prompt.length)
+      return true
+    },
+    [changeText, focusCaret, historyEntries, historyPosition, updatePastes]
+  )
 
   const insertAtCaret = React.useCallback(
     (value: string) => {
@@ -686,6 +739,33 @@ export function ChatInput({
           selectMentionItem(item)
           return
         }
+      }
+    }
+
+    /* Prompt recall comes after both menus on purpose: while one is open the
+       arrows are choosing an item, and only a plain arrow at the very start or
+       the very end of the text is a request for history. Anything the reader
+       has typed is left alone — a backward step out of a non-empty composer
+       returns nothing, so the draft is never overwritten. */
+    if (
+      historyEntries.length > 0 &&
+      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      const ta = event.currentTarget
+      const collapsed = ta.selectionStart === ta.selectionEnd
+      const backward = event.key === "ArrowUp"
+      const atEdge =
+        collapsed &&
+        (backward
+          ? ta.selectionStart === 0
+          : ta.selectionStart === ta.value.length)
+      if (atEdge && recallPrompt(backward ? "backward" : "forward")) {
+        event.preventDefault()
+        return
       }
     }
 
