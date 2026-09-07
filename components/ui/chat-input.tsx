@@ -936,6 +936,7 @@ export function ChatInput({
               {isGenerating ? (
                 <button
                   type="button"
+                  data-slot="chat-input-stop"
                   onClick={onStop}
                   title="Stop generating"
                   className={cn(
@@ -954,6 +955,7 @@ export function ChatInput({
               {isGenerating && !queueing ? null : (
                 <button
                   type="button"
+                  data-slot="chat-input-send"
                   onClick={submit}
                   disabled={!canSend}
                   title={queueing ? "Queue (Enter)" : "Send (Enter)"}

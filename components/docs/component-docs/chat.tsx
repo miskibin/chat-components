@@ -416,6 +416,8 @@ export function Composer() {
       "chat-input-surface",
       "chat-input-textarea",
       "chat-input-toolbar",
+      "chat-input-send",
+      "chat-input-stop",
       "chat-input-chips",
       "chat-input-chip",
       "chat-input-slash-menu",
