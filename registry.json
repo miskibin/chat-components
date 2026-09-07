@@ -113,7 +113,7 @@
       "name": "chat-input",
       "type": "registry:ui",
       "title": "Chat Input",
-      "description": "Composer with attachments, drag-and-drop, a skills/slash menu, @-mentions, a mid-turn message queue, collapsed long pastes, shell-style prompt recall on the arrow keys, and Enter-to-send.",
+      "description": "Composer with attachments, drag-and-drop, $-skills, a slash menu whose provider commands are offered only at the head of a message, @-mentions, a mid-turn message queue, collapsed long pastes, shell-style prompt recall on the arrow keys, and Enter-to-send.",
       "dependencies": ["lucide-react", "class-variance-authority"],
       "registryDependencies": ["miskibin/chat-components/file-icon"],
       "files": [
