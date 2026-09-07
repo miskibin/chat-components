@@ -38,6 +38,7 @@ const math = createMathPlugin({
 const plugins = { code, mermaid, math }
 
 type RehypePlugins = React.ComponentProps<typeof Streamdown>["rehypePlugins"]
+type RehypePlugin = NonNullable<RehypePlugins>[number]
 type SanitizeSchema = {
   protocols?: Record<string, string[]>
   attributes?: Record<string, unknown[]>
@@ -57,31 +58,34 @@ type SanitizeSchema = {
  * that one attribute, only on a blockquote, and its value is one of five words
  * the plugin itself writes.
  */
-function messageRehypePlugins(): RehypePlugins {
-  const { raw, sanitize, harden } = defaultRehypePlugins
-  if (!Array.isArray(sanitize)) return Object.values(defaultRehypePlugins)
+function messageSanitize(): RehypePlugin {
+  const { sanitize } = defaultRehypePlugins
+  if (!Array.isArray(sanitize)) return sanitize
   const [plugin, schema] = sanitize as [typeof sanitize[0], SanitizeSchema]
   return [
-    raw,
-    [
-      plugin,
-      {
-        ...schema,
-        protocols: {
-          ...schema.protocols,
-          src: [...(schema.protocols?.src ?? []), "data"],
-        },
-        attributes: {
-          ...schema.attributes,
-          blockquote: [
-            ...(schema.attributes?.blockquote ?? []),
-            "dataAlert",
-          ],
-        },
+    plugin,
+    {
+      ...schema,
+      protocols: {
+        ...schema.protocols,
+        src: [...(schema.protocols?.src ?? []), "data"],
       },
-    ],
-    harden,
+      attributes: {
+        ...schema.attributes,
+        blockquote: [...(schema.attributes?.blockquote ?? []), "dataAlert"],
+      },
+    },
   ]
+}
+
+/**
+ * `raw` → `sanitize` → `fileLinks` → `harden`, Streamdown's own order with one
+ * pass inserted: relative links are claimed before the hardening pass, which
+ * cannot resolve them (see `fileLinks`).
+ */
+function messageRehypePlugins(): RehypePlugins {
+  const { raw, harden } = defaultRehypePlugins
+  return [raw, messageSanitize(), fileLinks, harden]
 }
 
 const rehypePlugins = messageRehypePlugins()
@@ -150,9 +154,10 @@ export type MessageMarkdownProps = {
   /** Inline replacements applied to paragraph and list-item text. */
   patternHandlers?: MarkdownPatternHandler[]
   /**
-   * Makes an inline-code file reference a button — the path arrives without
-   * its `:line` suffix, and the line it named arrives beside it, ready to
-   * hand to a file panel.
+   * Makes a file reference a button — an inline-code path and a relative
+   * markdown link alike. The path arrives without its `:line` (or `#L42`)
+   * suffix, and the line it named arrives beside it, ready to hand to a file
+   * panel.
    */
   onFileClick?: (path: string, line?: number) => void
   /**
@@ -186,6 +191,99 @@ const NO_FILE_REFS: FileRefContextValue = { onFileClick: null }
  */
 const FileRefContext = React.createContext<FileRefContextValue>(NO_FILE_REFS)
 
+/**
+ * Every href the hardening pass resolves on its own: an absolute URL or custom
+ * scheme, a host- or root-relative URL, an in-page anchor, and a dot-relative
+ * path. Those keep Streamdown's own treatment.
+ */
+const HARDENABLE_HREF_RE = /^(?:[a-zA-Z][\w+.-]*:|\/|#|\.{1,2}\/)/
+
+/** A relative link is a file, plain text, or none of this file's business. */
+type LinkVerdict = FilePathPosition | { path: null }
+
+/**
+ * What `[label](href)` should become. `null` leaves the link alone.
+ *
+ * A path is a path whether or not it starts with `./` — `README.md` and
+ * `./docs/setup.md` are the same reference — so `parseMarkdownFileLink` gets
+ * first refusal and a dot-relative path is claimed too, rather than being
+ * resolved against the page the transcript happens to be rendered on.
+ */
+function classifyLinkHref(href: string): LinkVerdict | null {
+  const text = href.trim()
+  if (!text) return { path: null }
+  const reference = parseMarkdownFileLink(text)
+  if (reference) return reference
+  return HARDENABLE_HREF_RE.test(text) ? null : { path: null }
+}
+
+/** The slice of a hast node this file walks — no `@types/hast` dependency. */
+type HastNode = {
+  type: string
+  tagName?: string
+  properties?: Record<string, unknown>
+  children?: HastNode[]
+}
+
+/**
+ * The element `fileLinks` leaves behind for `MarkdownFileLink` to render.
+ * Invented after the sanitizer has run, so markdown that writes the tag by
+ * hand cannot reach that renderer — the sanitizer drops unknown tags.
+ */
+const FILE_LINK_TAG = "file-link"
+
+/**
+ * Relative links, before the hardening pass can mangle them.
+ *
+ * `rehype-harden` resolves an href against `defaultOrigin`, and Streamdown
+ * leaves that unset: `[README](README.md)` parses as no URL at all and is
+ * replaced with a grey `[blocked]` marker, while `[docs](./docs/setup.md)`
+ * survives only as `/docs/setup.md` — a link off the page the transcript is
+ * rendered on. Neither is what an agent citing a file in its workspace meant,
+ * and agents cite files constantly.
+ *
+ * So a relative link that names a path becomes the same chip an inline-code
+ * reference does, one the host can open through `onFileClick`; a relative link
+ * that names nothing resolvable degrades to the text it wrapped. Absolute
+ * links, anchors and images are untouched and reach `harden` as before.
+ */
+function fileLinks() {
+  return (tree: HastNode) => {
+    rewriteFileLinks(tree)
+  }
+}
+
+function rewriteFileLinks(node: HastNode) {
+  const children = node.children
+  if (!children) return
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index]
+    if (!child || child.type !== "element") continue
+    rewriteFileLinks(child)
+    if (child.tagName !== "a") continue
+    const href = child.properties?.href
+    if (typeof href !== "string") continue
+    const verdict = classifyLinkHref(href)
+    if (!verdict) continue
+    if (verdict.path !== null) {
+      children[index] = {
+        type: "element",
+        tagName: FILE_LINK_TAG,
+        properties: {
+          dataPath: verdict.path,
+          dataLine: verdict.line,
+          dataHref: href,
+        },
+        children: child.children ?? [],
+      }
+      continue
+    }
+    const label = child.children ?? []
+    children.splice(index, 1, ...label)
+    index += label.length - 1
+  }
+}
+
 function textOf(node: React.ReactNode): string {
   if (typeof node === "string") return node
   if (typeof node === "number") return String(node)
@@ -197,50 +295,33 @@ const fileRefChip =
   "inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/60 px-1.5 py-0 align-baseline font-mono text-[12px] text-foreground/90"
 
 /**
- * Streamdown routes bare inline spans here and leaves fenced blocks (and
- * mermaid / math) on their own renderer, so this only ever sees `` `code` ``.
- * Anything that is not a file reference renders as Streamdown's own inline
- * code, untouched.
+ * One chip for both ways an answer names a file — an inline-code path and a
+ * relative markdown link. The label stays whatever the answer wrote; only the
+ * handler is told the path and the line.
  */
-function InlineCode({
-  node,
+function FileRefChip({
+  path,
+  line,
+  copyAs,
   className,
   children,
   ...props
-}: Omit<React.ComponentProps<"code">, "ref"> & { node?: unknown }) {
-  // `node` is Streamdown's hast element — destructured out so it never reaches
-  // the DOM, and of no use to a chip that reads its own text.
-  void node
+}: Omit<React.ComponentProps<"span">, "ref"> & {
+  path: string
+  line?: number
+  /**
+   * What a copied selection crossing this chip should yield — the markdown the
+   * answer wrote, rather than the empty string a `<button>` serializes to.
+   */
+  copyAs?: string
+}) {
   const { onFileClick, fileActions } = React.useContext(FileRefContext)
-  const text = textOf(children)
-  const reference = inlineCodeFileReference(text)
-
-  if (!reference) {
-    return (
-      <code
-        className={cn(
-          "rounded bg-muted px-1.5 py-0.5 font-mono text-sm",
-          className
-        )}
-        data-streamdown="inline-code"
-        {...props}
-      >
-        {children}
-      </code>
-    )
-  }
-
-  // The chip keeps saying `file.ts:42`; only the handler is told the number.
-  const { path, line } = reference
   const label = (
     <>
       <FileIcon path={path} size={13} aria-hidden />
       {children}
     </>
   )
-  /* Copying a selection that crosses this chip must yield the code span the
-     answer wrote, not the empty string a <button> serializes to. */
-  const copyAs = `\`${text}\``
 
   /* A chip with no click handler is still a right-click target, so it has to
      be reachable: focused, Shift+F10 and the Menu key open the same menu. */
@@ -275,7 +356,7 @@ function InlineCode({
         "cursor-pointer outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
         className
       )}
-      {...props}
+      {...(props as React.ComponentProps<"button">)}
     >
       {label}
     </button>
@@ -285,6 +366,53 @@ function InlineCode({
     <FileContextMenu path={path} actions={fileActions}>
       {chip}
     </FileContextMenu>
+  )
+}
+
+/**
+ * Streamdown routes bare inline spans here and leaves fenced blocks (and
+ * mermaid / math) on their own renderer, so this only ever sees `` `code` ``.
+ * Anything that is not a file reference renders as Streamdown's own inline
+ * code, untouched.
+ */
+function InlineCode({
+  node,
+  className,
+  children,
+  ...props
+}: Omit<React.ComponentProps<"code">, "ref"> & { node?: unknown }) {
+  // `node` is Streamdown's hast element — destructured out so it never reaches
+  // the DOM, and of no use to a chip that reads its own text.
+  void node
+  const text = textOf(children)
+  const reference = inlineCodeFileReference(text)
+
+  if (!reference) {
+    return (
+      <code
+        className={cn(
+          "rounded bg-muted px-1.5 py-0.5 font-mono text-sm",
+          className
+        )}
+        data-streamdown="inline-code"
+        {...props}
+      >
+        {children}
+      </code>
+    )
+  }
+
+  // The chip keeps saying `file.ts:42`; only the handler is told the number.
+  return (
+    <FileRefChip
+      path={reference.path}
+      line={reference.line}
+      copyAs={`\`${text}\``}
+      className={className}
+      {...props}
+    >
+      {children}
+    </FileRefChip>
   )
 }
 
@@ -335,58 +463,31 @@ function MarkdownImage({
 }
 
 /**
- * A markdown link whose destination is a path on this machine — `[the
- * route](app/page.tsx:12)`, or a `file://` URL a harness pasted. Rendered as
- * the same chip an inline-code path gets, so both open the same panel at the
- * same line. Anything that is not a file stays an ordinary link.
+ * The relative link `fileLinks` claimed — `[the route](app/page.tsx:12)`, a
+ * bare `README.md`, or a `file://` URL a harness pasted. Rendered as the same
+ * chip an inline-code path gets, so both open the same panel at the same line.
+ * Streamdown types a tag of its own loosely, so the path arrives as a plain
+ * record entry.
+ *
+ * The label is flattened to text: an answer that writes ``[`README.md`](README.md)``
+ * would otherwise nest a chip inside a chip, and a chip is a button.
  */
-function MarkdownLink({
-  node,
-  className,
-  href,
-  children,
-  ...props
-}: Omit<React.ComponentProps<"a">, "ref"> & { node?: unknown }) {
-  void node
-  const { onFileClick, fileActions } = React.useContext(FileRefContext)
-  const reference: FilePathPosition | null =
-    typeof href === "string" ? parseMarkdownFileLink(href) : null
-
-  if (!reference || !onFileClick) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className={className}
-        {...props}
-      >
-        {children}
-      </a>
-    )
-  }
-
-  const { path, line } = reference
+function MarkdownFileLink(props: Record<string, unknown>) {
+  const rawPath = props["data-path"]
+  const rawLine = props["data-line"]
+  const rawHref = props["data-href"]
+  const path = typeof rawPath === "string" ? rawPath : ""
+  const parsedLine = typeof rawLine === "number" ? rawLine : Number(rawLine)
+  const line =
+    Number.isFinite(parsedLine) && parsedLine > 0 ? parsedLine : undefined
+  const label = textOf(props.children as React.ReactNode).trim()
+  if (!path) return <>{label}</>
+  const text = label || path
+  const href = typeof rawHref === "string" ? rawHref : path
   return (
-    <FileContextMenu path={path} actions={fileActions}>
-      <button
-        type="button"
-        data-slot="message-file-ref"
-        data-path={path}
-        data-markdown-copy={`[${textOf(children)}](${href})`}
-        data-interactive="true"
-        title={path}
-        onClick={() => onFileClick(path, line)}
-        className={cn(
-          fileRefChip,
-          "cursor-pointer outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
-          className
-        )}
-      >
-        <FileIcon path={path} size={13} aria-hidden />
-        {children}
-      </button>
-    </FileContextMenu>
+    <FileRefChip path={path} line={line} copyAs={`[${text}](${href})`}>
+      {text}
+    </FileRefChip>
   )
 }
 
@@ -431,18 +532,15 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
      swapped in where the host actually has something to offer on a picture. */
   const menuOnImages = !!fileActions?.length
 
-  /* Overriding `a` is only worth its own renderer where a file link has
-     somewhere to go — otherwise Streamdown's own anchor stays in place. */
-  const linksToFiles = !!onFileClick
-
   const components = React.useMemo(() => {
     const image = menuOnImages ? { img: MarkdownImage } : null
-    const link = linksToFiles ? { a: MarkdownLink } : null
     // `inlineCode` is the same function every time — Streamdown compares the
     // map key by key, by reference, so rebuilding the object costs nothing.
-    if (patternHandlers.length === 0) {
-      return { inlineCode: InlineCode, ...image, ...link }
+    const chips = {
+      inlineCode: InlineCode,
+      [FILE_LINK_TAG]: MarkdownFileLink,
     }
+    if (patternHandlers.length === 0) return { ...chips, ...image }
     /**
      * Scanning from an offset needs `lastIndex`, which is state on the regex —
      * so each handler gets a private copy, always global. The caller's own
@@ -504,17 +602,27 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
       return typeof node === "string" ? process(node) : node
     }
     return {
-      inlineCode: InlineCode,
+      ...chips,
       ...image,
-      ...link,
-      p: ({ children: kids, ...props }: { children?: React.ReactNode }) => (
-        <p {...props}>{wrap(kids)}</p>
-      ),
-      li: ({ children: kids, ...props }: { children?: React.ReactNode }) => (
-        <li {...props}>{wrap(kids)}</li>
-      ),
+      // Streamdown hands every renderer its hast `node`; it is not a DOM prop.
+      p: ({
+        children: kids,
+        node,
+        ...props
+      }: { children?: React.ReactNode; node?: unknown }) => {
+        void node
+        return <p {...props}>{wrap(kids)}</p>
+      },
+      li: ({
+        children: kids,
+        node,
+        ...props
+      }: { children?: React.ReactNode; node?: unknown }) => {
+        void node
+        return <li {...props}>{wrap(kids)}</li>
+      },
     }
-  }, [linksToFiles, patternHandlers, menuOnImages])
+  }, [patternHandlers, menuOnImages])
 
   /* Either the stable callback or null — one identity each, so the provider
      never invalidates the blocks below it mid-stream. */
