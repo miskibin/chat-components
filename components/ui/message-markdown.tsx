@@ -552,10 +552,19 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
     return {
       ...chips,
       ...image,
-      p: ({ children: kids, ...props }: { children?: React.ReactNode }) => (
+      // Streamdown hands every renderer its hast `node`; it is not a DOM prop.
+      p: ({
+        children: kids,
+        node: _node,
+        ...props
+      }: { children?: React.ReactNode; node?: unknown }) => (
         <p {...props}>{wrap(kids)}</p>
       ),
-      li: ({ children: kids, ...props }: { children?: React.ReactNode }) => (
+      li: ({
+        children: kids,
+        node: _node,
+        ...props
+      }: { children?: React.ReactNode; node?: unknown }) => (
         <li {...props}>{wrap(kids)}</li>
       ),
     }
