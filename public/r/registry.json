@@ -322,7 +322,7 @@
       "name": "file-preview",
       "type": "registry:ui",
       "title": "File Preview",
-      "description": "Side panel that shows a file an agent touched: its diff (unified or split), the whole file with the edited lines marked and scrolled into view, or the picture when it is an image — with copy-path, line wrapping and a file actions menu.",
+      "description": "Side panel that shows a file an agent touched: its diff (unified or split), the whole file with the edited lines marked and scrolled into view, or the picture when it is an image — with copy-path, line wrapping, line comments and a file actions menu.",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "dropdown-menu",
@@ -359,8 +359,8 @@
       "name": "diff-view",
       "type": "registry:ui",
       "title": "Diff View",
-      "description": "A file or a diff rendered by @pierre/diffs — virtualized, syntax highlighted, split or unified, with a focus line and per-line tints — bound to the app's own tokens.",
-      "dependencies": ["@pierre/diffs", "next-themes"],
+      "description": "A file or a diff rendered by @pierre/diffs — virtualized, syntax highlighted, split or unified, with a focus line, per-line tints and line selection that hands a picked range back with its text — bound to the app's own tokens.",
+      "dependencies": ["@pierre/diffs", "lucide-react", "next-themes"],
       "registryDependencies": ["miskibin/chat-components/diff-worker-pool"],
       "files": [
         {

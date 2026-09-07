@@ -8,6 +8,7 @@ import { AskQuestionStyledExample } from "@/components/examples/ask-question-sty
 import { ChangeSummaryActionsExample } from "@/components/examples/change-summary-actions-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
 import { ChangeSummaryStyledExample } from "@/components/examples/change-summary-styled-example"
+import { DiffViewCommentsExample } from "@/components/examples/diff-view-comments-example"
 import { DiffViewExample } from "@/components/examples/diff-view-example"
 import { DiffViewLargeExample } from "@/components/examples/diff-view-large-example"
 import { FileIconExample } from "@/components/examples/file-icon-example"
@@ -2458,6 +2459,19 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
               "Renders the close button. While it is set, Escape closes the panel too.",
           },
           {
+            name: "onLineComment",
+            type: "(range: DiffLineCommentRange) => void",
+            description: (
+              <>
+                Line selection in both bodies, forwarded to{" "}
+                <Link href="/docs/components/diff-view">Diff View</Link>: the
+                reader picks a range and the panel hands back the lines with
+                their text, for a host that quotes them into a prompt or a
+                review.
+              </>
+            ),
+          },
+          {
             name: "classNames",
             type: "{ root?, header?, body? }",
             description: "Per-part overrides, merged after the defaults.",
@@ -2618,6 +2632,7 @@ export function Workspace({ messages }: { messages: ChatMessageData[] }) {
       "file-preview-note",
       "diff-view",
       "diff-view-surface",
+      "diff-view-line-comment",
       "file-icon",
     ],
     examples: [
@@ -3155,6 +3170,23 @@ export function Review({ file }: { file: ChangedFile }) {
             ),
           },
           {
+            name: "onLineComment",
+            type: "(range: DiffLineCommentRange) => void",
+            description: (
+              <>
+                Turns on line selection. Drag the gutter and a{" "}
+                <DocsCode>Comment on lines</DocsCode> button appears over the
+                selection; clicking it hands back{" "}
+                <DocsCode>
+                  {"{ path, startLine, endLine, side?, excerpt }"}
+                </DocsCode>{" "}
+                — the numbers in the numbering of the side they were picked on,
+                and the text of those lines, read back out of the patch so the
+                quote survives leaving the viewer.
+              </>
+            ),
+          },
+          {
             name: "theme",
             type: "DiffsThemeNames | ThemesType",
             default: '{ light: "pierre-light", dark: "pierre-dark" }',
@@ -3223,6 +3255,7 @@ export function Review({ file }: { file: ChangedFile }) {
     dataSlots: [
       "diff-view",
       "diff-view-surface",
+      "diff-view-line-comment",
       "diff-view-note",
       "diff-view-empty",
       "diff-worker-pool-fallback",
@@ -3245,6 +3278,23 @@ export function Review({ file }: { file: ChangedFile }) {
       },
     ],
     examples: [
+      {
+        title: "Comment on the lines you picked",
+        description: (
+          <>
+            <DocsCode>onLineComment</DocsCode> is what turns a viewer into a
+            review surface: the reader drags a range in the gutter, and the host
+            gets the lines <em>and</em> their text. A range dragged across the
+            two columns of a split diff belongs to the side it ended on, so the
+            numbers and the quote always agree.
+          </>
+        ),
+        example: {
+          name: "diff-view-comments-example",
+          node: <DiffViewCommentsExample />,
+          align: "stretch",
+        },
+      },
       {
         title: "Four thousand lines, sixteen changed",
         description: (

@@ -7,7 +7,10 @@ import {
   FileContextMenu,
   type FileActionItem,
 } from "@/components/ui/change-summary"
-import { DiffView } from "@/components/ui/diff-view"
+import {
+  DiffView,
+  type DiffLineCommentRange,
+} from "@/components/ui/diff-view"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,6 +70,8 @@ export type FilePreviewFile = {
   imageSrc?: string
 }
 
+export type { DiffLineCommentRange }
+
 export type FilePreviewView = "file" | "diff"
 
 export type FilePreviewDiffLayout = "unified" | "split"
@@ -91,6 +96,11 @@ export type FilePreviewProps = Omit<React.ComponentProps<"div">, "children"> & {
   onCopyPath?: (path: string) => void
   /** Renders the close button. Escape closes the panel whenever this is set. */
   onClose?: () => void
+  /**
+   * Turns on line selection in both bodies and offers "Comment on lines" over
+   * the picked range — the host decides what a comment is for.
+   */
+  onLineComment?: (range: DiffLineCommentRange) => void
   classNames?: {
     root?: string
     header?: string
@@ -314,6 +324,7 @@ export function FilePreview({
   actions,
   onCopyPath,
   onClose,
+  onLineComment,
   className,
   classNames,
   ...props
@@ -643,6 +654,7 @@ export function FilePreview({
             focusLine={fileFocus}
             focusNonce={deferredFile.focusNonce}
             wrap={wrapped}
+            {...(onLineComment ? { onLineComment } : null)}
           />
         ) : view === "diff" && hasDiff ? (
           <DiffView
@@ -654,6 +666,7 @@ export function FilePreview({
             newText={model.newText}
             mode={layout}
             wrap={wrapped}
+            {...(onLineComment ? { onLineComment } : null)}
           />
         ) : (
           <EmptyNote>No preview available for this file.</EmptyNote>

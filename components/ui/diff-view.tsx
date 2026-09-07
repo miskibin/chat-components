@@ -7,6 +7,8 @@ import {
   type CodeViewItem,
   type DiffsThemeNames,
   type FileDiffMetadata,
+  type SelectedLineRange,
+  type SelectionSide,
   type SupportedLanguages,
   type ThemesType,
 } from "@pierre/diffs"
@@ -15,6 +17,7 @@ import {
   type CodeViewHandle,
   type CodeViewReactOptions,
 } from "@pierre/diffs/react"
+import { MessageSquarePlus } from "lucide-react"
 import { useTheme } from "next-themes"
 import * as React from "react"
 
@@ -22,6 +25,21 @@ import { cn } from "@/lib/utils"
 import { PREFERRED_HIGHLIGHTER, DIFF_THEMES } from "@/lib/syntax-highlighting"
 
 export type DiffViewMode = "unified" | "split"
+
+/**
+ * A range of lines a reader picked, and the text those lines hold — what a
+ * host needs to quote the selection back at an agent. `side` names which
+ * version of the file the numbers belong to; a plain file has neither.
+ */
+export type DiffLineCommentRange = {
+  path: string
+  /** 1-based, inclusive, in the numbering of `side`. */
+  startLine: number
+  endLine: number
+  side?: "old" | "new"
+  /** The selected lines themselves, newline joined. Empty when unreadable. */
+  excerpt: string
+}
 
 /**
  * Every option `DiffView` owns is removed: passing one here would be silently
@@ -39,6 +57,7 @@ export type DiffViewOptions = Omit<
   | "preferredHighlighter"
   | "itemMetrics"
   | "layout"
+  | "enableLineSelection"
 >
 
 export type DiffViewProps = Omit<
@@ -76,6 +95,12 @@ export type DiffViewProps = Omit<
   focusLine?: number
   /** Bump it to ask for the same `focusLine` again. */
   focusNonce?: number
+  /**
+   * Turns on line selection and offers "Comment on lines" over the selected
+   * range. Set it and a reader can drag the gutter to pick lines and hand
+   * them — with the text they name — back to the host.
+   */
+  onLineComment?: (range: DiffLineCommentRange) => void
   /** Shiki theme, or a light/dark pair. Defaults to Pierre's own two. */
   theme?: DiffsThemeNames | ThemesType
   /** Appended inside the viewer's shadow root, after the token bindings. */
@@ -84,7 +109,12 @@ export type DiffViewProps = Omit<
   options?: DiffViewOptions
   /** Shown when there is nothing to render. */
   emptyLabel?: React.ReactNode
-  classNames?: { root?: string; surface?: string; note?: string }
+  classNames?: {
+    root?: string
+    surface?: string
+    note?: string
+    lineComment?: string
+  }
 }
 
 /**
@@ -242,6 +272,58 @@ function contextPatch(path: string, content: string, startLine: number) {
   ].join("\n")
 }
 
+/**
+ * The lines a selected range names, read back out of the model the viewer is
+ * showing. A hunk carries both its file-line start and where its rows begin
+ * inside `additionLines` / `deletionLines`, so one walk covers a whole-file
+ * diff and a patch that only holds the lines around each change.
+ */
+function excerptFromDiff(
+  file: FileDiffMetadata,
+  side: SelectionSide,
+  startLine: number,
+  endLine: number
+) {
+  const deletions = side === "deletions"
+  const source = deletions ? file.deletionLines : file.additionLines
+  const picked: string[] = []
+  for (const hunk of file.hunks) {
+    const first = deletions ? hunk.deletionStart : hunk.additionStart
+    const count = deletions ? hunk.deletionCount : hunk.additionCount
+    const index = deletions ? hunk.deletionLineIndex : hunk.additionLineIndex
+    const from = Math.max(startLine, first)
+    const to = Math.min(endLine, first + count - 1)
+    for (let line = from; line <= to; line++) {
+      picked.push((source[index + (line - first)] ?? "").replace(/\r?\n$/, ""))
+    }
+  }
+  return picked.join("\n")
+}
+
+/** The same, for the plain-file item — which always numbers from 1. */
+function excerptFromFile(contents: string, startLine: number, endLine: number) {
+  return splitLines(contents)
+    .slice(Math.max(0, startLine - 1), endLine)
+    .join("\n")
+}
+
+/** `12`, or `12-18` — the label the comment affordance carries. */
+function rangeLabel(startLine: number, endLine: number) {
+  return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`
+}
+
+/**
+ * Pierre reports a range in the numbering of whichever side each end was
+ * picked on. A selection dragged across the two columns of a split diff is
+ * read as belonging to the side it ended on, and the numbers are ordered.
+ */
+function normalizeRange(range: SelectedLineRange) {
+  const side: SelectionSide | undefined = range.endSide ?? range.side
+  const startLine = Math.min(range.start, range.end)
+  const endLine = Math.max(range.start, range.end)
+  return { side, startLine, endLine }
+}
+
 type DiffModel =
   | { kind: "none" }
   | { kind: "item"; item: CodeViewItem<undefined>; diff: boolean }
@@ -353,6 +435,7 @@ export function DiffView({
   highlightLines,
   focusLine,
   focusNonce,
+  onLineComment,
   theme,
   unsafeCSS,
   options,
@@ -364,6 +447,7 @@ export function DiffView({
 }: DiffViewProps) {
   const { resolvedTheme } = useTheme()
   const dark = resolvedTheme === "dark"
+  const commentable = !!onLineComment
 
   const lang = language as SupportedLanguages | undefined
   const model = React.useMemo(
@@ -386,6 +470,20 @@ export function DiffView({
     [marked, unsafeCSS]
   )
 
+  /**
+   * The lines the reader has picked. Controlled, because that is the only
+   * shape the viewer offers: it reports every change and draws back whatever
+   * it is handed.
+   */
+  const [selection, setSelection] = React.useState<SelectedLineRange | null>(
+    null
+  )
+  const onSelectionChange = React.useCallback(
+    (next: { id: string; range: SelectedLineRange } | null) =>
+      setSelection(next?.range ?? null),
+    []
+  )
+
   const viewerOptions = React.useMemo<CodeViewReactOptions<undefined, undefined>>(
     () => ({
       ...options,
@@ -397,6 +495,7 @@ export function DiffView({
       disableFileHeader: !fileHeader,
       preferredHighlighter: PREFERRED_HIGHLIGHTER,
       unsafeCSS: css,
+      enableLineSelection: commentable,
       itemMetrics: {
         diffHeaderHeight: fileHeader ? 32 : 0,
         hunkSeparatorHeight: 24,
@@ -409,7 +508,17 @@ export function DiffView({
       },
       layout: { paddingTop: 0, paddingBottom: 0, gap: 0 },
     }),
-    [options, theme, dark, wrap, mode, lineNumbers, fileHeader, css]
+    [
+      options,
+      theme,
+      dark,
+      wrap,
+      mode,
+      lineNumbers,
+      fileHeader,
+      css,
+      commentable,
+    ]
   )
 
   // State rather than a ref: the reveal effect below has to run again once the
@@ -424,6 +533,47 @@ export function DiffView({
   const isDiffItem = item?.type === "diff"
   const isDiff = model.kind === "item" && model.diff
   const items = React.useMemo(() => (item ? [item] : []), [item])
+
+  // Adjusted while rendering rather than in an effect: a range picked in the
+  // file that was open must not survive into the one that replaces it.
+  const [selectionFor, setSelectionFor] = React.useState(itemId)
+  if (selectionFor !== itemId) {
+    setSelectionFor(itemId)
+    setSelection(null)
+  }
+  const selected = React.useMemo(
+    () => (commentable && selection && itemId ? { id: itemId, range: selection } : null),
+    [commentable, itemId, selection]
+  )
+
+  /** The picked range, ordered and reduced to one side. */
+  const picked = React.useMemo(
+    () => (selection ? normalizeRange(selection) : null),
+    [selection]
+  )
+
+  /**
+   * Hand the picked lines to the host, with the text they hold — a quote is
+   * what makes the comment mean something once it is out of the viewer — and
+   * drop the selection, so the affordance does not outlive the click.
+   */
+  const comment = React.useCallback(() => {
+    if (!onLineComment || !selection || !item) return
+    const { side, startLine: from, endLine: to } = normalizeRange(selection)
+    const excerpt =
+      item.type === "diff"
+        ? excerptFromDiff(item.fileDiff, side ?? "additions", from, to)
+        : excerptFromFile(item.file.contents, from, to)
+    onLineComment({
+      path,
+      startLine: from,
+      endLine: to,
+      ...(side ? { side: side === "deletions" ? ("old" as const) : ("new" as const) } : null),
+      excerpt,
+    })
+    setSelection(null)
+    handle?.clearSelectedLines()
+  }, [handle, item, onLineComment, path, selection])
 
   /**
    * Centre the requested line once per request. The line *and* the host's
@@ -486,14 +636,37 @@ export function DiffView({
       ) : (
         <div
           data-slot="diff-view-surface"
-          className={cn("min-h-0 flex-1", classNames?.surface)}
+          className={cn("relative min-h-0 flex-1", classNames?.surface)}
         >
           <CodeView<undefined, undefined>
             ref={setHandle}
             items={items}
             options={viewerOptions}
+            {...(commentable
+              ? {
+                  selectedLines: selected,
+                  onSelectedLinesChange: onSelectionChange,
+                }
+              : null)}
             className="h-full font-mono text-[12.5px] outline-none"
           />
+          {commentable && picked ? (
+            <button
+              type="button"
+              data-slot="diff-view-line-comment"
+              onClick={comment}
+              className={cn(
+                "absolute right-3 bottom-3 z-10 inline-flex items-center gap-1.5 rounded-md border bg-popover px-2 py-1 text-[12px] font-medium text-popover-foreground shadow-md outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                classNames?.lineComment
+              )}
+            >
+              <MessageSquarePlus className="size-3.5" />
+              Comment on {picked.startLine === picked.endLine
+                ? "line"
+                : "lines"}{" "}
+              {rangeLabel(picked.startLine, picked.endLine)}
+            </button>
+          ) : null}
         </div>
       )}
     </div>
