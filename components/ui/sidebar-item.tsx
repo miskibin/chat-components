@@ -36,7 +36,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
-import { useSidebarDndList } from "@/components/ui/sidebar-dnd"
+import {
+  useSidebarDnd,
+  useSidebarDndList,
+  useSidebarDropVerb,
+} from "@/components/ui/sidebar-dnd"
+import { useSidebarListMotion } from "@/components/ui/sidebar-motion"
 import { cn } from "@/lib/utils"
 
 /* -------------------------------------------------------------------------------------------------
@@ -76,6 +81,12 @@ export type ChatSidebarItemData = {
   status?: SidebarItemStatus
   /** Leading node rendered instead of the status dot. */
   leading?: ReactNode
+  /**
+   * Dims the row until it is hovered, active or selected. Background work
+   * should not compete with the things waiting on you: a row that is merely
+   * busy recedes, a row that needs an answer does not.
+   */
+  recede?: boolean
 }
 
 export type SidebarItemRenderContext = {
@@ -134,16 +145,34 @@ export type SidebarItemRenderContent = (
   ctx: SidebarItemRenderContext
 ) => ReactNode
 
+/**
+ * Builds the hover-action cluster for one row. Identity is stabilised by the
+ * list, so an inline arrow costs nothing; return `undefined` for a row that
+ * carries no actions.
+ */
+export type SidebarItemRenderActions = (
+  item: ChatSidebarItemData,
+  ctx: SidebarItemRenderContext
+) => ReactNode
+
 /* -------------------------------------------------------------------------------------------------
  * Status dot
  * -----------------------------------------------------------------------------------------------*/
 
-const statusDotVariants = cva("size-2 shrink-0 rounded-full", {
+/**
+ * Three colours and a grey, on purpose: `primary` for this app's own work,
+ * amber for something waiting on the user, `destructive` for a failure. A dot
+ * per state is a legend nobody reads.
+ */
+const statusDotVariants = cva("relative size-2 shrink-0 rounded-full", {
   variants: {
     status: {
       idle: "bg-muted-foreground/50",
       active: "bg-primary",
-      streaming: "bg-primary animate-pulse",
+      // Saturated rather than pulsing: a looping animation on every streaming
+      // row repaints for as long as the answer takes, and a sidebar of them
+      // costs more than the answer does.
+      streaming: "bg-primary",
       pending: "bg-amber-500",
       fault: "bg-destructive",
     },
@@ -159,13 +188,30 @@ export function SidebarItemStatusDot({
   status,
   className,
 }: SidebarItemStatusDotProps) {
+  const resolved = status ?? "idle"
+  // One ping when the state changes, then nothing — the change is the news,
+  // and a state that has not changed has nothing left to announce. Adjusted
+  // while rendering (the key remounts the ring) so no effect and no second
+  // paint are needed.
+  const [seen, setSeen] = useState({ status: resolved, pulse: 0 })
+  if (seen.status !== resolved) {
+    setSeen({ status: resolved, pulse: seen.pulse + 1 })
+  }
+
   return (
     <span
       aria-hidden
       data-slot="sidebar-item-status"
-      data-status={status ?? "idle"}
+      data-status={resolved}
       className={cn(statusDotVariants({ status }), className)}
-    />
+    >
+      {seen.pulse > 0 ? (
+        <span
+          key={seen.pulse}
+          className="absolute inset-0 rounded-full bg-inherit animate-ping [animation-iteration-count:1] motion-reduce:hidden"
+        />
+      ) : null}
+    </span>
   )
 }
 
@@ -269,16 +315,45 @@ function isMultiline(item: ChatSidebarItemData) {
 const SUB_INK =
   "text-muted-foreground group-hover/row:text-current/75 group-data-[active=true]/row:text-current/75 group-data-[selected=true]/row:text-current/75"
 
+/**
+ * What dropping here would do, on the row under the pointer, in the slot the
+ * meta label just vacated. Its own context subscriber: the verb changes on
+ * every `dragover`, and only the lifted row mounts this.
+ */
+function SidebarDropVerbBadge() {
+  const verb = useSidebarDropVerb()
+  if (!verb) return null
+
+  return (
+    <span
+      role="status"
+      data-slot="sidebar-item-drop-verb"
+      className={cn(
+        "pointer-events-none inline-flex h-5 shrink-0 items-center gap-1 rounded-sm px-1.5",
+        "border border-primary/40 bg-primary/10 text-[11px] font-medium text-primary"
+      )}
+    >
+      {verb.icon}
+      {verb.label}
+    </span>
+  )
+}
+
 function SidebarItemBody({
   item,
   active = false,
   pinned,
   showStatusDot = true,
+  hasActions = false,
+  dragging = false,
 }: {
   item: ChatSidebarItemData
   active?: boolean
   pinned: boolean
   showStatusDot?: boolean
+  /** Fade the meta out on hover, because an action cluster takes its place. */
+  hasActions?: boolean
+  dragging?: boolean
 }) {
   const leading =
     item.leading ??
@@ -286,6 +361,29 @@ function SidebarItemBody({
       <SidebarItemStatusDot status={resolveStatus(active, item.status)} />
     ) : null)
   const title = item.title || "Untitled"
+  // The verb sits beside the meta rather than replacing it, so a drag that
+  // stays inside one list — which has no verb to show — keeps its timestamp.
+  const trailing =
+    dragging || item.meta != null ? (
+      <>
+        {dragging ? <SidebarDropVerbBadge /> : null}
+        {item.meta != null ? (
+          <span
+            data-slot="sidebar-item-meta"
+            className={cn(
+              "shrink-0 text-[11px] font-normal",
+              SUB_INK,
+              // The actions cluster covers this slot; fading rather than
+              // unmounting keeps the title's truncation from jumping on hover.
+              hasActions &&
+                "transition-opacity motion-reduce:transition-none group-hover/sidebar-item:opacity-0 group-has-[:focus-visible]/sidebar-item:opacity-0"
+            )}
+          >
+            {item.meta}
+          </span>
+        ) : null}
+      </>
+    ) : null
 
   return (
     <>
@@ -299,18 +397,11 @@ function SidebarItemBody({
           {leading}
         </span>
       ) : null}
-      {item.subtitle != null || item.meta != null ? (
+      {item.subtitle != null || trailing != null ? (
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 flex-1 truncate">{title}</span>
-            {item.meta != null ? (
-              <span
-                data-slot="sidebar-item-meta"
-                className={cn("shrink-0 text-[11px] font-normal", SUB_INK)}
-              >
-                {item.meta}
-              </span>
-            ) : null}
+            {trailing}
           </span>
           {item.subtitle != null ? (
             <span
@@ -369,6 +460,18 @@ export type ChatSidebarItemProps = {
   showDivider?: boolean
   showStatusDot?: boolean
   /**
+   * Controls that take over the meta slot on hover or keyboard focus — settle,
+   * dismiss, snooze. They sit beside the row button, never inside it, so they
+   * stay real buttons.
+   */
+  actions?: ReactNode
+  /**
+   * Skip rendering rows scrolled out of the sidebar (`content-visibility`). On
+   * by default; turn it off for a list short enough that the reserved
+   * intrinsic size costs more than the skipped layout saves.
+   */
+  contentVisibility?: boolean
+  /**
    * Replace the row body entirely. The shell — button, drag listeners, context
    * menu, double-click renaming and the editing input — stays.
    */
@@ -397,6 +500,19 @@ function isModifierClick(event: { shiftKey: boolean; metaKey: boolean; ctrlKey: 
   return event.shiftKey || event.metaKey || event.ctrlKey
 }
 
+// Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.
+/**
+ * A double-click dispatches two `click` events before `dblclick`: the first has
+ * `detail === 1`, the second `detail === 2`. The row wires select and rename on
+ * the same button, so the second click must not also select — otherwise
+ * double-click-to-rename opens the chat on its way to the input.
+ * `MouseEvent.detail` is 0 for synthetic and keyboard activations, which still
+ * count as one normal activation.
+ */
+export function isTrailingDoubleClick(detail: number): boolean {
+  return detail > 1
+}
+
 /** Cmd on Apple, Ctrl on other platforms. Ctrl+click on Mac is a context menu. */
 function isToggleClick(event: { metaKey: boolean; ctrlKey: boolean }) {
   if (event.metaKey) return true
@@ -412,6 +528,8 @@ function SidebarItemRow({
   bulk,
   showDivider = false,
   showStatusDot = true,
+  actions,
+  contentVisibility = true,
   renderContent,
   className,
   editing,
@@ -461,6 +579,17 @@ function SidebarItemRow({
 
   const custom = renderContent?.(item, { active, pinned, selected })
   const multiline = custom === undefined && isMultiline(item)
+  const recede = !!item.recede && !active && !selected
+  const startRename = onRename && !multi ? startEdit : undefined
+
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      // The row renames on double-click, so the second click of one is spent.
+      if (startRename && isTrailingDoubleClick(event.detail)) return
+      onSelect?.(event)
+    },
+    [onSelect, startRename]
+  )
 
   /* dnd-kit installs the activator its sensors declare, and the list's are
      Mouse/Touch/Keyboard — `onMouseDown` and `onTouchStart`. `onPointerDown`
@@ -499,13 +628,27 @@ function SidebarItemRow({
     <div
       ref={drag?.setNodeRef}
       data-slot="sidebar-item"
+      data-motion-key={item.id}
       data-active={active}
       data-selected={selected}
       data-pinned={pinned}
+      data-recede={recede || undefined}
       data-dragging={drag?.dragging ? true : undefined}
       style={drag?.style}
       className={cn(
         "group/sidebar-item relative",
+        // A sidebar is a long list of rows nobody has scrolled to. The
+        // intrinsic size is the row's own height, so the scrollbar stays
+        // honest while the row itself is skipped.
+        contentVisibility && [
+          multiline
+            ? "[content-visibility:auto] [contain-intrinsic-size:auto_78px]"
+            : "[content-visibility:auto] [contain-intrinsic-size:auto_34px]",
+          // Skipping a row also paints it clipped, which would cut the focus
+          // ring off at the row's own box. A row with focus in it is on screen
+          // by definition, so it has nothing to skip anyway.
+          "focus-within:[content-visibility:visible]",
+        ],
         showDivider && "mt-1.5 border-t border-sidebar-border pt-1.5",
         drag?.dragging && "opacity-40",
         className
@@ -536,9 +679,10 @@ function SidebarItemRow({
           data-slot="sidebar-item-button"
           data-active={active}
           data-selected={selected}
+          data-recede={recede || undefined}
           title={item.title || "Untitled"}
-          onClick={onSelect}
-          onDoubleClick={onRename && !multi ? startEdit : undefined}
+          onClick={onSelect ? handleClick : undefined}
+          onDoubleClick={startRename}
           {...(drag?.attributes ?? {})}
           {...(drag?.listeners ?? {})}
           onMouseDown={onMouseDown}
@@ -552,6 +696,10 @@ function SidebarItemRow({
             "focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
             "data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground",
             "data-[selected=true]:bg-sidebar-accent data-[selected=true]:text-sidebar-accent-foreground",
+            // Receding is a rest state only: hovering one restores it whole.
+            "data-[recede=true]:text-muted-foreground data-[recede=true]:opacity-70",
+            "data-[recede=true]:hover:text-sidebar-accent-foreground data-[recede=true]:hover:opacity-100",
+            "transition-opacity motion-reduce:transition-none",
             drag?.enabled && "cursor-grab active:cursor-grabbing"
           )}
         >
@@ -561,31 +709,52 @@ function SidebarItemRow({
               active={active}
               pinned={pinned}
               showStatusDot={showStatusDot}
+              hasActions={actions != null}
+              dragging={drag?.dragging}
             />
           ) : (
             custom
           )}
         </button>
       )}
+      {actions != null && !editing ? (
+        // focus-visible, not focus-within: a mouse click leaves the action
+        // focused, and focus-within would keep the cluster pinned over the meta
+        // label after the pointer moves away instead of cross-fading back.
+        // Outside the button, because a button inside a button is not a button.
+        <span
+          data-slot="sidebar-item-actions"
+          className={cn(
+            "pointer-events-none absolute right-2 flex items-center gap-0.5 opacity-0",
+            "rounded-md bg-sidebar-accent pl-3 text-sidebar-accent-foreground",
+            "transition-opacity motion-reduce:transition-none",
+            multiline ? "top-2 h-5" : "inset-y-1.5",
+            "group-hover/sidebar-item:pointer-events-auto group-hover/sidebar-item:opacity-100",
+            "has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100"
+          )}
+        >
+          {actions}
+        </span>
+      ) : null}
     </div>
   )
 
-  const actions = useItemMenuActions({
+  const menuItems = useItemMenuActions({
     pinned,
     bulk,
     menuActions: multi ? undefined : menuActions,
-    onRename: onRename && !multi ? startEdit : undefined,
+    onRename: startRename,
     onTogglePin,
     onDelete,
   })
 
-  if (editing || actions.length === 0) return shell
+  if (editing || menuItems.length === 0) return shell
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{shell}</ContextMenuTrigger>
       <ContextMenuContent className="min-w-40">
-        {actions.map((action) => (
+        {menuItems.map((action) => (
           <div key={action.id}>
             {action.separatorBefore ? <ContextMenuSeparator /> : null}
             <ContextMenuItem
@@ -775,9 +944,11 @@ type ListRowProps = {
   sortable: boolean
   showDivider: boolean
   showStatusDot: boolean
+  contentVisibility: boolean
   renameToken: number
   itemClassName?: string
   renderContent?: SidebarItemRenderContent
+  renderActions?: SidebarItemRenderActions
   onSelect?: (id: string, event: MouseEvent<HTMLButtonElement>) => void
   onRename?: (id: string, title: string) => void
   onTogglePin?: (id: string, pinned: boolean) => void
@@ -798,9 +969,11 @@ const SidebarListRow = memo(function SidebarListRow({
   sortable,
   showDivider,
   showStatusDot,
+  contentVisibility,
   renameToken,
   itemClassName,
   renderContent,
+  renderActions,
   onSelect,
   onRename,
   onTogglePin,
@@ -812,6 +985,10 @@ const SidebarListRow = memo(function SidebarListRow({
   const id = item.id
   const pinned = !!item.pinned
   const multi = selected && (bulk?.count ?? 0) > 1
+  const actions = useMemo(
+    () => renderActions?.(item, { active, pinned, selected }),
+    [active, item, pinned, renderActions, selected]
+  )
 
   const handleSelect = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => onSelect?.(id, event),
@@ -841,6 +1018,8 @@ const SidebarListRow = memo(function SidebarListRow({
       sortable={sortable}
       showDivider={showDivider}
       showStatusDot={showStatusDot}
+      contentVisibility={contentVisibility}
+      actions={actions}
       renameToken={renameRequestToken(renameToken, multi)}
       renderContent={renderContent}
       className={itemClassName}
@@ -881,6 +1060,19 @@ export type ChatSidebarItemListProps = {
   /** Draw a separator between the pinned group and the rest. */
   groupPinned?: boolean
   /**
+   * Animate rows between their layout positions — reorders, filtering, a chat
+   * arriving or leaving. Off by default: it is a real animation on a list that
+   * may be long, so a consumer opts in per list. Honours
+   * `prefers-reduced-motion` and gives up on updates that would fade more than
+   * forty rows at once.
+   */
+  motion?: boolean
+  /**
+   * Skip rendering rows scrolled out of view (`content-visibility`). On by
+   * default.
+   */
+  contentVisibility?: boolean
+  /**
    * Opens the inline rename input for one row from the outside — bump `token`
    * (a command palette action, a keyboard shortcut) to request it.
    */
@@ -894,6 +1086,12 @@ export type ChatSidebarItemListProps = {
    * an inline callback still leaves rows memoized.
    */
   renderContent?: SidebarItemRenderContent
+  /**
+   * Row controls that swap with the meta label on hover or keyboard focus.
+   * Identity is stabilised internally, so an inline callback still leaves rows
+   * memoized.
+   */
+  renderActions?: SidebarItemRenderActions
   onSelect?: (id: string) => void
   onRename?: (id: string, title: string) => void
   onTogglePin?: (id: string, pinned: boolean) => void
@@ -994,11 +1192,14 @@ export function ChatSidebarItemList({
   sortable = false,
   showStatusDot = true,
   groupPinned = true,
+  motion = false,
+  contentVisibility = true,
   renameRequest,
   className,
   itemClassName,
   emptyState,
   renderContent,
+  renderActions,
   onSelect,
   onRename,
   onTogglePin,
@@ -1013,6 +1214,19 @@ export function ChatSidebarItemList({
   const ids = useMemo(() => items.map((item) => item.id), [items])
 
   useSidebarDndList(resolvedListId, ids)
+
+  const listRef = useRef<HTMLDivElement>(null)
+  const { activeId: draggingId, registerDragRelease } = useSidebarDnd()
+  const listMotion = useSidebarListMotion(listRef, {
+    enabled: motion,
+    // A drag owns the layout: rows move by transform, which no layout read
+    // sees, so the FLIP waits for the release snapshot instead.
+    paused: draggingId !== null,
+  })
+  useEffect(
+    () => registerDragRelease(listMotion.release),
+    [listMotion, registerDragRelease]
+  )
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedIdsRef = useRef(selectedIds)
@@ -1039,6 +1253,7 @@ export function ChatSidebarItemList({
   const stableSelectionChange = useStableCallback(onSelectedIdsChange)
   const stableMenuActions = useStableCallback(getMenuActions)
   const stableRenderContent = useStableCallback(renderContent)
+  const stableRenderActions = useStableCallback(renderActions)
 
   const applySelection = useCallback(
     (next: string[], nextAnchor?: string | null) => {
@@ -1156,9 +1371,11 @@ export function ChatSidebarItemList({
       draggable={draggable || sortable}
       sortable={sortable}
       showStatusDot={showStatusDot}
+      contentVisibility={contentVisibility}
       renameToken={renameRequest?.id === item.id ? renameRequest.token : 0}
       itemClassName={itemClassName}
       renderContent={renderContent ? stableRenderContent : undefined}
+      renderActions={renderActions ? stableRenderActions : undefined}
       showDivider={
         groupPinned && index > 0 && !!items[index - 1].pinned && !item.pinned
       }
@@ -1174,10 +1391,17 @@ export function ChatSidebarItemList({
 
   return (
     <div
+      ref={listRef}
       data-slot="sidebar-item-list"
       data-list-id={resolvedListId}
       data-selection-count={selectedCount || undefined}
-      className={cn("flex flex-col gap-px", className)}
+      className={cn(
+        "flex flex-col gap-px",
+        // The motion positions exit clones against this box, and reads every
+        // row's offsetTop from it.
+        motion && "relative",
+        className
+      )}
     >
       {items.length === 0 ? (
         emptyState
@@ -1232,7 +1456,8 @@ export function ChatSidebarItemGhost({
       )}
     >
       {custom === undefined ? (
-        <SidebarItemBody item={item} active={active} pinned={pinned} />
+        // The ghost is the lifted row: it carries the drop verb too.
+        <SidebarItemBody item={item} active={active} pinned={pinned} dragging />
       ) : (
         custom
       )}
