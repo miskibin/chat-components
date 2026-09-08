@@ -80,6 +80,8 @@ export type MessageProps = {
    * newest plan in a thread — see `MessageToolCall`.
    */
   onPlanBuild?: (toolId: string) => void
+  /** The host shows the plan in a panel; the row becomes the way back. */
+  onPlanOpen?: (toolId: string) => void
   /**
    * Elapsed seconds — labels the “Worked for 12s” row the thinking and tool
    * parts collapse into once the turn settles.
@@ -170,6 +172,7 @@ export const Message = React.memo(function Message({
   isAnimating = false,
   onAskAnswer,
   onPlanBuild,
+  onPlanOpen,
   workedFor,
   changes,
   onReviewChanges,
@@ -511,6 +514,7 @@ export const Message = React.memo(function Message({
           tool={part.tool}
           onAskAnswer={onAskAnswer}
           onPlanBuild={onPlanBuild}
+          onPlanOpen={onPlanOpen}
           onOpenFile={onOpenFile}
           fileActions={fileActions}
           resolveFileUrl={resolveFileUrl}
@@ -556,6 +560,7 @@ export const Message = React.memo(function Message({
             defaultOpen
             onAskAnswer={onAskAnswer}
             onPlanBuild={onPlanBuild}
+            onPlanOpen={onPlanOpen}
             onOpenFile={onOpenFile}
             fileActions={fileActions}
             resolveFileUrl={resolveFileUrl}

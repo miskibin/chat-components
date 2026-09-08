@@ -1,6 +1,6 @@
 "use client"
 
-import { ClipboardList, Hammer, Loader2 } from "lucide-react"
+import { ChevronRight, ClipboardList, Hammer, Loader2 } from "lucide-react"
 import * as React from "react"
 
 import { MessageMarkdown } from "@/components/ui/message-markdown"
@@ -96,6 +96,22 @@ export type PlanCardProps = Omit<React.ComponentProps<"div">, "children"> & {
   buildLabel?: string
   /** Locks the action while the turn that would carry it out is starting. */
   busy?: boolean
+  /**
+   * Draws the card as its header alone — the title and the checklist count —
+   * and nothing else. For a host that shows the plan somewhere with more room
+   * than a message column: a side panel, a route of its own. The transcript
+   * still says a plan was written and where in the thread, without repeating a
+   * document that is already open beside it.
+   *
+   * Pair it with {@link onOpen}, or the row is a label nobody can act on.
+   */
+  compact?: boolean
+  /**
+   * Makes the card's header the way back to the plan. Given, the header is a
+   * button; the body below it is unaffected, so an expanded card can carry it
+   * too — the same plan, somewhere it can be read properly.
+   */
+  onOpen?: () => void
 }
 
 /**
@@ -108,40 +124,70 @@ export const PlanCard = React.memo(function PlanCard({
   onBuild,
   buildLabel = "Build",
   busy = false,
+  compact = false,
+  onOpen,
   className,
   ...props
 }: PlanCardProps) {
   const progress = plan.todos?.length ? todoProgress(plan.todos) : null
 
+  const header = (
+    <>
+      <ClipboardList className="size-3.5 opacity-70" />
+      <span
+        data-slot="plan-card-title"
+        className="min-w-0 flex-1 truncate text-left font-medium text-foreground"
+      >
+        {plan.title || "Plan"}
+      </span>
+      {progress ? (
+        <span
+          data-slot="plan-card-count"
+          className="shrink-0 tabular-nums text-muted-foreground"
+        >
+          {progress.completed}/{progress.total}
+        </span>
+      ) : null}
+      {onOpen ? (
+        <ChevronRight
+          data-slot="plan-card-open"
+          className="size-3.5 shrink-0 text-muted-foreground"
+        />
+      ) : null}
+    </>
+  )
+  const headerClass = cn(
+    "flex w-full items-center gap-2 px-3.5 py-2.5 text-[13px] [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    !compact && "border-b",
+    onOpen &&
+      "cursor-pointer outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+  )
+
   return (
     <div
       data-slot="plan-card"
+      data-compact={compact || undefined}
       className={cn(
         "my-2 overflow-hidden rounded-lg border bg-card text-card-foreground animate-in fade-in duration-150",
         className
       )}
       {...props}
     >
-      <div
-        data-slot="plan-card-header"
-        className="flex items-center gap-2 border-b px-3.5 py-2.5 text-[13px] [&_svg]:pointer-events-none [&_svg]:shrink-0"
-      >
-        <ClipboardList className="size-3.5 opacity-70" />
-        <span
-          data-slot="plan-card-title"
-          className="min-w-0 flex-1 truncate font-medium text-foreground"
+      {onOpen ? (
+        <button
+          type="button"
+          data-slot="plan-card-header"
+          onClick={onOpen}
+          className={headerClass}
         >
-          {plan.title || "Plan"}
-        </span>
-        {progress ? (
-          <span
-            data-slot="plan-card-count"
-            className="shrink-0 tabular-nums text-muted-foreground"
-          >
-            {progress.completed}/{progress.total}
-          </span>
-        ) : null}
-      </div>
+          {header}
+        </button>
+      ) : (
+        <div data-slot="plan-card-header" className={headerClass}>
+          {header}
+        </div>
+      )}
+      {compact ? null : (
       <div data-slot="plan-card-body" className="px-3.5 py-3">
         {plan.overview ? (
           <p
@@ -161,7 +207,8 @@ export const PlanCard = React.memo(function PlanCard({
           />
         ) : null}
       </div>
-      {onBuild ? (
+      )}
+      {onBuild && !compact ? (
         <div
           data-slot="plan-card-actions"
           className="flex justify-end border-t px-3.5 py-2.5"

@@ -1446,6 +1446,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   defaultOpen = false,
   onAskAnswer,
   onPlanBuild,
+  onPlanOpen,
   onOpenFile,
   fileActions,
   resolveFileUrl,
@@ -1465,6 +1466,12 @@ export const MessageToolCall = React.memo(function MessageToolCall({
    * button on it would build a plan the conversation has already moved past.
    */
   onPlanBuild?: (toolId: string) => void
+  /**
+   * The host shows this plan somewhere with more room — a side panel. Given,
+   * the row collapses to its header and that header is the way back to it,
+   * rather than repeating a document already open beside the transcript.
+   */
+  onPlanOpen?: (toolId: string) => void
   /**
    * Opt in to “click the headline to open the file” — the row splits into an
    * open button and a separate chevron. Only fires for Edit / Write / Read
@@ -1583,11 +1590,19 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     onPlanBuild?.(tool.id)
   }, [onPlanBuild, tool.id])
 
+  const openPlanPanel = React.useCallback(() => {
+    onPlanOpen?.(tool.id)
+  }, [onPlanOpen, tool.id])
+
   if (plan) {
     return (
       <PlanCard
         plan={plan}
         onBuild={onPlanBuild ? buildPlan : undefined}
+        /* Shown elsewhere: the row says a plan was written and where in the
+           thread, and hands the reader back to where it can be read. */
+        compact={!!onPlanOpen}
+        onOpen={onPlanOpen ? openPlanPanel : undefined}
         busy={running}
         className={className}
       />
@@ -2051,6 +2066,7 @@ export function MessageToolCalls({
   defaultOpen,
   onAskAnswer,
   onPlanBuild,
+  onPlanOpen,
   onOpenFile,
   fileActions,
   resolveFileUrl,
@@ -2063,6 +2079,12 @@ export function MessageToolCalls({
   onAskAnswer?: (toolId: string, result: AskQuestionResult) => void
   /** Forwarded to every row — see `MessageToolCall`. */
   onPlanBuild?: (toolId: string) => void
+  /**
+   * The host shows this plan somewhere with more room — a side panel. Given,
+   * the row collapses to its header and that header is the way back to it,
+   * rather than repeating a document already open beside the transcript.
+   */
+  onPlanOpen?: (toolId: string) => void
   /** Forwarded to every row — see `MessageToolCall`. */
   onOpenFile?: (tool: MessageToolCallData) => void
   /** Forwarded to every row — see `MessageToolCall`. */
@@ -2097,6 +2119,7 @@ export function MessageToolCalls({
           tool={tool}
           onAskAnswer={onAskAnswer}
           onPlanBuild={onPlanBuild}
+          onPlanOpen={onPlanOpen}
           onOpenFile={onOpenFile}
           fileActions={fileActions}
           resolveFileUrl={resolveFileUrl}

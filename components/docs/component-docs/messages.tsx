@@ -31,6 +31,7 @@ import { MessageListEmptyExample } from "@/components/examples/message-list-empt
 import { MessageListExample } from "@/components/examples/message-list-example"
 import { MessageListJumpExample } from "@/components/examples/message-list-jump-example"
 import { MessageListStreamingExample } from "@/components/examples/message-list-streaming-example"
+import { PlanCardCompactExample } from "@/components/examples/plan-card-compact-example"
 import { MessageMarkdownAlertsExample } from "@/components/examples/message-markdown-alerts-example"
 import { MessageMarkdownCopyExample } from "@/components/examples/message-markdown-copy-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
@@ -1711,6 +1712,28 @@ export function Thread() {
             description:
               "Locks the action while the turn that carries the plan out is starting.",
           },
+          {
+            name: "compact",
+            type: "boolean",
+            default: "false",
+            description: (
+              <>
+                Draws the header alone — title and checklist count, no body and
+                no Build. For a host that shows the plan somewhere with more
+                room than a message column: the transcript still says a plan
+                was written and where in the thread, without repeating a
+                document already open beside it. Pair it with{" "}
+                <DocsCode>onOpen</DocsCode>, or the row is a label nobody can
+                act on.
+              </>
+            ),
+          },
+          {
+            name: "onOpen",
+            type: "() => void",
+            description:
+              "Makes the header a button — the way back to the plan. An expanded card can carry it too.",
+          },
         ],
       },
       {
@@ -1747,6 +1770,7 @@ export function Thread() {
       "plan-card-todos",
       "plan-card-actions",
       "plan-card-build",
+      "plan-card-open",
     ],
     examples: [
       {
@@ -1762,6 +1786,27 @@ export function Thread() {
           </>
         ),
         example: { name: "plan-card-example", node: <PlanCardExample /> },
+      },
+      {
+        title: "Somewhere with more room",
+        description: (
+          <>
+            A plan is the one thing in a transcript that is a proposal rather
+            than a record: it is read, argued with, then acted on. A host with
+            a side panel can put it there — pass{" "}
+            <DocsCode>onPlanOpen</DocsCode> to{" "}
+            <DocsCode>MessageToolCall</DocsCode> (or{" "}
+            <DocsCode>MessageList</DocsCode>, which carries it per message) and
+            the transcript row collapses to its header and becomes the way back
+            to it, rather than repeating a document already open beside it.
+            Build goes wherever the plan is; it belongs to one of them, never
+            both.
+          </>
+        ),
+        example: {
+          name: "plan-card-compact-example",
+          node: <PlanCardCompactExample />,
+        },
       },
     ],
   },
@@ -1936,6 +1981,30 @@ export function Answer({ text }: { text: string }) {
             <DocsCode>mailto:</DocsCode> links are hardened exactly as before; a
             relative href that names no path (<DocsCode>?tab=logs</DocsCode>)
             degrades to the text it wrapped.
+          </>
+        ),
+        example: {
+          name: "message-markdown-links-example",
+          node: <MessageMarkdownLinksExample />,
+        },
+      },
+      {
+        title: "An external link opens on the first click",
+        description: (
+          <>
+            Streamdown&rsquo;s <DocsCode>linkSafety</DocsCode> interstitial is
+            off, so an absolute link is a real{" "}
+            <DocsCode>&lt;a target=&quot;_blank&quot;&gt;</DocsCode> rather than
+            a button that raises an &ldquo;Open external link?&rdquo; modal
+            first. The modal is written for a chat with an untrusted model on a
+            page of other people&rsquo;s content; in an agent transcript it is a
+            second click between the reader and the docs their own agent just
+            cited &mdash; and it costs the anchor, so middle-click,{" "}
+            <DocsCode>Copy link address</DocsCode> and a host that wants to
+            route the click itself all stop working. With a real anchor back, a
+            desktop shell (where <DocsCode>target=&quot;_blank&quot;</DocsCode>{" "}
+            has no window to open into) can intercept the click and hand the URL
+            to the system browser.
           </>
         ),
         example: {
