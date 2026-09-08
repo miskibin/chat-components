@@ -118,8 +118,16 @@ const TREE_CSS = `
   --trees-git-added-color-override: var(--chat-diff-added, oklch(0.696 0.17 162.48));
   --trees-git-untracked-color-override: var(--chat-diff-added, oklch(0.696 0.17 162.48));
   --trees-git-deleted-color-override: var(--chat-diff-removed, oklch(0.637 0.237 25.331));
-  --trees-git-modified-color-override: var(--primary);
-  --trees-git-renamed-color-override: var(--primary);
+  /* A tint of the theme's primary *through* the foreground, not the primary
+     itself. Every row in a "changed files" tree is modified, so painting that
+     state the full accent turns the whole list one saturated colour — a
+     glowing blue column in the default theme — which distinguishes nothing and
+     is the loudest thing in a window whose text is otherwise muted grey. At
+     40% the hue still separates a modified file from an untouched one while
+     browsing a folder, and the +12 −3 decoration beside it carries the
+     detail, which is what the colour was standing in for. */
+  --trees-git-modified-color-override: color-mix(in oklab, var(--primary) 40%, var(--foreground));
+  --trees-git-renamed-color-override: color-mix(in oklab, var(--primary) 40%, var(--foreground));
   --trees-git-ignored-color-override: var(--muted-foreground);
 }
 `
