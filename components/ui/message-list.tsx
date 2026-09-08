@@ -80,6 +80,8 @@ export type MessageListProps = React.ComponentProps<"div"> & {
    * record of what was proposed, not a button.
    */
   onPlanBuild?: (messageId: string, toolId: string) => void
+  /** The host shows the plan in a panel; the row becomes the way back. */
+  onPlanOpen?: (messageId: string, toolId: string) => void
   /** Makes the Review label on a turn's change card a button. */
   onReviewChanges?: (messageId: string) => void
   /** Clicking an Edit / Write / Read headline — open it in a file panel. */
@@ -348,6 +350,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onEditMessage,
   onAskAnswer,
   onPlanBuild,
+  onPlanOpen,
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
@@ -374,6 +377,8 @@ const MessageListRow = React.memo(function MessageListRow({
    * record of what was proposed, not a button.
    */
   onPlanBuild?: (messageId: string, toolId: string) => void
+  /** The host shows the plan in a panel; the row becomes the way back. */
+  onPlanOpen?: (messageId: string, toolId: string) => void
   onReviewChanges?: (messageId: string) => void
   onOpenFile?: (messageId: string, tool: MessageToolCallData) => void
   onChangeFileClick?: (messageId: string, file: ChangeSummaryFile) => void
@@ -400,6 +405,10 @@ const MessageListRow = React.memo(function MessageListRow({
   const handlePlanBuild = React.useCallback(
     (toolId: string) => onPlanBuild?.(message.id, toolId),
     [message.id, onPlanBuild]
+  )
+  const handlePlanOpen = React.useCallback(
+    (toolId: string) => onPlanOpen?.(message.id, toolId),
+    [message.id, onPlanOpen]
   )
   const handleReviewChanges = React.useCallback(
     () => onReviewChanges?.(message.id),
@@ -446,6 +455,9 @@ const MessageListRow = React.memo(function MessageListRow({
       onAskAnswer={openAsk && onAskAnswer ? handleAskAnswer : undefined}
       /* Same rule for the plan: only the row that still has one to build. */
       onPlanBuild={openPlan && onPlanBuild ? handlePlanBuild : undefined}
+      /* Unlike Build, this is offered on every plan in the thread: reopening
+         one the conversation has moved past is reading, not acting. */
+      onPlanOpen={onPlanOpen ? handlePlanOpen : undefined}
       onReviewChanges={onReviewChanges ? handleReviewChanges : undefined}
       onOpenFile={onOpenFile ? handleOpenFile : undefined}
       onChangeFileClick={onChangeFileClick ? handleChangeFileClick : undefined}
@@ -468,6 +480,7 @@ export function MessageList({
   onEditMessage,
   onAskAnswer,
   onPlanBuild,
+  onPlanOpen,
   onReviewChanges,
   onOpenFile,
   onChangeFileClick,
@@ -490,6 +503,7 @@ export function MessageList({
   const stableEdit = useStableCallback(onEditMessage)
   const stableAskAnswer = useStableCallback(onAskAnswer)
   const stablePlanBuild = useStableCallback(onPlanBuild)
+  const stablePlanOpen = useStableCallback(onPlanOpen)
   const stableReviewChanges = useStableCallback(onReviewChanges)
   const stableOpenFile = useStableCallback(onOpenFile)
   const stableChangeFileClick = useStableCallback(onChangeFileClick)
@@ -559,6 +573,7 @@ export function MessageList({
                     onEditMessage={onEditMessage ? stableEdit : undefined}
                     onAskAnswer={onAskAnswer ? stableAskAnswer : undefined}
                     onPlanBuild={onPlanBuild ? stablePlanBuild : undefined}
+                    onPlanOpen={onPlanOpen ? stablePlanOpen : undefined}
                     onReviewChanges={
                       onReviewChanges ? stableReviewChanges : undefined
                     }

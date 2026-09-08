@@ -31,6 +31,7 @@ import { MessageListEmptyExample } from "@/components/examples/message-list-empt
 import { MessageListExample } from "@/components/examples/message-list-example"
 import { MessageListJumpExample } from "@/components/examples/message-list-jump-example"
 import { MessageListStreamingExample } from "@/components/examples/message-list-streaming-example"
+import { PlanCardCompactExample } from "@/components/examples/plan-card-compact-example"
 import { MessageMarkdownAlertsExample } from "@/components/examples/message-markdown-alerts-example"
 import { MessageMarkdownCopyExample } from "@/components/examples/message-markdown-copy-example"
 import { MessageMarkdownExample } from "@/components/examples/message-markdown-example"
@@ -1711,6 +1712,28 @@ export function Thread() {
             description:
               "Locks the action while the turn that carries the plan out is starting.",
           },
+          {
+            name: "compact",
+            type: "boolean",
+            default: "false",
+            description: (
+              <>
+                Draws the header alone — title and checklist count, no body and
+                no Build. For a host that shows the plan somewhere with more
+                room than a message column: the transcript still says a plan
+                was written and where in the thread, without repeating a
+                document already open beside it. Pair it with{" "}
+                <DocsCode>onOpen</DocsCode>, or the row is a label nobody can
+                act on.
+              </>
+            ),
+          },
+          {
+            name: "onOpen",
+            type: "() => void",
+            description:
+              "Makes the header a button — the way back to the plan. An expanded card can carry it too.",
+          },
         ],
       },
       {
@@ -1747,6 +1770,7 @@ export function Thread() {
       "plan-card-todos",
       "plan-card-actions",
       "plan-card-build",
+      "plan-card-open",
     ],
     examples: [
       {
@@ -1762,6 +1786,27 @@ export function Thread() {
           </>
         ),
         example: { name: "plan-card-example", node: <PlanCardExample /> },
+      },
+      {
+        title: "Somewhere with more room",
+        description: (
+          <>
+            A plan is the one thing in a transcript that is a proposal rather
+            than a record: it is read, argued with, then acted on. A host with
+            a side panel can put it there — pass{" "}
+            <DocsCode>onPlanOpen</DocsCode> to{" "}
+            <DocsCode>MessageToolCall</DocsCode> (or{" "}
+            <DocsCode>MessageList</DocsCode>, which carries it per message) and
+            the transcript row collapses to its header and becomes the way back
+            to it, rather than repeating a document already open beside it.
+            Build goes wherever the plan is; it belongs to one of them, never
+            both.
+          </>
+        ),
+        example: {
+          name: "plan-card-compact-example",
+          node: <PlanCardCompactExample />,
+        },
       },
     ],
   },
