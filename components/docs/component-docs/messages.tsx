@@ -1944,6 +1944,30 @@ export function Answer({ text }: { text: string }) {
         },
       },
       {
+        title: "An external link opens on the first click",
+        description: (
+          <>
+            Streamdown&rsquo;s <DocsCode>linkSafety</DocsCode> interstitial is
+            off, so an absolute link is a real{" "}
+            <DocsCode>&lt;a target=&quot;_blank&quot;&gt;</DocsCode> rather than
+            a button that raises an &ldquo;Open external link?&rdquo; modal
+            first. The modal is written for a chat with an untrusted model on a
+            page of other people&rsquo;s content; in an agent transcript it is a
+            second click between the reader and the docs their own agent just
+            cited &mdash; and it costs the anchor, so middle-click,{" "}
+            <DocsCode>Copy link address</DocsCode> and a host that wants to
+            route the click itself all stop working. With a real anchor back, a
+            desktop shell (where <DocsCode>target=&quot;_blank&quot;</DocsCode>{" "}
+            has no window to open into) can intercept the click and hand the URL
+            to the system browser.
+          </>
+        ),
+        example: {
+          name: "message-markdown-links-example",
+          node: <MessageMarkdownLinksExample />,
+        },
+      },
+      {
         title: "Mermaid and math",
         description: (
           <>

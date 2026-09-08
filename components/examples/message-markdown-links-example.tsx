@@ -16,7 +16,9 @@ one is a real link.
 /**
  * A relative markdown link names a file, not a page on the site the transcript
  * is rendered on — so it renders as the same chip an inline-code path does and
- * reaches `onFileClick`. Absolute links keep opening in a new tab.
+ * reaches `onFileClick`. An absolute link stays an anchor and opens in a new
+ * tab on the first click: Streamdown's "Open external link?" interstitial is
+ * off, so there is nothing between the reader and the URL.
  */
 export function MessageMarkdownLinksExample() {
   return (

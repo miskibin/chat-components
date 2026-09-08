@@ -139,6 +139,24 @@ const shikiTheme: ["github-light", "github-dark"] = [
   "github-light",
   "github-dark",
 ]
+
+/**
+ * A link in an answer opens straight away.
+ *
+ * Streamdown's default is the opposite: `linkSafety` is on, so every external
+ * link renders as a `<button>` that raises an "Open external link?" modal
+ * before it will go anywhere. That interstitial is meant for a chat with an
+ * untrusted model on a page full of other people's content; here the answer is
+ * the user's own agent citing the docs it just read, and the modal is a second
+ * click between them and every URL — with no anchor left to middle-click,
+ * "Copy link address", or hand to a host that wants to route the click itself.
+ *
+ * Off, the link is an `<a target="_blank" rel="noreferrer">` again: the browser
+ * opens it in a tab, and a host embedding this (a desktop shell, where
+ * `target="_blank"` has no window to open into) can intercept the click on a
+ * real anchor and send it to the system browser instead.
+ */
+const linkSafety = { enabled: false } as const
 const EMPTY_HANDLERS: MarkdownPatternHandler[] = []
 
 export type MarkdownPatternHandler = {
@@ -667,6 +685,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
           shikiTheme={shikiTheme}
           mermaid={mermaidConfig}
           isAnimating={isAnimating}
+          linkSafety={linkSafety}
           parseIncompleteMarkdown
           codeBlockMaxHeight={Infinity}
           tableMaxHeight={Infinity}
