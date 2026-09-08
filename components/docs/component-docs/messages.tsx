@@ -9,6 +9,7 @@ import { ChangeSummaryActionsExample } from "@/components/examples/change-summar
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
 import { ChangeSummaryStyledExample } from "@/components/examples/change-summary-styled-example"
 import { DiffViewCommentsExample } from "@/components/examples/diff-view-comments-example"
+import { DiffStackExample } from "@/components/examples/diff-stack-example"
 import { DiffViewExample } from "@/components/examples/diff-view-example"
 import { DiffViewLargeExample } from "@/components/examples/diff-view-large-example"
 import { FileIconExample } from "@/components/examples/file-icon-example"
@@ -3157,7 +3158,7 @@ export function Pending({ busy }: { busy: boolean }) {
 import { DiffView } from "@/components/ui/diff-view"
 
 export function Review({ file }: { file: ChangedFile }) {
-  // The viewer owns its scroll container, so give it a height.
+  // The viewer is its own scroll container, so give it a height.
   return (
     <div className="h-full min-h-0">
       <DiffView
@@ -3171,6 +3172,47 @@ export function Review({ file }: { file: ChangedFile }) {
   )
 }`,
     props: [
+      {
+        caption: "DiffStack",
+        rows: [
+          {
+            name: "files",
+            type: "DiffStackFile[]",
+            required: true,
+            description:
+              "One entry per file — the same inputs DiffView takes (patch, or oldText/newText, or content), keyed by path. A file with nothing to show drops out rather than rendering an empty frame.",
+          },
+          {
+            name: "focusPath",
+            type: "string",
+            description:
+              "Scrolls that file to the top of the viewport. Pair it with focusNonce to ask for the same file twice — a file map's rows are exactly that.",
+          },
+          {
+            name: "focusNonce",
+            type: "number",
+            description: "Makes a repeat request for the same path a new request.",
+          },
+          {
+            name: "mode",
+            type: '"unified" | "split"',
+            default: '"unified"',
+            description: "Applies to every file in the stack.",
+          },
+          {
+            name: "wrap",
+            type: "boolean",
+            default: "true",
+            description: "Soft-wrap long lines; off, each file scrolls sideways.",
+          },
+          {
+            name: "emptyLabel",
+            type: "ReactNode",
+            description:
+              "Shown when there is nothing to draw — a clean worktree, or a change that is all binary.",
+          },
+        ],
+      },
       {
         caption: "DiffView",
         rows: [
@@ -3357,6 +3399,9 @@ export function Review({ file }: { file: ChangedFile }) {
       "diff-view-line-comment",
       "diff-view-note",
       "diff-view-empty",
+      "diff-stack",
+      "diff-stack-surface",
+      "diff-stack-empty",
       "diff-worker-pool-fallback",
     ],
     notes: [
@@ -3410,6 +3455,30 @@ export function Review({ file }: { file: ChangedFile }) {
         example: {
           name: "diff-view-large-example",
           node: <DiffViewLargeExample />,
+          align: "stretch",
+        },
+      },
+      {
+        title: "A whole review, in one scroller",
+        description: (
+          <>
+            <DocsCode>DiffView</DocsCode> answers &ldquo;show me this
+            file&rdquo;; <DocsCode>DiffStack</DocsCode> answers &ldquo;show me
+            what changed&rdquo;, which is a different question with a different
+            shape. A column of separate viewers would be a column of separate{" "}
+            <em>scrollers</em> &mdash; the reader lands in one, scrolls it to
+            its end, and stops, with the rest of the review below a boundary the
+            wheel refuses to cross. So this is one viewer holding one item per
+            file: <DocsCode>@pierre/diffs</DocsCode> virtualizes them together
+            against a single scroll container, which is both the only way the
+            wheel behaves and the reason a hundred-file review costs what one
+            screen costs. File headers are on, because in a stack the filename
+            is the only thing saying which file a hunk belongs to.
+          </>
+        ),
+        example: {
+          name: "diff-stack-example",
+          node: <DiffStackExample />,
           align: "stretch",
         },
       },

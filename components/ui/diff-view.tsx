@@ -418,8 +418,70 @@ function buildModel(
  * on screen exist, and with a `DiffWorkerPoolProvider` above it the
  * highlighting happens off the main thread.
  *
- * The viewer owns its scroll container, so give it a height.
+ * The viewer *is* its own scroll container, so give it a height and let it
+ * scroll: `@pierre/diffs` hangs its virtualizer off the `CodeView` root, reads
+ * `scrollTop` from it and listens for `scroll` on it. Without an overflow of
+ * its own that root is 18,000px of content in an 820px box with nowhere to go —
+ * the file renders, the wheel does nothing, and the rows past the first screen
+ * are unreachable. The library never sets it; the consumer must.
  */
+/**
+ * The viewer options both `DiffView` and `DiffStack` hand to `CodeView`.
+ *
+ * One definition rather than two, because these are the settings that make a
+ * diff *this* registry's diff — the theme, the metrics that keep the last row
+ * inside the scroll range, the wrap mode — and a stack of files that disagreed
+ * with a single file about any of them would read as a different component.
+ */
+function useViewerOptions({
+  options,
+  theme,
+  dark,
+  wrap,
+  mode,
+  lineNumbers,
+  fileHeader,
+  css,
+  commentable,
+}: {
+  options?: Partial<CodeViewReactOptions<undefined, undefined>>
+  theme?: DiffViewProps["theme"]
+  dark: boolean
+  wrap: boolean
+  mode: DiffViewMode
+  lineNumbers: boolean
+  fileHeader: boolean
+  css: string
+  commentable: boolean
+}) {
+  return React.useMemo<CodeViewReactOptions<undefined, undefined>>(
+    () => ({
+      ...options,
+      theme: theme ?? DIFF_THEMES,
+      themeType: dark ? "dark" : "light",
+      overflow: wrap ? "wrap" : "scroll",
+      diffStyle: mode === "split" ? "split" : "unified",
+      disableLineNumbers: !lineNumbers,
+      disableFileHeader: !fileHeader,
+      preferredHighlighter: PREFERRED_HIGHLIGHTER,
+      unsafeCSS: css,
+      enableLineSelection: commentable,
+      itemMetrics: {
+        diffHeaderHeight: fileHeader ? 32 : 0,
+        hunkSeparatorHeight: 24,
+        spacing: 0,
+        paddingTop: 0,
+        // The 8px under a file's last line is painted unconditionally by
+        // Pierre's stylesheet, so the metric has to count it or the end of the
+        // list sits past the reachable scroll range.
+        paddingBottom: 8,
+      },
+      layout: { paddingTop: 0, paddingBottom: 0, gap: 0 },
+    }),
+    [options, theme, dark, wrap, mode, lineNumbers, fileHeader, css, commentable]
+  )
+}
+
 export function DiffView({
   path,
   language,
@@ -484,42 +546,17 @@ export function DiffView({
     []
   )
 
-  const viewerOptions = React.useMemo<CodeViewReactOptions<undefined, undefined>>(
-    () => ({
-      ...options,
-      theme: theme ?? DIFF_THEMES,
-      themeType: dark ? "dark" : "light",
-      overflow: wrap ? "wrap" : "scroll",
-      diffStyle: mode === "split" ? "split" : "unified",
-      disableLineNumbers: !lineNumbers,
-      disableFileHeader: !fileHeader,
-      preferredHighlighter: PREFERRED_HIGHLIGHTER,
-      unsafeCSS: css,
-      enableLineSelection: commentable,
-      itemMetrics: {
-        diffHeaderHeight: fileHeader ? 32 : 0,
-        hunkSeparatorHeight: 24,
-        spacing: 0,
-        paddingTop: 0,
-        // The 8px under a file's last line is painted unconditionally by
-        // Pierre's stylesheet, so the metric has to count it or the end of the
-        // list sits past the reachable scroll range.
-        paddingBottom: 8,
-      },
-      layout: { paddingTop: 0, paddingBottom: 0, gap: 0 },
-    }),
-    [
-      options,
-      theme,
-      dark,
-      wrap,
-      mode,
-      lineNumbers,
-      fileHeader,
-      css,
-      commentable,
-    ]
-  )
+  const viewerOptions = useViewerOptions({
+    options,
+    theme,
+    dark,
+    wrap,
+    mode,
+    lineNumbers,
+    fileHeader,
+    css,
+    commentable,
+  })
 
   // State rather than a ref: the reveal effect below has to run again once the
   // viewer exists, and assigning a ref does not schedule that.
@@ -648,7 +685,11 @@ export function DiffView({
                   onSelectedLinesChange: onSelectionChange,
                 }
               : null)}
-            className="h-full font-mono text-[12.5px] outline-none"
+            /* `overflow-y-auto` is load-bearing, not tidying — it is what
+               makes this element the virtualizer's scroll container. See the
+               component's own doc comment. `overscroll-contain` keeps a flick
+               at the end of a file from scrolling the conversation behind it. */
+            className="h-full overflow-y-auto overscroll-contain font-mono text-[12.5px] outline-none"
           />
           {commentable && picked ? (
             <button
@@ -667,6 +708,170 @@ export function DiffView({
               {rangeLabel(picked.startLine, picked.endLine)}
             </button>
           ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Many files, one scroller                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** One file in a {@link DiffStack} — the same inputs `DiffView` takes. */
+export type DiffStackFile = {
+  path: string
+  language?: string
+  patch?: string
+  oldText?: string
+  newText?: string
+  content?: string
+}
+
+export type DiffStackProps = Omit<
+  React.ComponentProps<"div">,
+  "children" | "content"
+> & {
+  files: DiffStackFile[]
+  mode?: DiffViewMode
+  wrap?: boolean
+  lineNumbers?: boolean
+  theme?: DiffViewProps["theme"]
+  unsafeCSS?: string
+  options?: Partial<CodeViewReactOptions<undefined, undefined>>
+  emptyLabel?: React.ReactNode
+  /** Scrolls that file to the top of the viewport. Re-request with a new nonce. */
+  focusPath?: string
+  focusNonce?: number
+  classNames?: { root?: string; surface?: string; note?: string }
+}
+
+/**
+ * Every changed file in one scroller, the way a review reads.
+ *
+ * `DiffView` answers "show me this file"; this answers "show me what changed",
+ * which is a different question with a different shape. A column of separate
+ * viewers would be a column of separate *scrollers* — the reader would land in
+ * one, scroll it to its end, and stop, with the rest of the review below a
+ * boundary the wheel refuses to cross. So this is one `CodeView` holding one
+ * item per file: `@pierre/diffs` virtualizes them together against a single
+ * scroll container, which is both the only way the wheel behaves and the
+ * reason a hundred-file review costs what one screen costs.
+ *
+ * File headers are on, because in a stack the filename is the only thing
+ * saying which file a hunk belongs to.
+ */
+export function DiffStack({
+  files,
+  mode = "unified",
+  wrap = true,
+  lineNumbers = true,
+  theme,
+  unsafeCSS,
+  options,
+  emptyLabel = "Nothing has changed here yet.",
+  focusPath,
+  focusNonce,
+  className,
+  classNames,
+  style,
+  ...props
+}: DiffStackProps) {
+  const { resolvedTheme } = useTheme()
+  const dark = resolvedTheme === "dark"
+
+  const css = React.useMemo(
+    () => `${TOKEN_CSS}${unsafeCSS ? `\n${unsafeCSS}` : ""}`,
+    [unsafeCSS]
+  )
+
+  /**
+   * One item per file, keyed by path so a re-read of the same worktree does not
+   * remount every viewer. A file whose patch could not be parsed keeps its
+   * place as text — the same bargain `DiffView` makes — and one with nothing to
+   * show at all drops out rather than rendering an empty frame.
+   */
+  const items = React.useMemo(
+    () =>
+      files.flatMap((file) => {
+        const model = buildModel(
+          file.path,
+          file.language as SupportedLanguages | undefined,
+          file.patch,
+          file.oldText,
+          file.newText,
+          file.content,
+          1
+        )
+        return model.kind === "none" ? [] : [model.item]
+      }),
+    [files]
+  )
+
+  const viewerOptions = useViewerOptions({
+    options,
+    theme,
+    dark,
+    wrap,
+    mode,
+    lineNumbers,
+    fileHeader: true,
+    css,
+    commentable: false,
+  })
+
+  const [handle, setHandle] = React.useState<CodeViewHandle<
+    undefined,
+    undefined
+  > | null>(null)
+
+  /** Same one-reveal-per-request rule as `DiffView`'s `focusLine`. */
+  const revealKey = focusPath ? `${focusPath}\0${focusNonce ?? ""}` : null
+  const revealedRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (revealKey === null || !focusPath) return
+    if (revealedRef.current === revealKey) return
+    if (!handle?.getInstance()) return
+    revealedRef.current = revealKey
+    handle.scrollTo({ type: "item", id: focusPath, align: "start" })
+  }, [focusPath, handle, revealKey])
+
+  return (
+    <div
+      data-slot="diff-stack"
+      data-mode={mode}
+      data-wrap={wrap ? "true" : "false"}
+      className={cn(
+        "flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground",
+        className,
+        classNames?.root
+      )}
+      style={{ colorScheme: dark ? "dark" : "light", ...style }}
+      {...props}
+    >
+      {items.length === 0 ? (
+        <p
+          data-slot="diff-stack-empty"
+          className={cn(
+            "px-3 py-2 text-[12.5px] text-muted-foreground",
+            classNames?.note
+          )}
+        >
+          {emptyLabel}
+        </p>
+      ) : (
+        <div
+          data-slot="diff-stack-surface"
+          className={cn("relative min-h-0 flex-1", classNames?.surface)}
+        >
+          <CodeView<undefined, undefined>
+            ref={setHandle}
+            items={items}
+            options={viewerOptions}
+            /* The scroll container, for the same reason `DiffView`'s is — and
+               here it is the *only* one, which is the whole point. */
+            className="h-full overflow-y-auto overscroll-contain font-mono text-[12.5px] outline-none"
+          />
         </div>
       )}
     </div>
