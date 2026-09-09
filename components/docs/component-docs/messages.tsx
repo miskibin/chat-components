@@ -3601,9 +3601,9 @@ export function ChangedFiles({ entries }: { entries: FileTreeEntry[] }) {
           {
             name: "icons",
             type: "FileTreeIcons",
-            default: '{ set: "standard", colored: true }',
+            default: '{ set: "complete", colored: true }',
             description:
-              "Pierre's built-in icon sets, or a custom sprite sheet with per-name and per-extension rules.",
+              "Pierre's built-in icon sets, or a custom sprite sheet with per-name and per-extension rules. complete is the coloured set; standard assigns type tokens but does not paint them.",
           },
           {
             name: "density",
@@ -3639,6 +3639,17 @@ export function ChangedFiles({ entries }: { entries: FileTreeEntry[] }) {
             <DocsCode>End</DocsCode> jump, <DocsCode>Enter</DocsCode> selects,
             and typing in the filter box narrows without leaving it — all of it
             from <DocsCode>@pierre/trees</DocsCode>, on a real tree role.
+          </>
+        ),
+      },
+      {
+        title: "Git colours the lane, not the glyph",
+        description: (
+          <>
+            A status still tints the filename and the A/M/D mark. The file-type
+            icon keeps the colour Pierre assigned it — a modified{" "}
+            <DocsCode>.tsx</DocsCode> stays TypeScript-blue, not the modified
+            mix.
           </>
         ),
       },

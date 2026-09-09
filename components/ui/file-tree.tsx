@@ -79,7 +79,11 @@ export type FileTreeProps = Omit<
   ) => React.ReactNode
   /** `"closed"`, `"open"`, or how many levels to open. Defaults to `"open"`. */
   initialExpansion?: "closed" | "open" | number
-  /** Pierre's icon set or a custom sprite. Defaults to the coloured built-ins. */
+  /**
+   * Pierre's icon set or a custom sprite. Defaults to `complete` with colours:
+   * `standard` still assigns type tokens, but Pierre only paints them on
+   * `complete`.
+   */
   icons?: FileTreeIcons
   /** Row height preset, or a scale factor. Defaults to `"compact"`. */
   density?: FileTreeDensity
@@ -94,6 +98,70 @@ export type FileTreeProps = Omit<
     tree?: string
   }
 }
+
+/**
+ * Tokens Pierre paints when `data-file-tree-colored-icons` is on. Repeated in
+ * the unsafe sheet so git status and the selected row colour the name and the
+ * A/M/D lane, never the glyph — Pierre fills the sprite from the row's
+ * currentColor, which is exactly those tints.
+ */
+const FILE_ICON_TOKENS = [
+  "astro",
+  "babel",
+  "bash",
+  "biome",
+  "bootstrap",
+  "browserslist",
+  "bun",
+  "c",
+  "cpp",
+  "claude",
+  "css",
+  "database",
+  "default",
+  "docker",
+  "eslint",
+  "git",
+  "go",
+  "graphql",
+  "html",
+  "image",
+  "javascript",
+  "json",
+  "markdown",
+  "mcp",
+  "npm",
+  "oxc",
+  "postcss",
+  "prettier",
+  "python",
+  "react",
+  "ruby",
+  "rust",
+  "sass",
+  "svg",
+  "svelte",
+  "svgo",
+  "swift",
+  "table",
+  "text",
+  "tailwind",
+  "terraform",
+  "typescript",
+  "vite",
+  "vscode",
+  "vue",
+  "wasm",
+  "webpack",
+  "yml",
+  "zig",
+  "zip",
+] as const
+
+const FILE_ICON_COLOR_CSS = FILE_ICON_TOKENS.map(
+  (token) =>
+    `[data-item-section="icon"] > [data-icon-token="${token}"] { color: var(--trees-file-icon-color-${token}); fill: currentColor; }`
+).join("\n")
 
 /**
  * Shadow-root overrides that make the tree read as part of the app chrome.
@@ -130,6 +198,8 @@ const TREE_CSS = `
   --trees-git-renamed-color-override: color-mix(in oklab, var(--primary) 40%, var(--foreground));
   --trees-git-ignored-color-override: var(--muted-foreground);
 }
+
+${FILE_ICON_COLOR_CSS}
 `
 
 /** `+12 −3`, coloured like every other diff stat in the registry. */
@@ -217,7 +287,7 @@ export function FileTree({
   fileActions,
   renderNodeMenu,
   initialExpansion = "open",
-  icons = { set: "standard", colored: true },
+  icons = { set: "complete", colored: true },
   density = "compact",
   label = "Files",
   emptyLabel = "No files.",
