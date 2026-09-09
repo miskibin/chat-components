@@ -523,7 +523,7 @@ export function MessageList({
         handleMessageScroll()
       }}
       className={cn(
-        "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-4 md:px-6",
+        "min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pt-4 pb-4 sm:px-4 md:px-6",
         className
       )}
       {...props}

@@ -168,7 +168,7 @@ export const PlanCard = React.memo(function PlanCard({
       data-slot="plan-card"
       data-compact={compact || undefined}
       className={cn(
-        "my-2 overflow-hidden rounded-lg border bg-card text-card-foreground animate-in fade-in duration-150",
+        "my-3 overflow-hidden rounded-lg border bg-card text-card-foreground animate-in fade-in duration-150",
         className
       )}
       {...props}
