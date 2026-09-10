@@ -174,7 +174,7 @@ const MAX_SKILL_MATCHES = 50
  * toolbar stays aligned no matter what you drop into `tools`.
  */
 export const chatInputButtonVariants = cva(
-  "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] whitespace-nowrap outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] whitespace-nowrap outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 sm:h-7 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -1400,9 +1400,9 @@ export function ChatInput({
 
           <div
             data-slot="chat-input-toolbar"
-            className="mt-1 flex items-center justify-between gap-2"
+            className="mt-1 flex items-end justify-between gap-2"
           >
-            <div className="flex min-w-0 items-center gap-0.5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
               <button
                 type="button"
                 title="Attach file"
@@ -1444,7 +1444,7 @@ export function ChatInput({
                   title={queueing ? "Queue (Enter)" : "Send (Enter)"}
                   className={cn(chatInputButtonVariants({ variant: "primary" }))}
                 >
-                  <span className="text-[13px] leading-none">↵</span>
+                  <span className="hidden text-[13px] leading-none sm:inline">↵</span>
                   <span className="text-[11px]">
                     {queueing ? "queue" : "send"}
                   </span>

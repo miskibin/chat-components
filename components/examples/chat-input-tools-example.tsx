@@ -27,7 +27,7 @@ const MODELS = [
  */
 export function ChatInputToolsExample() {
   return (
-    <div className="w-full max-w-2xl">
+    <div className="w-full max-w-[20rem] sm:max-w-2xl">
       <ChatInput
         placeholder="Ask anything"
         tools={

@@ -158,7 +158,7 @@ export function Picker() {
   "model-picker": {
     title: "Model Picker",
     description:
-      "Compact model switcher on the shadcn dropdown menu: one row per thing that can change, each showing its current value, with the choices in a submenu.",
+      "Compact model switcher with 36px phone touch targets that return to its compact desktop size at sm: one row per thing that can change, each showing its current value, with the choices in a submenu.",
     registry: "model-picker",
     registryDependencies: ["dropdown-menu", "command"],
     preview: { name: "model-picker-example", node: <ModelPickerExample /> },
@@ -574,7 +574,7 @@ export function Picker() {
   "mode-picker": {
     title: "Mode Picker",
     description:
-      "Ask / Plan / Agent switch built on the shadcn dropdown menu, with a short description under each mode.",
+      "Ask / Plan / Agent switch with a 36px phone touch target that returns to its compact desktop size at sm, built on the shadcn dropdown menu with a short description under each mode.",
     registry: "mode-picker",
     registryDependencies: ["dropdown-menu"],
     preview: { name: "mode-picker-example", node: <ModePickerExample /> },
