@@ -603,8 +603,10 @@ export function Composer() {
         description: (
           <>
             The <DocsCode>tools</DocsCode> slot sits next to the attach button.
-            Pass <DocsCode>side=&quot;top&quot;</DocsCode> so the menus open
-            away from the composer.
+            On narrow screens its controls use 36px touch targets and wrap
+            before the send action, which stays reachable. Pass{" "}
+            <DocsCode>side=&quot;top&quot;</DocsCode> so the menus open away from
+            the composer.
           </>
         ),
         example: {
