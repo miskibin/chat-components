@@ -113,7 +113,7 @@
       "name": "chat-input",
       "type": "registry:ui",
       "title": "Chat Input",
-      "description": "Composer with attachments, drag-and-drop, $-skills, a slash menu whose provider commands are offered only at the head of a message, @-mentions, a mid-turn message queue, collapsed long pastes, shell-style prompt recall on the arrow keys, and Enter-to-send.",
+      "description": "Responsive composer with 36px mobile touch targets and a wrapping toolbar, attachments, drag-and-drop, $-skills, a slash menu whose provider commands are offered only at the head of a message, @-mentions, a mid-turn message queue, collapsed long pastes, shell-style prompt recall on the arrow keys, and Enter-to-send.",
       "dependencies": ["lucide-react", "class-variance-authority"],
       "registryDependencies": ["miskibin/chat-components/file-icon"],
       "files": [
@@ -143,7 +143,7 @@
       "name": "mode-picker",
       "type": "registry:ui",
       "title": "Mode Picker",
-      "description": "Ask / Plan / Agent mode switch built on the shadcn dropdown menu.",
+      "description": "Ask / Plan / Agent mode switch with a 36px phone touch target that returns to its compact desktop size at sm, built on the shadcn dropdown menu.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["dropdown-menu"],
       "files": [
@@ -157,7 +157,7 @@
       "name": "model-picker",
       "type": "registry:ui",
       "title": "Model Picker",
-      "description": "Compact model switcher on the dropdown menu: one row per thing that can change, its current value alongside, choices in a submenu, optional provider sections, and a search field once the model list grows.",
+      "description": "Compact model switcher with 36px phone touch targets that return to its compact desktop size at sm: one row per thing that can change, its current value alongside, choices in a submenu, optional provider sections, and a search field once the model list grows.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["dropdown-menu", "command"],
       "files": [
