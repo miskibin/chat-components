@@ -143,7 +143,7 @@
       "name": "mode-picker",
       "type": "registry:ui",
       "title": "Mode Picker",
-      "Ask / Plan / Agent mode switch with a 36px phone touch target that returns to its compact desktop size at sm, built on the shadcn dropdown menu.",
+      "description": "Ask / Plan / Agent mode switch with a 36px phone touch target that returns to its compact desktop size at sm, built on the shadcn dropdown menu.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["dropdown-menu"],
       "files": [
@@ -157,7 +157,7 @@
       "name": "model-picker",
       "type": "registry:ui",
       "title": "Model Picker",
-      "Compact model switcher with 36px phone touch targets that return to its compact desktop size at sm: one row per thing that can change, its current value alongside, choices in a submenu, optional provider sections, and a search field once the model list grows.",
+      "description": "Compact model switcher with 36px phone touch targets that return to its compact desktop size at sm: one row per thing that can change, its current value alongside, choices in a submenu, optional provider sections, and a search field once the model list grows.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["dropdown-menu", "command"],
       "files": [

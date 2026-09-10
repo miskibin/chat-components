@@ -178,7 +178,7 @@ export const chatInputButtonVariants = cva(
   {
     variants: {
       variant: {
-        ghost: "px-2 text-muted-foreground hover:bg-muted hover:text-foreground",
+        ghost: "min-w-9 px-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:min-w-0",
         primary:
           "min-w-11 bg-primary px-2.5 text-primary-foreground hover:bg-primary/90 disabled:bg-primary/15 disabled:text-primary/70 disabled:opacity-100",
       },
