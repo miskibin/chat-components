@@ -11,7 +11,7 @@
     "class-variance-authority"
   ],
   "registryDependencies": [
-    "context-menu",
+    "miskibin/chat-components/context-menu",
     "miskibin/chat-components/sidebar-dnd"
   ],
   "files": [
