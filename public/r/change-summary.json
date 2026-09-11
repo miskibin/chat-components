@@ -8,7 +8,7 @@
   ],
   "registryDependencies": [
     "collapsible",
-    "context-menu",
+    "miskibin/chat-components/context-menu",
     "miskibin/chat-components/file-icon"
   ],
   "files": [

@@ -52,6 +52,19 @@
       ]
     },
     {
+      "name": "context-menu",
+      "type": "registry:ui",
+      "title": "Context Menu",
+      "description": "Context menu primitives with destructive item styling used by message files and sidebar actions.",
+      "dependencies": ["@radix-ui/react-context-menu", "lucide-react"],
+      "files": [
+        {
+          "path": "components/ui/context-menu.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "change-summary",
       "type": "registry:ui",
       "title": "Change Summary",
@@ -59,7 +72,7 @@
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "collapsible",
-        "context-menu",
+        "miskibin/chat-components/context-menu",
         "miskibin/chat-components/file-icon"
       ],
       "files": [
@@ -490,7 +503,7 @@
         "class-variance-authority"
       ],
       "registryDependencies": [
-        "context-menu",
+        "miskibin/chat-components/context-menu",
         "miskibin/chat-components/sidebar-dnd"
       ],
       "files": [
