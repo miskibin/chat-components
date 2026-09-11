@@ -4,6 +4,30 @@
   "homepage": "https://github.com/miskibin/chat-components",
   "items": [
     {
+      "name": "chat-composer",
+      "type": "registry:ui",
+      "title": "Chat Composer",
+      "description": "Controlled, text-only composer with keyboard send and an optional stop control.",
+      "files": [
+        {
+          "path": "components/ui/chat-composer.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "chat-empty-state",
+      "type": "registry:ui",
+      "title": "Chat Empty State",
+      "description": "Centered opening state with host-owned suggestions or actions.",
+      "files": [
+        {
+          "path": "components/ui/chat-empty-state.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "use-click-outside",
       "type": "registry:hook",
       "title": "useClickOutside",

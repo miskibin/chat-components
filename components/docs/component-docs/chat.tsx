@@ -1,6 +1,8 @@
 import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { ChatExample } from "@/components/examples/chat-example"
+import { ChatComposerExample } from "@/components/examples/chat-composer-example"
+import { ChatEmptyStateExample } from "@/components/examples/chat-empty-state-example"
 import { ChatInputCustomButtonExample } from "@/components/examples/chat-input-custom-button-example"
 import { ChatInputExample } from "@/components/examples/chat-input-example"
 import { ChatInputStyledExample } from "@/components/examples/chat-input-styled-example"
@@ -23,6 +25,69 @@ import { TodoListExample } from "@/components/examples/todo-list-example"
 import { ResizableExample } from "@/components/examples/resizable-example"
 
 export const chatDocs = {
+  "chat-composer": {
+    title: "Chat Composer",
+    description:
+      "Controlled, text-only composer for a conventional chat. It keeps keyboard behavior and loading controls without assuming a model, tools, or attachments.",
+    registry: "chat-composer",
+    preview: { name: "chat-composer-example", node: <ChatComposerExample /> },
+    usage: `"use client"
+
+import { useState } from "react"
+import { ChatComposer } from "@/components/ui/chat-composer"
+
+export function Conversation() {
+  const [draft, setDraft] = useState("")
+
+  function send() {
+    if (!draft.trim()) return
+    // Send the text with your own transport, then clear it.
+    setDraft("")
+  }
+
+  return <ChatComposer value={draft} onValueChange={setDraft} onSend={send} />
+}`,
+    props: [
+      {
+        caption: "ChatComposer",
+        rows: [
+          { name: "value / onValueChange", type: "string / (value: string) => void", required: true, description: "The controlled draft." },
+          { name: "onSend", type: "() => void", required: true, description: "Called by the send button or Enter when the draft is not blank." },
+          { name: "isGenerating", type: "boolean", default: "false", description: "Disables input and swaps send for a stop button." },
+          { name: "onStop", type: "() => void", description: "Called by the stop button while generating." },
+          { name: "footer", type: "ReactNode", description: "Quiet copy below the composer, usually a keyboard hint or safety note." },
+        ],
+      },
+    ],
+    dataSlots: ["chat-composer", "chat-composer-surface", "chat-composer-textarea", "chat-composer-send", "chat-composer-stop", "chat-composer-footer"],
+  },
+  "chat-empty-state": {
+    title: "Chat Empty State",
+    description:
+      "Centered, token-based opening state for a blank conversation. Suggestions and product-specific actions remain owned by the host.",
+    registry: "chat-empty-state",
+    preview: { name: "chat-empty-state-example", node: <ChatEmptyStateExample /> },
+    usage: `import { MessageSquare } from "lucide-react"
+import { ChatEmptyState } from "@/components/ui/chat-empty-state"
+
+<ChatEmptyState
+  icon={<MessageSquare />}
+  title="How can we help?"
+  description="Start with a short, focused question."
+/>`,
+    props: [
+      {
+        caption: "ChatEmptyState",
+        rows: [
+          { name: "title", type: "ReactNode", required: true, description: "The concise opening headline." },
+          { name: "description", type: "ReactNode", description: "Supporting copy beneath the title." },
+          { name: "icon", type: "ReactNode", description: "Optional mark in the neutral icon container." },
+          { name: "children", type: "ReactNode", description: "Host-owned suggestions or actions below the copy." },
+        ],
+      },
+    ],
+    dataSlots: ["chat-empty-state", "chat-empty-state-icon", "chat-empty-state-title", "chat-empty-state-description", "chat-empty-state-actions"],
+  },
   chat: {
     title: "Chat",
     description:

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "chat-empty-state",
+  "title": "Chat Empty State",
+  "description": "Centered opening state with host-owned suggestions or actions.",
+  "files": [
+    {
+      "path": "components/ui/chat-empty-state.tsx",
+      "content": "import * as React from \"react\"\n\nimport { cn } from \"@/lib/utils\"\n\nexport type ChatEmptyStateProps = React.ComponentProps<\"section\"> & {\n  title: React.ReactNode\n  description?: React.ReactNode\n  icon?: React.ReactNode\n  children?: React.ReactNode\n}\n\n/**\n * A calm starting point for a conversation. The host supplies the copy,\n * optional mark, and any suggested actions without giving up the layout.\n */\nexport function ChatEmptyState({\n  title,\n  description,\n  icon,\n  className,\n  children,\n  ...props\n}: ChatEmptyStateProps) {\n  return (\n    <section\n      data-slot=\"chat-empty-state\"\n      className={cn(\n        \"mx-auto flex w-full max-w-2xl flex-col items-center justify-center px-4 py-10 text-center sm:px-6 sm:py-16\",\n        className\n      )}\n      {...props}\n    >\n      {icon ? (\n        <div\n          data-slot=\"chat-empty-state-icon\"\n          className=\"mb-4 grid size-10 place-items-center rounded-lg bg-muted text-muted-foreground [&_svg]:size-5\"\n        >\n          {icon}\n        </div>\n      ) : null}\n      <h2\n        data-slot=\"chat-empty-state-title\"\n        className=\"text-pretty text-lg font-semibold tracking-tight text-foreground sm:text-xl\"\n      >\n        {title}\n      </h2>\n      {description ? (\n        <p\n          data-slot=\"chat-empty-state-description\"\n          className=\"mt-2 max-w-lg text-pretty text-[13px] leading-relaxed text-muted-foreground\"\n        >\n          {description}\n        </p>\n      ) : null}\n      {children ? (\n        <div data-slot=\"chat-empty-state-actions\" className=\"mt-6 w-full\">\n          {children}\n        </div>\n      ) : null}\n    </section>\n  )\n}\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}
