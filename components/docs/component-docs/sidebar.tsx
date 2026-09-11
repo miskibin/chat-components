@@ -21,7 +21,7 @@ export const sidebarDocs = {
   "chat-sidebar": {
     title: "Chat Sidebar",
     description:
-      "Collapsible sidebar chrome composed from slots — brand, nav, sections, rail, footer — and the single import surface for the whole sidebar family.",
+      "Collapsible sidebar chrome composed from slots — brand, nav, sections, rail, footer — with icon quick actions that pop on click, and the single import surface for the whole sidebar family.",
     registry: "chat-sidebar",
     registryDependencies: ["sidebar-item", "sidebar-dnd", "sidebar-drop-zones"],
     preview: {
@@ -35,7 +35,8 @@ import {
   ChatSidebar,
   ChatSidebarDnd,
   ChatSidebarItemList,
-  SideRow,
+  SideActionRow,
+  SideIconBtn,
   SidebarCollapsibleSection,
 } from "@/components/ui/chat-sidebar"
 
@@ -50,7 +51,13 @@ export function Nav() {
         onCollapsedChange={setCollapsed}
         edgeZones
         brand={<span className="px-1 text-sm font-medium">Chats</span>}
-        nav={<SideRow icon={<Pencil className="size-4" />}>New chat</SideRow>}
+        nav={
+          <SideActionRow>
+            <SideIconBtn label="New chat">
+              <Pencil className="size-4" />
+            </SideIconBtn>
+          </SideActionRow>
+        }
       >
         <SidebarCollapsibleSection
           title="Recent"
@@ -90,7 +97,7 @@ export function Nav() {
             name: "nav",
             type: "React.ReactNode",
             description:
-              "Sticky rows under the header — new chat, search. Usually SideRow.",
+              "Quick actions under the header — new chat, search. Usually SideActionRow of SideIconBtn.",
           },
           {
             name: "rail",
@@ -161,9 +168,9 @@ export function Nav() {
           {
             name: "animateWidth",
             type: "boolean",
-            default: "false",
+            default: "true",
             description:
-              "Animate the collapse. Off by default: width is a layout property, so the transition reflows the sidebar and everything beside it on every frame for 300ms.",
+              "Eases the collapse over 300ms and fades the inactive view so the swap is visible. Pass false to snap — width is a layout property, and the transition reflows everything beside the sidebar.",
           },
           {
             name: "classNames",
@@ -185,7 +192,7 @@ export function Nav() {
         ],
       },
       {
-        caption: "SideRow / SideIconBtn / SidebarCollapsibleSection",
+        caption: "SideRow / SideActionRow / SideIconBtn / SidebarCollapsibleSection",
         rows: [
           {
             name: "SideRow",
@@ -198,10 +205,17 @@ export function Nav() {
             type: '{ label: string } & ComponentProps<"button">',
             description: (
               <>
-                Square icon button for the rail and header.{" "}
-                <DocsCode>label</DocsCode> becomes the title and aria-label.
+                Square icon button for quick actions, the rail and the header.{" "}
+                <DocsCode>label</DocsCode> becomes the title and aria-label. A
+                click pops the glyph — no extra icon library.
               </>
             ),
+          },
+          {
+            name: "SideActionRow",
+            type: 'ComponentProps<"div">',
+            description:
+              "Horizontal cluster of SideIconBtn — New chat, Search, and the like.",
           },
           {
             name: "SidebarCollapsibleSection",
@@ -217,7 +231,21 @@ export function Nav() {
               <>
                 On <DocsCode>SidebarCollapsibleSection</DocsCode>: label, a
                 hairline across the rest of the row, chevron at the far end —
-                the shape a per-folder list wants.
+                the shape a per-folder list wants. With{" "}
+                <DocsCode>action</DocsCode> set, the chips move onto a second
+                row so a long label can truncate instead of colliding with them.
+              </>
+            ),
+          },
+          {
+            name: "action",
+            type: "ReactNode",
+            description: (
+              <>
+                Extra header content on{" "}
+                <DocsCode>SidebarCollapsibleSection</DocsCode> — a branch, git
+                chips, a port. With <DocsCode>rule</DocsCode> it sits on a
+                second row; otherwise at the right edge, before the count.
               </>
             ),
           },
@@ -270,10 +298,14 @@ export function Nav() {
       "chat-sidebar-nav",
       "chat-sidebar-content",
       "chat-sidebar-footer",
+      "sidebar-row",
+      "sidebar-icon-button",
+      "sidebar-action-row",
       "sidebar-section",
       "sidebar-section-trigger",
       "sidebar-section-rule",
       "sidebar-section-live",
+      "sidebar-section-action",
     ],
     examples: [
       {
@@ -297,6 +329,7 @@ export function Nav() {
   ChatSidebarItemGhost,
   ChatSidebarItemList,
   DEFAULT_SIDEBAR_ZONES,
+  SideActionRow,
   SideIconBtn,
   SideRow,
   SidebarCollapsibleSection,
@@ -337,8 +370,8 @@ export function Nav() {
         description: (
           <>
             Widths are numbers, so the collapsed rail and the expanded panel
-            are both yours to size; <DocsCode>animateWidth</DocsCode> decides
-            whether the root eases between them (it does not, by default).{" "}
+            are both yours to size; <DocsCode>animateWidth</DocsCode> eases
+            between them (on by default).{" "}
             <DocsCode>classNames</DocsCode> reaches each region — rail, panel,
             header, nav, content, footer — without a single descendant selector.
             Collapse it below to see both widths.
@@ -356,7 +389,9 @@ export function Nav() {
           <>
             <DocsCode>rule</DocsCode> turns a section header into a label, a
             hairline and a chevron — one line per working folder instead of a
-            stack of captions. <DocsCode>live</DocsCode> adds the dot that keeps
+            stack of captions. Pass <DocsCode>action</DocsCode> and the chips
+            drop onto a second row so they cannot paint over a long name.{" "}
+            <DocsCode>live</DocsCode> adds the dot that keeps
             a closed section honest while a chat inside it streams; it animates
             only while it is on screen and the tab is in front, so a folded
             sidebar full of them costs nothing. Toggle either section below.
@@ -1499,7 +1534,7 @@ export function ArchiveZone() {
   "sidebar-resize-rail": {
     title: "Sidebar Resize Rail",
     description:
-      "A drag handle for the sidebar's width that never re-renders React: one CSS variable, written once per frame, with keyboard resizing and a veto.",
+              "A drag handle for the sidebar's width that never re-renders React: one CSS variable, written once per frame, with keyboard resizing and a veto. The line sits on the seam and is transparent until hover, so titles are not covered.",
     registry: "sidebar-resize-rail",
     registryDependencies: ["chat-sidebar"],
     preview: {
@@ -1731,7 +1766,8 @@ export function Nav() {
             <DocsCode>defaultWidth</DocsCode> — the same thing a double-click
             does. <DocsCode>aria-valuenow</DocsCode> is kept up to date on the
             element itself rather than through state, for the same reason the
-            width is.
+            width is. The painted line sits on the seam and starts at opacity
+            0, so chat titles are never under an opaque bar.
           </>
         ),
       },

@@ -33,8 +33,8 @@ import {
   ChatSidebarDnd,
   ChatSidebarItemGhost,
   ChatSidebarItemList,
+  SideActionRow,
   SideIconBtn,
-  SideRow,
   SidebarCollapsibleSection,
   SidebarEmptyState,
   SidebarItemBadge,
@@ -954,21 +954,17 @@ export default function ChatExample() {
               </span>
             }
             nav={
-              <>
-                <SideRow
-                  icon={<Pencil className="size-4" />}
-                  onClick={handleNewChat}
-                >
-                  New chat
-                </SideRow>
-                <SideRow
-                  icon={<Search className="size-4" />}
-                  hint="⌘K"
+              <SideActionRow>
+                <SideIconBtn label="New chat" onClick={handleNewChat}>
+                  <Pencil className="size-4" />
+                </SideIconBtn>
+                <SideIconBtn
+                  label="Search"
                   onClick={() => toast.message("Wire search to your app")}
                 >
-                  Search
-                </SideRow>
-              </>
+                  <Search className="size-4" />
+                </SideIconBtn>
+              </SideActionRow>
             }
             rail={
               <>

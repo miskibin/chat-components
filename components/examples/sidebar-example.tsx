@@ -9,8 +9,8 @@ import {
   ChatSidebarDnd,
   ChatSidebarItemGhost,
   ChatSidebarItemList,
+  SideActionRow,
   SideIconBtn,
-  SideRow,
   SidebarCollapsibleSection,
   SidebarDropZone,
   SidebarEmptyState,
@@ -190,14 +190,14 @@ export function SidebarExample() {
           widthExpanded={252}
           brand={<span className="px-1 text-sm font-medium">Chats</span>}
           nav={
-            <>
-              <SideRow icon={<MessageSquarePlus className="size-4" />}>
-                New chat
-              </SideRow>
-              <SideRow icon={<Search className="size-4" />} hint="⌘K">
-                Search
-              </SideRow>
-            </>
+            <SideActionRow>
+              <SideIconBtn label="New chat">
+                <MessageSquarePlus className="size-4" />
+              </SideIconBtn>
+              <SideIconBtn label="Search">
+                <Search className="size-4" />
+              </SideIconBtn>
+            </SideActionRow>
           }
           rail={
             <>

@@ -6,8 +6,8 @@ import { useState } from "react"
 import {
   ChatSidebar,
   ChatSidebarItemList,
+  SideActionRow,
   SideIconBtn,
-  SideRow,
   SidebarCollapsibleSection,
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
@@ -39,14 +39,14 @@ function Panel({ dividers }: { dividers: boolean }) {
         </span>
       }
       nav={
-        <>
-          <SideRow icon={<MessageSquarePlus className="size-4" />}>
-            New chat
-          </SideRow>
-          <SideRow icon={<Search className="size-4" />} hint="⌘K">
-            Search chats
-          </SideRow>
-        </>
+        <SideActionRow>
+          <SideIconBtn label="New chat">
+            <MessageSquarePlus className="size-4" />
+          </SideIconBtn>
+          <SideIconBtn label="Search chats">
+            <Search className="size-4" />
+          </SideIconBtn>
+        </SideActionRow>
       }
       rail={
         <SideIconBtn label="New chat">

@@ -508,7 +508,7 @@
       "name": "sidebar-resize-rail",
       "type": "registry:ui",
       "title": "Sidebar Resize Rail",
-      "description": "Drag handle for the sidebar width: pointer capture, rAF-batched writes to one CSS variable, keyboard resizing, a width veto and pure min/max math.",
+      "description": "Drag handle for the sidebar width: pointer capture, rAF-batched writes to one CSS variable, keyboard resizing, a width veto and pure min/max math. Sits on the seam and stays transparent until hover.",
       "files": [
         {
           "path": "components/ui/sidebar-resize-rail.tsx",
@@ -520,7 +520,7 @@
       "name": "chat-sidebar",
       "type": "registry:ui",
       "title": "Chat Sidebar",
-      "description": "Collapsible sidebar chrome with slot-based composition, section headers as rules with a live dot, a resizable width variable, and generic drag-and-drop zones (pin, trash, custom).",
+      "description": "Collapsible sidebar chrome with slot-based composition, icon quick actions that pop on click, section headers as rules with a live dot, a resizable width variable, and generic drag-and-drop zones (pin, trash, custom).",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/sidebar-item",

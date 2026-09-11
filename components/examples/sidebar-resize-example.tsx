@@ -6,8 +6,8 @@ import { useState } from "react"
 import {
   ChatSidebar,
   ChatSidebarItemList,
+  SideActionRow,
   SideIconBtn,
-  SideRow,
   SidebarResizeRail,
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
@@ -40,9 +40,11 @@ export function SidebarResizeExample() {
         widthExpanded={260}
         brand={<span className="px-1 text-[13px] font-semibold">Chats</span>}
         nav={
-          <SideRow icon={<MessageSquarePlus className="size-4" />}>
-            New chat
-          </SideRow>
+          <SideActionRow>
+            <SideIconBtn label="New chat">
+              <MessageSquarePlus className="size-4" />
+            </SideIconBtn>
+          </SideActionRow>
         }
         rail={
           <SideIconBtn label="New chat">

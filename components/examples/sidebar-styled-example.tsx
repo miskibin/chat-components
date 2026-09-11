@@ -6,8 +6,8 @@ import { useState } from "react"
 import {
   ChatSidebar,
   ChatSidebarItemList,
+  SideActionRow,
   SideIconBtn,
-  SideRow,
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
 
@@ -42,9 +42,11 @@ export function SidebarStyledExample() {
         }}
         brand={<span className="text-[13px] font-semibold">Threads</span>}
         nav={
-          <SideRow icon={<MessageSquarePlus className="size-4" />}>
-            New chat
-          </SideRow>
+          <SideActionRow>
+            <SideIconBtn label="New chat">
+              <MessageSquarePlus className="size-4" />
+            </SideIconBtn>
+          </SideActionRow>
         }
         rail={
           <SideIconBtn label="New chat">

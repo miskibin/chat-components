@@ -7,8 +7,8 @@ import { ChatNavbar } from "@/components/ui/chat-navbar"
 import {
   ChatSidebar,
   ChatSidebarItemList,
+  SideActionRow,
   SideIconBtn,
-  SideRow,
   SidebarCollapsibleSection,
   type ChatSidebarItemData,
 } from "@/components/ui/chat-sidebar"
@@ -63,12 +63,14 @@ export function SidebarMobileExample() {
           brand={<span className="px-1 text-sm font-medium">Chats</span>}
           collapseLabel="Close chats"
           nav={
-            <>
-              <SideRow icon={<Pencil className="size-4" />}>New chat</SideRow>
-              <SideRow icon={<Search className="size-4" />} hint="⌘K">
-                Search
-              </SideRow>
-            </>
+            <SideActionRow>
+              <SideIconBtn label="New chat">
+                <Pencil className="size-4" />
+              </SideIconBtn>
+              <SideIconBtn label="Search">
+                <Search className="size-4" />
+              </SideIconBtn>
+            </SideActionRow>
           }
         >
           <SidebarCollapsibleSection
