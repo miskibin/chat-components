@@ -5,6 +5,7 @@ import { FolderPickerExample } from "@/components/examples/folder-picker-example
 import { ContextMeterDetailsExample } from "@/components/examples/context-meter-details-example"
 import { ContextMeterExample } from "@/components/examples/context-meter-example"
 import { ContextMeterToolbarExample } from "@/components/examples/context-meter-toolbar-example"
+import { ModePickerCustomExample } from "@/components/examples/mode-picker-custom-example"
 import { ModePickerExample } from "@/components/examples/mode-picker-example"
 import { ModePickerStyledExample } from "@/components/examples/mode-picker-styled-example"
 import { ModelPickerDisabledExample } from "@/components/examples/model-picker-disabled-example"
@@ -574,7 +575,7 @@ export function Picker() {
   "mode-picker": {
     title: "Mode Picker",
     description:
-      "Ask / Plan / Agent switch with a 36px phone touch target that returns to its compact desktop size at sm, built on the shadcn dropdown menu with a short description under each mode.",
+      "Ask / Plan / Agent switch with customizable labels and a 36px phone touch target that returns to its compact desktop size at sm, built on the shadcn dropdown menu with a short description under each mode.",
     registry: "mode-picker",
     registryDependencies: ["dropdown-menu"],
     preview: { name: "mode-picker-example", node: <ModePickerExample /> },
@@ -591,6 +592,9 @@ export function Picker() {
       {
         caption: "ModePicker",
         rows: [
+          { name: "modes", type: "ChatModeOption[]", default: "CHAT_MODES", description: "Mode labels, descriptions and optional icons for this host. IDs remain ask / plan / agent; permissions are enforced by the host." },
+          { name: "label", type: "string", default: '"Mode"', description: "Menu heading and empty-selection placeholder." },
+          { name: "triggerLabel", type: "string", default: '"Change mode"', description: "Accessible label and hover title of the trigger." },
           {
             name: "value",
             type: "ChatMode",
@@ -629,22 +633,9 @@ export function Picker() {
     ],
     examples: [
       {
-        title: "Rename the modes",
-        description: (
-          <>
-            Modes are a plain exported array rather than a prop — the component
-            is copied into your repo, so edit{" "}
-            <DocsCode>CHAT_MODES</DocsCode> directly.
-          </>
-        ),
-        code: {
-          lang: "tsx",
-          code: `export const CHAT_MODES = [
-  { id: "ask", name: "Chat", description: "Answers only", icon: MessageCircle },
-  { id: "plan", name: "Review", description: "Proposes a diff", icon: ListTodo },
-  { id: "agent", name: "Build", description: "Edits your repo", icon: Bot },
-]`,
-        },
+        title: "Use application-specific modes",
+        description: <>Pass <DocsCode>modes</DocsCode> to describe what this host actually supports, without modifying the copied component. Localize <DocsCode>label</DocsCode> and <DocsCode>triggerLabel</DocsCode> alongside the rows.</>,
+        example: { name: "mode-picker-custom-example", node: <ModePickerCustomExample /> },
       },
       {
         title: "Restyle the trigger, flip the side",

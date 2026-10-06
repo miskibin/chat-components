@@ -180,7 +180,7 @@
       "name": "mode-picker",
       "type": "registry:ui",
       "title": "Mode Picker",
-      "description": "Ask / Plan / Agent mode switch with a 36px phone touch target that returns to its compact desktop size at sm, built on the shadcn dropdown menu.",
+      "description": "Configurable Ask / Plan / Agent picker with consumer labels, descriptions, icons and accessible trigger text.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["dropdown-menu"],
       "files": [
