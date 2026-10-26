@@ -764,15 +764,41 @@ export function ChatInput({
     [mentionIndex, mentionKey, mentionMatches.length]
   )
 
-  // Auto-resize the textarea, capped at `maxHeight`.
-  React.useEffect(() => {
+  /**
+   * Auto-resize the textarea, capped at `maxHeight`. In a layout effect, so a
+   * draft restored through the handle never paints a frame at the old height.
+   *
+   * The text is not the only thing that changes how many lines it wraps to:
+   * a side panel opening or the window narrowing does too, and a box sized
+   * only on keystrokes kept its old height with `overflow: hidden` — the extra
+   * lines simply vanished. So a width change measures again.
+   */
+  const fitHeight = React.useCallback(() => {
     const ta = taRef.current
     if (!ta) return
     ta.style.height = "auto"
     const capped = ta.scrollHeight > maxHeight
     ta.style.height = `${capped ? maxHeight : ta.scrollHeight}px`
     ta.style.overflowY = capped ? "auto" : "hidden"
-  }, [text, maxHeight])
+  }, [maxHeight])
+
+  React.useLayoutEffect(() => {
+    fitHeight()
+  }, [text, fitHeight])
+
+  React.useEffect(() => {
+    const ta = taRef.current
+    if (!ta || typeof ResizeObserver === "undefined") return
+    let width = ta.clientWidth
+    const observer = new ResizeObserver(() => {
+      // Our own height writes trigger this too; only a new width re-wraps.
+      if (ta.clientWidth === width) return
+      width = ta.clientWidth
+      fitHeight()
+    })
+    observer.observe(ta)
+    return () => observer.disconnect()
+  }, [fitHeight])
 
   const addFiles = React.useCallback((files: FileList | File[] | null) => {
     if (!files) return
@@ -1007,7 +1033,9 @@ export function ChatInput({
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Never steal keys from an IME candidate window.
-    if (event.nativeEvent.isComposing) return
+    // Safari ends an IME composition with an Enter whose `isComposing` is
+    // already false; keyCode 229 is the only sign it belonged to the IME.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
 
     if (
       onStash &&
