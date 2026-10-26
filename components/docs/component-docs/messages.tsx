@@ -41,6 +41,7 @@ import { MessageMarkdownImagesExample } from "@/components/examples/message-mark
 import { MessageMarkdownLinksExample } from "@/components/examples/message-markdown-links-example"
 import { MessageMarkdownMermaidExample } from "@/components/examples/message-markdown-mermaid-example"
 import { MessageMarkdownPathsExample } from "@/components/examples/message-markdown-paths-example"
+import { MessageMarkdownStreamingExample } from "@/components/examples/message-markdown-streaming-example"
 import { MessageMarkdownStyledExample } from "@/components/examples/message-markdown-styled-example"
 import { MessagePartsExample } from "@/components/examples/message-parts-example"
 import { MessagePartsOutputExample } from "@/components/examples/message-parts-output-example"
@@ -1855,6 +1856,29 @@ export function Answer({ text }: { text: string }) {
               "True while text is still streaming; unterminated emphasis, links, and fences stop flickering.",
           },
           {
+            name: "streaming",
+            type: '"paced" | "instant"',
+            default: '"paced"',
+            description: (
+              <>
+                How streamed text reaches the screen. <DocsCode>paced</DocsCode>{" "}
+                spreads each burst over the next frames — a floor of ~90
+                characters a second, rising so it never trails the stream by
+                more than ~300ms, ending on word boundaries — and fades each new
+                word in (not under reduced motion). After the stream ends the
+                rest drains in ~120ms instead of landing as one jump. Text
+                present at mount is never replayed.{" "}
+                <DocsCode>instant</DocsCode> paints chunks as they land.
+              </>
+            ),
+          },
+          {
+            name: "caret",
+            type: '"block" | "circle"',
+            description:
+              "A caret after the last line while text is arriving. Off by default.",
+          },
+          {
             name: "patternHandlers",
             type: "MarkdownPatternHandler[]",
             default: "[]",
@@ -1912,6 +1936,22 @@ export function Answer({ text }: { text: string }) {
       "file-icon",
     ],
     examples: [
+      {
+        title: "Paced streaming",
+        description: (
+          <>
+            The same bursty stream — a dozen words, a pause, three words — twice.
+            Paced, the bursts are spread into a steady word-by-word reveal that
+            stays within a few hundred milliseconds of the stream; instant, they
+            land as lumps. The pacing curve is{" "}
+            <DocsCode>lib/stream-pacing.ts</DocsCode>, pure and unit-tested.
+          </>
+        ),
+        example: {
+          name: "message-markdown-streaming-example",
+          node: <MessageMarkdownStreamingExample />,
+        },
+      },
       {
         title: "File references become chips",
         description: (

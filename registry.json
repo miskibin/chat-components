@@ -246,7 +246,7 @@
       "name": "message-markdown",
       "type": "registry:ui",
       "title": "Message Markdown",
-      "description": "Streamdown renderer for assistant markdown: GFM, GitHub alerts, code, Mermaid, KaTeX, inline data: images, clickable file references — inline paths and relative links — with their line, a right-click menu per file, per-block render isolation, and copy-as-markdown.",
+      "description": "Streamdown renderer for assistant markdown: GFM, GitHub alerts, code, Mermaid, KaTeX, inline data: images, clickable file references — inline paths and relative links — with their line, a right-click menu per file, per-block render isolation, copy-as-markdown, and paced streaming with a word fade.",
       "dependencies": [
         "streamdown",
         "@streamdown/code",
@@ -285,6 +285,10 @@
         },
         {
           "path": "lib/markdown-list-indentation.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "lib/stream-pacing.ts",
           "type": "registry:lib"
         }
       ],

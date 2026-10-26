@@ -286,3 +286,12 @@
 .lc-markdown blockquote[data-alert="caution"] {
   --lc-alert: var(--destructive);
 }
+
+/* The paced reveal's word fade is motion; readers who asked for less get the
+   words without it. Pacing itself stays — text arriving is not animation. */
+@media (prefers-reduced-motion: reduce) {
+  .lc-markdown [data-sd-animate],
+  .lc-markdown [data-sd-animate-marker]::marker {
+    animation: none;
+  }
+}

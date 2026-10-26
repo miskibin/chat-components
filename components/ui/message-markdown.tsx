@@ -29,6 +29,7 @@ import {
 } from "@/lib/markdown-file-paths"
 import { remarkGithubAlerts } from "@/lib/markdown-github-alerts"
 import { remarkNormalizeListItemIndentation } from "@/lib/markdown-list-indentation"
+import { isContinuation, nextRevealLength } from "@/lib/stream-pacing"
 import { cn } from "@/lib/utils"
 
 const math = createMathPlugin({
@@ -169,6 +170,20 @@ export type MessageMarkdownProps = {
   className?: string
   /** True while the text is still streaming in. */
   isAnimating?: boolean
+  /**
+   * How streamed text reaches the screen. `"paced"` spreads each burst over
+   * the next few frames — never more than ~300ms behind the stream — and
+   * fades every new word in; `"instant"` paints chunks exactly as they land.
+   * Text already present when the component mounts is never replayed.
+   *
+   * @default "paced"
+   */
+  streaming?: "paced" | "instant"
+  /**
+   * A caret after the last line while text is arriving. Off by default; the
+   * paced fade already says the answer is live.
+   */
+  caret?: "block" | "circle"
   /** Inline replacements applied to paragraph and list-item text. */
   patternHandlers?: MarkdownPatternHandler[]
   /**
@@ -523,6 +538,63 @@ function useStableCallback<A extends unknown[], R>(
   return React.useCallback((...args: A) => ref.current?.(...args), [])
 }
 
+/** Short and plain: a word should settle before the next one lands. */
+const WORD_FADE = { animation: "fadeIn", duration: 180, sep: "word" } as const
+
+/** Reveal ticks are capped near 30fps: the text, not the frame rate, is the point. */
+const PACE_FRAME_MS = 32
+/** A first chunk this short is typed out rather than painted whole. */
+const PACE_FROM_START_CHARS = 120
+
+/**
+ * The text to paint this frame, trailing `text` by at most a few hundred
+ * milliseconds while it streams (see `lib/stream-pacing`). Only growth while
+ * paced is spread out: a mount, a transcript swap or an edit shows the text
+ * as it is. `settling` stays true while what arrived before the stream ended
+ * is still being drawn.
+ */
+function usePacedText(text: string, streaming: boolean, enabled: boolean) {
+  const [shown, setShown] = React.useState(() =>
+    enabled && streaming && text.length <= PACE_FROM_START_CHARS ? 0 : text.length
+  )
+  const [source, setSource] = React.useState(text)
+  let length = shown
+  // Adjusted while rendering: a text that is not a continuation of the last
+  // one must never paint a frame sliced at the old length.
+  if (source !== text) {
+    setSource(text)
+    if (!enabled || !isContinuation(source, text)) {
+      length = text.length
+      setShown(length)
+    }
+  }
+  if (!enabled && length !== text.length) {
+    length = text.length
+    setShown(length)
+  }
+
+  const behind = enabled && length < text.length
+  React.useEffect(() => {
+    if (!behind) return
+    let frame = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      frame = requestAnimationFrame(tick)
+      const elapsed = now - last
+      if (elapsed < PACE_FRAME_MS) return
+      last = now
+      setShown((prev) => nextRevealLength(text, prev, elapsed, streaming))
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [behind, streaming, text])
+
+  return {
+    text: length >= text.length ? text : text.slice(0, length),
+    settling: behind,
+  }
+}
+
 /**
  * Memoized so a streaming message list only re-renders the message that
  * actually changed.
@@ -531,11 +603,22 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
   children,
   className,
   isAnimating = false,
+  streaming = "paced",
+  caret,
   patternHandlers = EMPTY_HANDLERS,
   onFileClick,
   fileActions,
   copyAsMarkdown = true,
 }: MessageMarkdownProps) {
+  const paced = streaming === "paced"
+  const { text: visibleText, settling } = usePacedText(
+    children,
+    isAnimating,
+    paced
+  )
+  // A paced answer is still "animating" while it drains what already
+  // arrived, so the fade and the caret stay with it until the last word.
+  const live = isAnimating || settling
   const { resolvedTheme } = useTheme()
   const mermaidConfig = React.useMemo(
     () => ({
@@ -684,14 +767,16 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
           BlockComponent={IsolatedBlock}
           shikiTheme={shikiTheme}
           mermaid={mermaidConfig}
-          isAnimating={isAnimating}
+          isAnimating={live}
+          animated={paced ? WORD_FADE : undefined}
+          caret={caret}
           linkSafety={linkSafety}
           parseIncompleteMarkdown
           codeBlockMaxHeight={Infinity}
           tableMaxHeight={Infinity}
           components={components}
         >
-          {children}
+          {visibleText}
         </Streamdown>
       </FileRefContext.Provider>
     </div>
