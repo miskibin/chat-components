@@ -556,8 +556,16 @@ function SidebarItemRow({
     if (editing) setDraft(item.title)
   }
 
+  /**
+   * Enter and Escape end the edit, which unmounts the input — and a browser
+   * that blurs a focused node as it leaves fires `onBlur={commit}` after the
+   * fact. That second call would rename on Escape, so the first ending wins.
+   */
+  const settledRef = useRef(false)
+
   useEffect(() => {
     if (!editing) return
+    settledRef.current = false
     inputRef.current?.focus()
     inputRef.current?.select()
   }, [editing])
@@ -567,12 +575,16 @@ function SidebarItemRow({
   }, [onEditingChange])
 
   const commit = useCallback(() => {
+    if (settledRef.current) return
+    settledRef.current = true
     onEditingChange(false)
     const next = draft.trim()
     if (next && next !== item.title) onRename?.(next)
   }, [draft, item.title, onEditingChange, onRename])
 
   const cancel = useCallback(() => {
+    if (settledRef.current) return
+    settledRef.current = true
     onEditingChange(false)
     setDraft(item.title)
   }, [item.title, onEditingChange])
@@ -662,6 +674,8 @@ function SidebarItemRow({
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
+            // The Enter that confirms an IME candidate is not a rename.
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return
             if (event.key === "Enter") {
               event.preventDefault()
               commit()

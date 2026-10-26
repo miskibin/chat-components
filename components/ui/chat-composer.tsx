@@ -56,6 +56,9 @@ export function ChatComposer({
       if (event.defaultPrevented || event.key !== "Enter" || event.shiftKey) {
         return
       }
+      // The Enter that confirms an IME candidate (keyCode 229 in Safari,
+      // where `isComposing` is already false) belongs to the IME.
+      if (event.nativeEvent.isComposing || event.keyCode === 229) return
       event.preventDefault()
       if (canSend) onSend()
     },

@@ -97,6 +97,45 @@ export type MessageAttachmentData = {
 const disclosureTrigger =
   "inline-flex max-w-full items-center gap-1.5 rounded-sm py-0.5 text-left text-[13px] leading-snug text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
 
+/** "Thought for 1 second", "Thought for 12 seconds", "Thought for 2m 5s". */
+export function formatThoughtDuration(seconds: number) {
+  const total = Math.max(0, Math.round(seconds))
+  if (total < 60) return `Thought for ${total} ${total === 1 ? "second" : "seconds"}`
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  return `Thought for ${minutes}m${rest ? ` ${rest}s` : ""}`
+}
+
+/**
+ * Keeps a scrolling box on its last line while `active`, for as long as the
+ * reader leaves it there: scrolling the box up to reread stops the pinning,
+ * and scrolling back to its end resumes it. `content` is what grows.
+ */
+function useFollowLive<T extends HTMLElement>(active: boolean, content: unknown) {
+  const ref = React.useRef<T>(null)
+  const pinnedRef = React.useRef(true)
+
+  React.useEffect(() => {
+    const node = ref.current
+    if (!node || !active) return
+    pinnedRef.current = true
+    const onScroll = () => {
+      pinnedRef.current =
+        node.scrollHeight - node.scrollTop - node.clientHeight <= 8
+    }
+    node.addEventListener("scroll", onScroll, { passive: true })
+    return () => node.removeEventListener("scroll", onScroll)
+  }, [active])
+
+  React.useLayoutEffect(() => {
+    const node = ref.current
+    if (!node || !active || !pinnedRef.current) return
+    node.scrollTop = node.scrollHeight
+  }, [active, content])
+
+  return ref
+}
+
 export const MessageReasoning = React.memo(function MessageReasoning({
   children,
   defaultOpen = false,
@@ -122,16 +161,19 @@ export const MessageReasoning = React.memo(function MessageReasoning({
     else if (!defaultOpen) setOpen(false)
   }
 
-  const label =
-    duration == null
+  const label = streaming
+    ? "Thinking…"
+    : duration == null
       ? "Thought for a few seconds"
-      : `Thought for ${duration} seconds`
+      : formatThoughtDuration(duration)
+  const bodyRef = useFollowLive<HTMLDivElement>(streaming && open, children)
 
   return (
     <Collapsible
       open={open}
       onOpenChange={setOpen}
       data-slot="message-reasoning"
+      data-streaming={streaming || undefined}
       className={cn("mb-2 animate-in fade-in duration-150", className)}
     >
       <CollapsibleTrigger asChild>
@@ -151,9 +193,13 @@ export const MessageReasoning = React.memo(function MessageReasoning({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
+        {/* Bounded, and pinned to its newest line while it streams: a long
+            thought otherwise pushed the answer a screen down, then collapsed
+            out from under a reader the moment it finished. */}
         <div
+          ref={bodyRef}
           data-slot="message-reasoning-content"
-          className="mt-2 border-l pl-3 text-[13px] leading-relaxed opacity-60"
+          className="mt-2 max-h-80 overflow-y-auto overscroll-contain border-l pl-3 text-[13px] leading-relaxed opacity-60"
         >
           <MessageMarkdown className="text-inherit! text-[13px]! leading-relaxed!">
             {children}
@@ -1220,26 +1266,44 @@ const OUTPUT_CHAR_CAP = 4_000
 const ToolText = React.memo(function ToolText({
   text,
   tone,
+  live = false,
 }: {
   text: string
   tone?: "error"
+  /**
+   * The tool is still running. Its newest output is the part worth seeing —
+   * a build or a test run prints its verdict last — so the cap keeps the
+   * *tail* and the box stays pinned to it. A finished tool shows the head.
+   */
+  live?: boolean
 }) {
   const [showAll, setShowAll] = React.useState(false)
   const lines = React.useMemo(() => text.split("\n"), [text])
   const capped =
     !showAll &&
     (lines.length > OUTPUT_LINE_CAP || text.length > OUTPUT_CHAR_CAP)
-  const visible = capped
-    ? lines.slice(0, OUTPUT_LINE_CAP).join("\n").slice(0, OUTPUT_CHAR_CAP)
-    : text
+  const visible = !capped
+    ? text
+    : live
+      ? lines.slice(-OUTPUT_LINE_CAP).join("\n").slice(-OUTPUT_CHAR_CAP)
+      : lines.slice(0, OUTPUT_LINE_CAP).join("\n").slice(0, OUTPUT_CHAR_CAP)
   const showAllLines = React.useCallback(() => setShowAll(true), [])
+  const preRef = useFollowLive<HTMLPreElement>(live, visible)
 
   return (
     <div
       data-slot="message-tool-text"
+      data-live={live || undefined}
       className="overflow-hidden rounded-md border border-border/60 bg-muted/30"
     >
+      {capped && live ? (
+        <div className="border-b border-border/60 px-2 py-1 text-[11px] text-muted-foreground">
+          Showing the latest {Math.min(lines.length, OUTPUT_LINE_CAP)} of{" "}
+          {lines.length} lines
+        </div>
+      ) : null}
       <pre
+        ref={preRef}
         className={cn(
           "m-0 max-h-[min(22rem,55vh)] overflow-auto px-2 py-1.5 font-mono text-[12px] leading-relaxed break-words whitespace-pre-wrap",
           tone === "error" ? "text-destructive" : "text-muted-foreground"
@@ -1894,7 +1958,11 @@ export const MessageToolCall = React.memo(function MessageToolCall({
             ) : null}
             {rawInput ? <ToolText text={rawInput} /> : null}
             {showOutput && outputText ? (
-              <ToolText text={outputText} tone={errored ? "error" : undefined} />
+              <ToolText
+                text={outputText}
+                tone={errored ? "error" : undefined}
+                live={running}
+              />
             ) : null}
           </div>
         </CollapsibleContent>

@@ -228,12 +228,6 @@ export const Message = React.memo(function Message({
     if (onEdit && editedContent !== content) onEdit(editedContent)
   }, [content, editedContent, onEdit])
 
-  /** Scanned once per render instead of once per thinking part. */
-  const lastThinkingIndex = React.useMemo(
-    () => parts?.findLastIndex((part) => part.type === "thinking") ?? -1,
-    [parts]
-  )
-
   /**
    * Everything up to and including the last thinking / tool part is the
    * turn's process; whatever trails it is the answer. One scan, so a turn
@@ -396,6 +390,7 @@ export const Message = React.memo(function Message({
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
               onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault()
                   saveEdit()
@@ -523,12 +518,14 @@ export const Message = React.memo(function Message({
     }
     if (part.type === "thinking") {
       if (!part.text) return null
-      const isLatestThinking = index === lastThinkingIndex
+      // Only a thought nothing has followed yet is still being thought: once a
+      // tool call or the answer lands after it, it reads "Thought" and folds.
+      const isLiveThinking = index === parts.length - 1
       return (
         <MessageReasoning
           key={part.id}
           defaultOpen={reasoningDefaultOpen}
-          streaming={isAnimating && isLatestThinking}
+          streaming={isAnimating && isLiveThinking}
         >
           {part.text}
         </MessageReasoning>

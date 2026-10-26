@@ -204,9 +204,11 @@ export function Picker() {
               <>
                 The list contents. An empty array disables the trigger. Past{" "}
                 <DocsCode>searchThreshold</DocsCode> the list grows a search
-                field that matches <DocsCode>name</DocsCode>,{" "}
+                field. Every word typed must appear in the{" "}
+                <DocsCode>name</DocsCode>, <DocsCode>id</DocsCode>,{" "}
                 <DocsCode>badge</DocsCode>, <DocsCode>description</DocsCode>,{" "}
-                <DocsCode>meta</DocsCode> and the group label.
+                <DocsCode>meta</DocsCode> or group label, and rows whose name
+                matches best — exact, prefix, word start — sort first.
               </>
             ),
           },

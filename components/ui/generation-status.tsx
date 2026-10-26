@@ -15,6 +15,12 @@ export type GenerationStatusProps = React.ComponentProps<"span"> & {
   label?: string
   /** Indicator box size in px; the dot fills half of it. */
   size?: number
+  /**
+   * When the work started (epoch ms). Shows a ticking "12s" / "1m 05s" after
+   * the label — written straight to the DOM once a second, so a long turn
+   * costs no React renders at all.
+   */
+  startedAt?: number
 }
 
 const STAGE_LABELS: Record<GenerationStage, string | undefined> = {
@@ -47,12 +53,46 @@ function PulseDot({ size = 16 }: { size?: number }) {
   )
 }
 
+/** "4s", "1m 05s", "1h 02m". */
+export function formatElapsed(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  if (total < 60) return `${total}s`
+  const minutes = Math.floor(total / 60)
+  if (minutes < 60) return `${minutes}m ${String(total % 60).padStart(2, "0")}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${String(minutes % 60).padStart(2, "0")}m`
+}
+
+function Elapsed({ startedAt }: { startedAt: number }) {
+  const ref = React.useRef<HTMLSpanElement>(null)
+  React.useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    const tick = () => {
+      node.textContent = formatElapsed(Date.now() - startedAt)
+    }
+    tick()
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
+  }, [startedAt])
+  return (
+    <span
+      ref={ref}
+      data-slot="generation-status-elapsed"
+      // The first paint has no clock to read; the effect fills it in.
+      suppressHydrationWarning
+      className="shrink-0 tabular-nums text-muted-foreground/70"
+    />
+  )
+}
+
 export function GenerationStatus({
   active,
   stage = "idle",
   label,
   className,
   size = 16,
+  startedAt,
   ...props
 }: GenerationStatusProps) {
   const show = active ?? stage !== "idle"
@@ -81,6 +121,7 @@ export function GenerationStatus({
           {text}
         </span>
       ) : null}
+      {startedAt != null ? <Elapsed startedAt={startedAt} /> : null}
     </span>
   )
 }

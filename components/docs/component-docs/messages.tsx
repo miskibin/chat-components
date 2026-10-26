@@ -20,6 +20,7 @@ import { FilePreviewImageExample } from "@/components/examples/file-preview-imag
 import { FilePreviewSplitExample } from "@/components/examples/file-preview-split-example"
 import { FileTreeExample } from "@/components/examples/file-tree-example"
 import { FileTreeLazyExample } from "@/components/examples/file-tree-lazy-example"
+import { GenerationStatusElapsedExample } from "@/components/examples/generation-status-elapsed-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { GenerationStatusStyledExample } from "@/components/examples/generation-status-styled-example"
 import { MessageActionsExample } from "@/components/examples/message-actions-example"
@@ -116,7 +117,7 @@ export function Turn() {
             name: "reasoningDefaultOpen",
             type: "boolean",
             default: "false",
-            description: "Start the reasoning disclosure expanded. The latest thought still opens while it streams, then collapses when the turn finishes.",
+            description: "Start the reasoning disclosure expanded. A thought still opens while it streams, then collapses once the turn moves past it.",
           },
           {
             name: "reasoningDuration",
@@ -530,6 +531,12 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             ),
           },
           {
+            name: "generationStartedAt",
+            type: "number",
+            description:
+              "When the waiting turn started (epoch ms). The indicator counts up beside its label without re-rendering the list.",
+          },
+          {
             name: "onEditMessage",
             type: "(id: string, content: string) => void",
             description: "Enables inline editing on user turns.",
@@ -932,12 +939,12 @@ export function Answer() {
             type: "boolean",
             default: "false",
             description:
-              "Keep the body open while this thought is still arriving. When it flips to false the disclosure collapses — same as Cursor after a turn finishes.",
+              "This thought is still arriving: the trigger reads “Thinking…” and the body stays open, bounded, and pinned to its newest line unless the reader scrolls it. When it flips to false the disclosure collapses. `Message` sets it only while the thought is the turn's last part.",
           },
           {
             name: "duration",
             type: "number",
-            description: 'Seconds — "Thought for N seconds".',
+            description: 'Seconds — "Thought for 1 second", "Thought for 2m 5s".',
           },
         ],
       },
@@ -1567,6 +1574,7 @@ export function Clarify() {
       "ask-question-prompt",
       "ask-question-group",
       "ask-question-option",
+      "ask-question-option-key",
       "ask-question-indicator",
       "ask-question-other",
       "ask-question-actions",
@@ -1650,7 +1658,9 @@ export function Clarify() {
             select. Multi-select questions are{" "}
             <DocsCode>checkbox</DocsCode> buttons and each is its own tab stop.
             Picking Other… with the pointer focuses its text field; arrowing
-            onto it does not, so the group stays navigable.
+            onto it does not, so the group stays navigable. With focus on an
+            option, <DocsCode>1</DocsCode>–<DocsCode>9</DocsCode> pick the
+            option carrying that number.
           </>
         ),
       },
@@ -3102,6 +3112,18 @@ export function Pending({ busy }: { busy: boolean }) {
             description:
               "Indicator box size in pixels; the dot fills half of it.",
           },
+          {
+            name: "startedAt",
+            type: "number",
+            description: (
+              <>
+                When the work started, in epoch ms. Adds a ticking{" "}
+                <DocsCode>12s</DocsCode> / <DocsCode>1m 05s</DocsCode> after the
+                label, written straight to the DOM once a second — a long turn
+                costs no React renders.
+              </>
+            ),
+          },
         ],
       },
     ],
@@ -3109,8 +3131,23 @@ export function Pending({ busy }: { busy: boolean }) {
       "generation-status",
       "generation-status-spinner",
       "generation-status-label",
+      "generation-status-elapsed",
     ],
     examples: [
+      {
+        title: "Elapsed time",
+        description: (
+          <>
+            Pass <DocsCode>startedAt</DocsCode> and the indicator counts up
+            beside its label. <DocsCode>MessageList</DocsCode> forwards it as{" "}
+            <DocsCode>generationStartedAt</DocsCode>.
+          </>
+        ),
+        example: {
+          name: "generation-status-elapsed-example",
+          node: <GenerationStatusElapsedExample />,
+        },
+      },
       {
         title: "Recolor, resize, hold it still",
         description: (
