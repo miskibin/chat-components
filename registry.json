@@ -300,7 +300,7 @@
       "name": "generative-view",
       "type": "registry:ui",
       "title": "Generative View",
-      "description": "A closed vocabulary of display blocks — cards, fields, tables, lists, timelines, stats, progress, tabs — drawn from JSON an agent writes in a ```ui fence, or read off a tool's JSON output by shape alone. Data, never code: normalized, bounded, safe links only. Ships VIEW_SPEC_PROMPT, the vocabulary for a model in ~200 tokens.",
+      "description": "A closed vocabulary of blocks — cards, fields, tables, lists, timelines, stats, progress, tabs, buttons and forms — drawn from JSON an agent writes in a ```ui fence, progressively as it streams, or read off a tool's JSON output by shape alone. Buttons and forms send a message back through onAction. Data, never code: normalized, bounded, safe links only. Ships VIEW_SPEC_PROMPT, the vocabulary for a model in ~200 tokens.",
       "dependencies": ["lucide-react", "class-variance-authority"],
       "registryDependencies": [
         "collapsible",

@@ -29,7 +29,7 @@ import {
   parseMarkdownFileLink,
   type FilePathPosition,
 } from "@/lib/markdown-file-paths"
-import { VIEW_FENCE_LANGUAGE } from "@/lib/generative-view"
+import { VIEW_FENCE_LANGUAGE, type ViewAction } from "@/lib/generative-view"
 import { remarkGithubAlerts } from "@/lib/markdown-github-alerts"
 import { remarkNormalizeListItemIndentation } from "@/lib/markdown-list-indentation"
 import { isContinuation, nextRevealLength } from "@/lib/stream-pacing"
@@ -45,7 +45,14 @@ const math = createMathPlugin({
  * scope, like every renderer here — Streamdown compares them by reference.
  */
 function ViewFence({ code: source, isIncomplete }: CustomRendererProps) {
-  return <GenerativeViewBlock code={source} isIncomplete={isIncomplete} />
+  const onAction = React.useContext(ViewActionContext)
+  return (
+    <GenerativeViewBlock
+      code={source}
+      isIncomplete={isIncomplete}
+      onAction={onAction}
+    />
+  )
 }
 
 const viewRenderers = [{ language: VIEW_FENCE_LANGUAGE, component: ViewFence }]
@@ -228,6 +235,11 @@ export type MessageMarkdownProps = {
    * @default true
    */
   views?: boolean
+  /**
+   * What a view's button or form asks for — a message to send as the user's
+   * next turn. Without it those actions are drawn disabled.
+   */
+  onViewAction?: (action: ViewAction) => void
 }
 
 type FileRefContextValue = {
@@ -244,6 +256,11 @@ const NO_FILE_REFS: FileRefContextValue = { onFileClick: null }
  * function per render would re-render every block on every token.
  */
 const FileRefContext = React.createContext<FileRefContextValue>(NO_FILE_REFS)
+
+/** Same reason as `FileRefContext`: the fence renderer is module scope. */
+const ViewActionContext = React.createContext<
+  ((action: ViewAction) => void) | undefined
+>(undefined)
 
 /**
  * Every href the hardening pass resolves on its own: an absolute URL or custom
@@ -631,6 +648,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
   fileActions,
   copyAsMarkdown = true,
   views = true,
+  onViewAction,
 }: MessageMarkdownProps) {
   const paced = streaming === "paced"
   const { text: visibleText, settling } = usePacedText(
@@ -755,6 +773,8 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
     () => ({ onFileClick: fileClick, fileActions }),
     [fileClick, fileActions]
   )
+  const stableViewAction = useStableCallback(onViewAction)
+  const viewAction = onViewAction ? stableViewAction : undefined
 
   /**
    * Serializing the selection back to markdown, on the way to the clipboard.
@@ -781,25 +801,27 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
       onCopy={copyAsMarkdown ? handleCopy : undefined}
     >
       <FileRefContext.Provider value={fileRefs}>
-        <Streamdown
-          className={cn("lc-markdown max-w-none", className)}
-          plugins={views ? plugins : pluginsWithoutViews}
-          rehypePlugins={rehypePlugins}
-          remarkPlugins={remarkPlugins}
-          BlockComponent={IsolatedBlock}
-          shikiTheme={shikiTheme}
-          mermaid={mermaidConfig}
-          isAnimating={live}
-          animated={paced ? WORD_FADE : undefined}
-          caret={caret}
-          linkSafety={linkSafety}
-          parseIncompleteMarkdown
-          codeBlockMaxHeight={Infinity}
-          tableMaxHeight={Infinity}
-          components={components}
-        >
-          {visibleText}
-        </Streamdown>
+        <ViewActionContext.Provider value={viewAction}>
+          <Streamdown
+            className={cn("lc-markdown max-w-none", className)}
+            plugins={views ? plugins : pluginsWithoutViews}
+            rehypePlugins={rehypePlugins}
+            remarkPlugins={remarkPlugins}
+            BlockComponent={IsolatedBlock}
+            shikiTheme={shikiTheme}
+            mermaid={mermaidConfig}
+            isAnimating={live}
+            animated={paced ? WORD_FADE : undefined}
+            caret={caret}
+            linkSafety={linkSafety}
+            parseIncompleteMarkdown
+            codeBlockMaxHeight={Infinity}
+            tableMaxHeight={Infinity}
+            components={components}
+          >
+            {visibleText}
+          </Streamdown>
+        </ViewActionContext.Provider>
       </FileRefContext.Provider>
     </div>
   )

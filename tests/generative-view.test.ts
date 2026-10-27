@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 
 import {
+  closePartialJson,
+  formMessage,
   jsonToView,
   normalizeView,
   parseViewSpec,
@@ -204,5 +206,80 @@ describe("jsonToView", () => {
       JSON.stringify({ items: [{ id: 1, name: "a" }, { id: 2, name: "b" }] })
     )
     assert.equal(view?.[0].type, "table")
+  })
+})
+
+describe("closePartialJson", () => {
+  const cases: [string, string | undefined][] = [
+    ["", undefined],
+    ["{", "{}"],
+    ['{"type":"card","ti', '{"type":"card"}'],
+    ['{"type":"card","title":"Fix lo', '{"type":"card","title":"Fix lo"}'],
+    ['{"type":"card","title":"a","children":[{"type":"te', '{"type":"card","title":"a","children":[{"type":"te"}]}'],
+    ['[{"a":1},{"b":tr', '[{"a":1},{}]'],
+    ['{"a":12,', '{"a":12}'],
+    ['{"a":"x\\', '{"a":"x"}'],
+    ['{"a":"x\\u00', '{"a":"x"}'],
+    ['{"a":[1,2', '{"a":[1]}'],
+  ]
+  for (const [input, expected] of cases) {
+    it(JSON.stringify(input), () => {
+      const closed = closePartialJson(input)
+      assert.equal(closed, expected)
+      if (closed) JSON.parse(closed)
+    })
+  }
+})
+
+describe("streaming views", () => {
+  it("draws what has arrived and hides a block whose type is still typing", () => {
+    const parsed = parseViewSpec(
+      '[{"type":"badge","label":"MERGED"},{"type":"ca',
+      { partial: true }
+    )
+    assert.deepEqual(parsed, {
+      ok: true,
+      view: [{ type: "badge", label: "MERGED", tone: "success" }],
+    })
+  })
+
+  it("stays strict once the fence has closed", () => {
+    assert.equal(parseViewSpec('[{"type":"badge","label":"x"}').ok, false)
+  })
+})
+
+describe("actions", () => {
+  it("normalizes a button, defaulting send to its label", () => {
+    assert.deepEqual(normalizeView({ type: "button", label: "Approve" }), [
+      { type: "button", label: "Approve", send: "Approve", tone: undefined },
+    ])
+  })
+
+  it("builds the message a form sends", () => {
+    const [form] = normalizeView({
+      type: "form",
+      submit: "Post reply",
+      send: "Reply to the review comments:",
+      fields: [
+        { name: "vote", label: "Vote", options: ["+1", "0", "-1"] },
+        { name: "msg", label: "Message", type: "textarea" },
+        { name: "wip", label: "Mark WIP", type: "checkbox" },
+        { name: "skip", label: "Unanswered" },
+      ],
+    })
+    assert.equal(form.type, "form")
+    if (form.type !== "form") return
+    assert.equal(form.fields[0].kind, "select")
+    assert.equal(
+      formMessage(form, { vote: "+1", msg: "Looks good.\nShip it.", wip: false }),
+      [
+        "Reply to the review comments:",
+        "- Vote: +1",
+        "- Message:",
+        "  Looks good.",
+        "  Ship it.",
+        "- Mark WIP: no",
+      ].join("\n")
+    )
   })
 })

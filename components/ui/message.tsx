@@ -28,6 +28,7 @@ import {
   type ChangeSummaryFile,
   type FileActionItem,
 } from "@/components/ui/change-summary"
+import type { ViewAction } from "@/lib/generative-view"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
 
@@ -120,6 +121,11 @@ export type MessageProps = {
    * dropping the selected text into the composer. Assistant turns only.
    */
   onQuote?: (text: string) => void
+  /**
+   * A button or form inside a ` ```ui ` view in the answer asks to send a
+   * message. Keep it stable — it reaches every markdown block.
+   */
+  onViewAction?: (action: ViewAction) => void
 }
 
 const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/i
@@ -182,6 +188,7 @@ export const Message = React.memo(function Message({
   onFileReferenceClick,
   fileActions,
   onQuote,
+  onViewAction,
 }: MessageProps) {
   const [isEditing, setIsEditing] = React.useState(false)
   const [editedContent, setEditedContent] = React.useState(content)
@@ -539,6 +546,7 @@ export const Message = React.memo(function Message({
         patternHandlers={patternHandlers}
         onFileClick={onFileReferenceClick}
         fileActions={fileActions}
+        onViewAction={onViewAction}
       >
         {part.text}
       </MessageMarkdown>
@@ -575,6 +583,7 @@ export const Message = React.memo(function Message({
             patternHandlers={patternHandlers}
             onFileClick={onFileReferenceClick}
             fileActions={fileActions}
+            onViewAction={onViewAction}
           >
             {displayContent}
           </MessageMarkdown>,

@@ -3,6 +3,7 @@
 import { ArrowDown } from "lucide-react"
 import * as React from "react"
 
+import type { ViewAction } from "@/lib/generative-view"
 import { cn } from "@/lib/utils"
 import {
   GenerationStatus,
@@ -109,6 +110,11 @@ export type MessageListProps = React.ComponentProps<"div"> & {
   fileActions?: FileActionItem[]
   /** Quoting a selection out of an assistant answer, for the composer. */
   onQuote?: (messageId: string, text: string) => void
+  /**
+   * A button or form in an answer's ` ```ui ` view asks to send a message —
+   * hand `action.text` to whatever sends the user's next turn.
+   */
+  onViewAction?: (messageId: string, action: ViewAction) => void
   /**
    * Turns a path a tool names into a URL the page can load — forwarded to
    * every row so an image the agent wrote or read renders as a picture.
@@ -453,6 +459,7 @@ const MessageListRow = React.memo(function MessageListRow({
   onFileReferenceClick,
   fileActions,
   onQuote,
+  onViewAction,
   resolveFileUrl,
 }: {
   message: ChatMessageData
@@ -485,6 +492,7 @@ const MessageListRow = React.memo(function MessageListRow({
   ) => void
   fileActions?: FileActionItem[]
   onQuote?: (messageId: string, text: string) => void
+  onViewAction?: (messageId: string, action: ViewAction) => void
   resolveFileUrl?: (path: string) => string | undefined
 }) {
   const isUser = message.sender === "user"
@@ -527,6 +535,10 @@ const MessageListRow = React.memo(function MessageListRow({
     (text: string) => onQuote?.(message.id, text),
     [message.id, onQuote]
   )
+  const handleViewAction = React.useCallback(
+    (action: ViewAction) => onViewAction?.(message.id, action),
+    [message.id, onViewAction]
+  )
 
   return (
     <Message
@@ -562,6 +574,7 @@ const MessageListRow = React.memo(function MessageListRow({
       }
       fileActions={fileActions}
       onQuote={onQuote ? handleQuote : undefined}
+      onViewAction={onViewAction ? handleViewAction : undefined}
       resolveFileUrl={resolveFileUrl}
     />
   )
@@ -584,6 +597,7 @@ export function MessageList({
   onFileReferenceClick,
   fileActions,
   onQuote,
+  onViewAction,
   resolveFileUrl,
   renderActions,
   conversationKey,
@@ -606,6 +620,7 @@ export function MessageList({
   const stableChangeFileClick = useStableCallback(onChangeFileClick)
   const stableFileReferenceClick = useStableCallback(onFileReferenceClick)
   const stableQuote = useStableCallback(onQuote)
+  const stableViewAction = useStableCallback(onViewAction)
   // Rows are memoized: a host that builds this resolver inline would otherwise
   // re-render every row on every streamed token.
   const stableResolveFileUrl = useStableCallback(resolveFileUrl)
@@ -684,6 +699,7 @@ export function MessageList({
                     }
                     fileActions={stableFileActions}
                     onQuote={onQuote ? stableQuote : undefined}
+                    onViewAction={onViewAction ? stableViewAction : undefined}
                     resolveFileUrl={
                       resolveFileUrl ? stableResolveFileUrl : undefined
                     }

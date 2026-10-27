@@ -21,9 +21,11 @@ import { FilePreviewImageExample } from "@/components/examples/file-preview-imag
 import { FilePreviewSplitExample } from "@/components/examples/file-preview-split-example"
 import { FileTreeExample } from "@/components/examples/file-tree-example"
 import { FileTreeLazyExample } from "@/components/examples/file-tree-lazy-example"
+import { GenerativeViewActionsExample } from "@/components/examples/generative-view-actions-example"
 import { GenerativeViewExample } from "@/components/examples/generative-view-example"
 import { GenerativeViewJsonExample } from "@/components/examples/generative-view-json-example"
 import { GenerativeViewMarkdownExample } from "@/components/examples/generative-view-markdown-example"
+import { GenerativeViewStreamingExample } from "@/components/examples/generative-view-streaming-example"
 import { GenerationStatusElapsedExample } from "@/components/examples/generation-status-elapsed-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { GenerationStatusShineExample } from "@/components/examples/generation-status-shine-example"
@@ -284,6 +286,17 @@ export function Turn() {
                 Offers a “Quote” pill over a selection inside an assistant
                 answer, for dropping the selected text into a composer.
                 Assistant turns only.
+              </>
+            ),
+          },
+          {
+            name: "onViewAction",
+            type: "(action: ViewAction) => void",
+            description: (
+              <>
+                A button or form inside a <DocsCode>```ui</DocsCode> view in the
+                answer asks to send <DocsCode>action.text</DocsCode> as the
+                user&rsquo;s next message. Keep it stable.
               </>
             ),
           },
@@ -607,6 +620,18 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
             type: "(messageId: string, text: string) => void",
             description:
               "A selection quoted out of an assistant answer, for the composer. Stabilized like the other callbacks.",
+          },
+          {
+            name: "onViewAction",
+            type: "(messageId: string, action: ViewAction) => void",
+            description: (
+              <>
+                A button or form in an answer&rsquo;s{" "}
+                <DocsCode>```ui</DocsCode> view asks to send{" "}
+                <DocsCode>action.text</DocsCode> — hand it to whatever sends the
+                user&rsquo;s next turn. Stabilized like the other callbacks.
+              </>
+            ),
           },
           {
             name: "resolveFileUrl",
@@ -1941,7 +1966,7 @@ export function Thread() {
   "generative-view": {
     title: "Generative View",
     description:
-      "UI an agent composes rather than one you wrote for it: a closed vocabulary of display blocks — cards, fields, tables, lists, timelines, stats, progress, tabs — drawn from JSON in a ```ui fence, or read straight off a tool's JSON output.",
+      "UI an agent composes rather than one you wrote for it: a closed vocabulary of blocks — cards, fields, tables, lists, timelines, stats, progress, tabs, buttons and forms — drawn from JSON in a ```ui fence as it streams, or read straight off a tool's JSON output.",
     registry: "generative-view",
     registryDependencies: ["collapsible", "tabs", "diff-stat"],
     preview: { name: "generative-view-example", node: <GenerativeViewExample /> },
@@ -1958,14 +1983,46 @@ export function View({ json }: { json: string }) {
         description: (
           <>
             <DocsCode>MessageMarkdown</DocsCode> draws every{" "}
-            <DocsCode>```ui</DocsCode> fence as a view. While the fence streams
-            it holds a placeholder; JSON that still does not parse once it
-            closes shows the reason above its source.
+            <DocsCode>```ui</DocsCode> fence as a view. JSON that still does
+            not parse once the fence closes shows the reason above its source.
           </>
         ),
         example: {
           name: "generative-view-markdown-example",
           node: <GenerativeViewMarkdownExample />,
+        },
+      },
+      {
+        title: "While it streams",
+        description: (
+          <>
+            The fence&rsquo;s JSON is closed where it stands on every token, so
+            the view grows with the answer — a string value types itself out,
+            a block appears once its <DocsCode>type</DocsCode> has landed —
+            instead of waiting for the last brace.
+          </>
+        ),
+        example: {
+          name: "generative-view-streaming-example",
+          node: <GenerativeViewStreamingExample />,
+        },
+      },
+      {
+        title: "Talking back",
+        description: (
+          <>
+            A <DocsCode>button</DocsCode> sends its <DocsCode>send</DocsCode>{" "}
+            text as the user&rsquo;s next message; a <DocsCode>form</DocsCode>{" "}
+            sends its <DocsCode>send</DocsCode> line followed by one{" "}
+            <DocsCode>- Label: answer</DocsCode> line per field. The view never
+            runs anything itself — the host decides what a message does. Both
+            stay disabled while the fence streams, without an{" "}
+            <DocsCode>onViewAction</DocsCode>, and after they have sent once.
+          </>
+        ),
+        example: {
+          name: "generative-view-actions-example",
+          node: <GenerativeViewActionsExample />,
         },
       },
       {
@@ -2039,7 +2096,26 @@ const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
             name: "classNames",
             type: "Partial<Record<GenerativeViewSlot, string>>",
             description:
-              "Per-part overrides — root, card, section, table, fields, list, timeline, stats, badge — applied to every block of that kind in the tree.",
+              "Per-part overrides — root, card, section, table, fields, list, timeline, stats, badge, form — applied to every block of that kind in the tree.",
+          },
+          {
+            name: "onAction",
+            type: "(action: ViewAction) => void",
+            description: (
+              <>
+                What a button or form asks for:{" "}
+                <DocsCode>{'{ type: "send", text }'}</DocsCode>, a message to
+                send as the user&rsquo;s next turn. Without it, actions are
+                drawn disabled. Keep it stable.
+              </>
+            ),
+          },
+          {
+            name: "pending",
+            type: "boolean",
+            default: "false",
+            description:
+              "The view is still streaming: actions are drawn but not clickable, so nothing half-written can be sent.",
           },
         ],
       },
@@ -2057,7 +2133,12 @@ const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
             type: "boolean",
             default: "false",
             description:
-              "The fence is still streaming: unparseable JSON shows a placeholder instead of an error.",
+              "The fence is still streaming: its JSON is closed where it stands and drawn, with actions held until it ends.",
+          },
+          {
+            name: "onAction",
+            type: "(action: ViewAction) => void",
+            description: "Forwarded to GenerativeView.",
           },
         ],
       },
@@ -2084,6 +2165,9 @@ const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
       "generative-view-stat",
       "generative-view-progress",
       "generative-view-code",
+      "generative-view-button",
+      "generative-view-form",
+      "generative-view-form-submit",
       "generative-view-unknown",
       "generative-view-pending",
       "generative-view-error",

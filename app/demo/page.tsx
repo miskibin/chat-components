@@ -1078,6 +1078,9 @@ export default function ChatExample() {
                     })
                   }
                   onAskAnswer={handleAskAnswer}
+                  onViewAction={(_, action) =>
+                    handleSend({ text: action.text, files: [], skills: [] })
+                  }
                   onOpenFile={openToolFile}
                   onChangeFileClick={openChangeFile}
                   onFileReferenceClick={openReferencedFile}

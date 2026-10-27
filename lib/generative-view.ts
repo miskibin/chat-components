@@ -36,6 +36,24 @@ export type ViewItem = {
 
 export type ViewColumn = { label: string; align: "start" | "end" }
 
+export type ViewFormField = {
+  name: string
+  label: string
+  kind: "text" | "textarea" | "select" | "checkbox"
+  options?: string[]
+  placeholder?: string
+  required: boolean
+  /** Initial value; `"true"` checks a checkbox. */
+  value?: string
+}
+
+/**
+ * What a view asks of its host. Today one thing: send this text as the user's
+ * next message — which is how a button or a form talks back to the agent
+ * without the view ever running anything itself.
+ */
+export type ViewAction = { type: "send"; text: string }
+
 export type ViewNode =
   | {
       type: "card"
@@ -72,6 +90,14 @@ export type ViewNode =
     }
   | { type: "code"; code: string; lang?: string }
   | { type: "diffstat"; added: number; removed: number }
+  | { type: "button"; label: string; send: string; tone?: ViewTone }
+  | {
+      type: "form"
+      title?: string
+      fields: ViewFormField[]
+      submit: string
+      send?: string
+    }
   | { type: "unknown"; name: string }
 
 export type ViewNodeType = ViewNode["type"]
@@ -97,7 +123,9 @@ card{title,subtitle?,href?,status?,children[]} section{title,collapsed?,children
 text{text,tone?,mono?} badge{label,tone?} link{label?,href} divider{}
 fields{items[{label,value}]} table{columns[],rows[[]]} list{items[]} timeline{items[]}
 stats{items[{label,value,hint?,tone?}]} progress{value,max?,label?,tone?} code{code,lang?} diffstat{added,removed}
+button{label,send,tone?} form{title?,fields[{name,label,type?:text|textarea|select|checkbox,options?,required?,value?}],submit,send?}
 list/timeline items: a string or {title,meta?,body?,href?,tone?}. Field values and table cells: a string, a number, or a badge/link node. status: a string or a badge node. tone: neutral|info|success|warning|danger.
+A button sends its \`send\` text to you as the user's next message; a form sends \`send\` (or its submit label) followed by the answers. Use them to offer next steps or ask for input you need.
 Only when it reads better than prose; keep the prose around it short and do not repeat what the view shows.`
 
 /* ---------------------------------------------------------------- limits -- */
@@ -215,7 +243,15 @@ export function toneForStatus(label: string): ViewTone {
 
 /* ----------------------------------------------------------- normalizing -- */
 
-type Budget = { nodes: number }
+type Budget = {
+  nodes: number
+  /**
+   * The JSON was closed by `closePartialJson`: a block whose `type` is still
+   * arriving is dropped rather than flashed as "unsupported", and an action
+   * is drawn only once its text has landed whole.
+   */
+  partial: boolean
+}
 
 function badgeFrom(value: Json): ViewBadge | undefined {
   if (isObj(value)) {
@@ -516,8 +552,59 @@ function nodeFrom(value: Json, depth: number, budget: Budget): ViewNode | undefi
         removed: Math.max(0, Math.round(removed ?? 0)),
       }
     }
+    case "button":
+    case "action": {
+      const label = str(value.label) ?? str(value.text)
+      const send = str(value.send, MAX_TEXT) ?? str(value.message, MAX_TEXT) ?? label
+      if (!label || !send) return undefined
+      return { type: "button", label, send, tone: normalizeTone(value.tone) }
+    }
+    case "form": {
+      const fields = (Array.isArray(value.fields) ? value.fields : [])
+        .slice(0, 20)
+        .flatMap((field): ViewFormField[] => {
+          if (!isObj(field)) return []
+          const label = str(field.label) ?? str(field.name)
+          const name = str(field.name, 60) ?? label
+          if (!label || !name) return []
+          const rawKind = str(field.type ?? field.kind, 20)?.toLowerCase()
+          const options = Array.isArray(field.options)
+            ? field.options
+                .slice(0, 50)
+                .map((option) => str(isObj(option) ? (option.label ?? option.value) : option))
+                .filter((option): option is string => !!option)
+            : undefined
+          const kind: ViewFormField["kind"] =
+            rawKind === "textarea" || rawKind === "checkbox"
+              ? rawKind
+              : rawKind === "select" || (options && options.length > 0)
+                ? "select"
+                : "text"
+          return [
+            {
+              name,
+              label,
+              kind,
+              options: kind === "select" ? options : undefined,
+              placeholder: str(field.placeholder),
+              required: field.required === true,
+              value: scalarText(field.value ?? field.default, MAX_TEXT),
+            },
+          ]
+        })
+      if (fields.length === 0) return undefined
+      return {
+        type: "form",
+        title: str(value.title),
+        fields,
+        submit: str(value.submit) ?? str(value.label) ?? "Send",
+        send: str(value.send, MAX_TEXT),
+      }
+    }
     default:
-      return { type: "unknown", name: clip(type || "untyped", 40) }
+      return budget.partial
+        ? undefined
+        : { type: "unknown", name: clip(type || "untyped", 40) }
   }
 }
 
@@ -525,8 +612,11 @@ function nodeFrom(value: Json, depth: number, budget: Budget): ViewNode | undefi
  * A view from anything JSON-shaped — one node, or an array of them. Never
  * throws: what cannot be drawn is dropped, or kept as an `unknown` marker.
  */
-export function normalizeView(value: unknown): ViewSpec {
-  const budget: Budget = { nodes: 0 }
+export function normalizeView(
+  value: unknown,
+  { partial = false }: { partial?: boolean } = {}
+): ViewSpec {
+  const budget: Budget = { nodes: 0, partial }
   const list = Array.isArray(value) ? value : [value]
   const out: ViewNode[] = []
   for (const item of list.slice(0, MAX_CHILDREN)) {
@@ -536,23 +626,157 @@ export function normalizeView(value: unknown): ViewSpec {
   return out
 }
 
-/** The text of a ` ```ui ` fence, as a view or the reason it is not one. */
-export function parseViewSpec(source: string): ParsedView {
+/**
+ * The text of a ` ```ui ` fence, as a view or the reason it is not one.
+ *
+ * `partial` is for a fence still streaming in: the JSON is closed where it
+ * stands (`closePartialJson`) so the view grows token by token instead of
+ * waiting for the last brace.
+ */
+export function parseViewSpec(
+  source: string,
+  { partial = false }: { partial?: boolean } = {}
+): ParsedView {
   const text = source.trim()
   if (!text) return { ok: false, error: "Empty view" }
   let value: unknown
+  let closed = false
   try {
     value = JSON.parse(text)
   } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Invalid JSON",
+    const repaired = partial ? closePartialJson(text) : undefined
+    if (repaired === undefined) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Invalid JSON",
+      }
+    }
+    try {
+      value = JSON.parse(repaired)
+      closed = true
+    } catch {
+      return { ok: false, error: "Invalid JSON" }
     }
   }
-  const view = normalizeView(value)
+  const view = normalizeView(value, { partial: closed })
   return view.length > 0
     ? { ok: true, view }
     : { ok: false, error: "Nothing in this view can be drawn" }
+}
+
+/* -------------------------------------------------------- streaming -- */
+
+/**
+ * JSON cut off mid-stream, closed into a document that parses — or
+ * `undefined` when nothing complete has arrived yet.
+ *
+ * Cuts back to the last point where every open value is whole (after a
+ * value, or just inside a bracket), with one exception: a string *value*
+ * still arriving is kept and closed, so a long title or comment types itself
+ * out rather than appearing at once. An object key never is — half a key is a
+ * different key.
+ */
+export function closePartialJson(text: string): string | undefined {
+  const stack: ("{" | "[")[] = []
+  /** For each open object: is the next string a key? */
+  const expectKey: boolean[] = []
+  let inString = false
+  let stringIsKey = false
+  let escaped = false
+  let safe = -1
+  let safeStack: ("{" | "[")[] = []
+
+  const markSafe = (index: number) => {
+    safe = index
+    safeStack = stack.slice()
+  }
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === "\\") escaped = true
+      else if (char === '"') {
+        inString = false
+        if (!stringIsKey) markSafe(index + 1)
+      }
+      continue
+    }
+    switch (char) {
+      case '"':
+        inString = true
+        stringIsKey = stack.at(-1) === "{" && expectKey.at(-1) === true
+        break
+      case "{":
+        stack.push("{")
+        expectKey.push(true)
+        markSafe(index + 1)
+        break
+      case "[":
+        stack.push("[")
+        expectKey.push(false)
+        markSafe(index + 1)
+        break
+      case "}":
+      case "]":
+        stack.pop()
+        expectKey.pop()
+        markSafe(index + 1)
+        break
+      case ":":
+        if (stack.at(-1) === "{") expectKey[expectKey.length - 1] = false
+        break
+      case ",":
+        // A bare number or literal just ended; the comma itself is the cut.
+        if (/[\w.]/.test(text.slice(0, index).trimEnd().slice(-1))) markSafe(index)
+        if (stack.at(-1) === "{") expectKey[expectKey.length - 1] = true
+        break
+    }
+  }
+
+  const close = (open: ("{" | "[")[]) =>
+    open
+      .slice()
+      .reverse()
+      .map((bracket) => (bracket === "{" ? "}" : "]"))
+      .join("")
+
+  if (inString && !stringIsKey) {
+    // Never end on half an escape: `\`, `\u00`.
+    const body = text.replace(/\\(u[0-9a-fA-F]{0,3})?$/, "")
+    return `${body}"${close(stack)}`
+  }
+  if (safe < 0) return undefined
+  return `${text.slice(0, safe)}${close(safeStack)}`
+}
+
+/* --------------------------------------------------------------- forms -- */
+
+/**
+ * The message a submitted form sends: its `send` line (or the submit label),
+ * then one `- Label: answer` line per field that was answered. Plain text on
+ * purpose — the agent reads it like anything else the user typed.
+ */
+export function formMessage(
+  form: Extract<ViewNode, { type: "form" }>,
+  values: Record<string, string | boolean>
+): string {
+  const lines = [form.send ?? form.submit]
+  for (const field of form.fields) {
+    const value = values[field.name]
+    if (field.kind === "checkbox") {
+      lines.push(`- ${field.label}: ${value === true ? "yes" : "no"}`)
+      continue
+    }
+    const text = typeof value === "string" ? value.trim() : ""
+    if (!text) continue
+    lines.push(
+      text.includes("\n")
+        ? `- ${field.label}:\n${text.replace(/^/gm, "  ")}`
+        : `- ${field.label}: ${text}`
+    )
+  }
+  return lines.join("\n")
 }
 
 /* ---------------------------------------------------- JSON → view, auto -- */

@@ -1,7 +1,7 @@
 "use client"
 
 import { cva } from "class-variance-authority"
-import { ChevronDown } from "lucide-react"
+import { Check, ChevronDown } from "lucide-react"
 import * as React from "react"
 
 import {
@@ -12,7 +12,9 @@ import {
 import { DiffStat } from "@/components/ui/diff-stat"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  formMessage,
   parseViewSpec,
+  type ViewAction,
   type ViewInline,
   type ViewItem,
   type ViewNode,
@@ -31,6 +33,7 @@ export type GenerativeViewSlot =
   | "timeline"
   | "stats"
   | "badge"
+  | "form"
 
 /**
  * Tones are the one raw-palette exception, the same one the diff counts and
@@ -86,6 +89,36 @@ const ClassNamesContext = React.createContext<ClassNames>({})
 function useSlotClass(slot: GenerativeViewSlot) {
   return React.useContext(ClassNamesContext)[slot]
 }
+
+type ActionContextValue = {
+  onAction?: (action: ViewAction) => void
+  /** Drawn, but not yet clickable — the view is still streaming in. */
+  pending: boolean
+}
+
+const ActionContext = React.createContext<ActionContextValue>({ pending: false })
+
+const controlClassName =
+  "w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-[12.5px] transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+
+const buttonVariants = cva(
+  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium whitespace-nowrap transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
+  {
+    variants: {
+      tone: {
+        neutral: "bg-background hover:bg-muted",
+        info: "border-primary bg-primary text-primary-foreground hover:bg-primary/90",
+        success:
+          "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300",
+        warning:
+          "border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300",
+        danger:
+          "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15",
+      },
+    },
+    defaultVariants: { tone: "neutral" },
+  }
+)
 
 /* ------------------------------------------------------------- inlines -- */
 
@@ -489,6 +522,155 @@ function Progress({ node }: { node: Extract<ViewNode, { type: "progress" }> }) {
   )
 }
 
+/**
+ * One click, one message: a button that has sent stays pressed, so a double
+ * click cannot queue the same turn twice. Without a host to send to it is
+ * drawn disabled — the view still says what was on offer.
+ */
+function ViewButton({ node }: { node: Extract<ViewNode, { type: "button" }> }) {
+  const { onAction, pending } = React.useContext(ActionContext)
+  const [sent, setSent] = React.useState(false)
+  return (
+    <button
+      type="button"
+      data-slot="generative-view-button"
+      data-state={sent ? "sent" : undefined}
+      data-tone={node.tone}
+      disabled={!onAction || pending || sent}
+      onClick={() => {
+        setSent(true)
+        onAction?.({ type: "send", text: node.send })
+      }}
+      className={buttonVariants({ tone: node.tone })}
+    >
+      {sent ? <Check className="size-3.5" /> : null}
+      {node.label}
+    </button>
+  )
+}
+
+function ViewForm({ node }: { node: Extract<ViewNode, { type: "form" }> }) {
+  const { onAction, pending } = React.useContext(ActionContext)
+  const id = React.useId()
+  const [values, setValues] = React.useState<Record<string, string | boolean>>(
+    () =>
+      Object.fromEntries(
+        node.fields.map((field) => [
+          field.name,
+          field.kind === "checkbox"
+            ? field.value === "true"
+            : (field.value ?? (field.kind === "select" ? (field.options?.[0] ?? "") : "")),
+        ])
+      )
+  )
+  const [sent, setSent] = React.useState(false)
+  const locked = !onAction || pending || sent
+  const set = (name: string, value: string | boolean) =>
+    setValues((current) => ({ ...current, [name]: value }))
+
+  return (
+    <form
+      data-slot="generative-view-form"
+      data-state={sent ? "sent" : undefined}
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (locked) return
+        setSent(true)
+        onAction?.({ type: "send", text: formMessage(node, values) })
+      }}
+      className={cn(
+        "min-w-0 space-y-2 rounded-md border px-3 py-2.5",
+        useSlotClass("form")
+      )}
+    >
+      {node.title ? (
+        <div className="text-[12.5px] font-medium">{node.title}</div>
+      ) : null}
+      {node.fields.map((field) => {
+        const fieldId = `${id}-${field.name}`
+        const value = values[field.name]
+        if (field.kind === "checkbox") {
+          return (
+            <label
+              key={field.name}
+              htmlFor={fieldId}
+              className="flex items-center gap-2 text-[12.5px]"
+            >
+              <input
+                id={fieldId}
+                type="checkbox"
+                checked={value === true}
+                disabled={locked}
+                onChange={(event) => set(field.name, event.target.checked)}
+                className="size-3.5 accent-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              />
+              {field.label}
+            </label>
+          )
+        }
+        return (
+          <div key={field.name} className="space-y-1">
+            <label
+              htmlFor={fieldId}
+              className="block text-[11.5px] text-muted-foreground"
+            >
+              {field.label}
+              {field.required ? <span aria-hidden> *</span> : null}
+            </label>
+            {field.kind === "textarea" ? (
+              <textarea
+                id={fieldId}
+                rows={3}
+                required={field.required}
+                placeholder={field.placeholder}
+                value={typeof value === "string" ? value : ""}
+                disabled={locked}
+                onChange={(event) => set(field.name, event.target.value)}
+                className={cn(controlClassName, "resize-y leading-relaxed")}
+              />
+            ) : field.kind === "select" ? (
+              <select
+                id={fieldId}
+                required={field.required}
+                value={typeof value === "string" ? value : ""}
+                disabled={locked}
+                onChange={(event) => set(field.name, event.target.value)}
+                className={cn(controlClassName, "h-7 py-0")}
+              >
+                {(field.options ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={fieldId}
+                type="text"
+                required={field.required}
+                placeholder={field.placeholder}
+                value={typeof value === "string" ? value : ""}
+                disabled={locked}
+                onChange={(event) => set(field.name, event.target.value)}
+                className={cn(controlClassName, "h-7")}
+              />
+            )}
+          </div>
+        )
+      })}
+      <button
+        type="submit"
+        data-slot="generative-view-form-submit"
+        disabled={locked}
+        className={buttonVariants({ tone: "info" })}
+      >
+        {sent ? <Check className="size-3.5" /> : null}
+        {node.submit}
+      </button>
+    </form>
+  )
+}
+
 function Block({ node }: { node: ViewNode }) {
   switch (node.type) {
     case "card":
@@ -499,7 +681,7 @@ function Block({ node }: { node: ViewNode }) {
       return (
         <div
           data-slot="generative-view-row"
-          className="flex min-w-0 flex-wrap gap-2 *:min-w-[10rem] *:flex-1"
+          className="flex min-w-0 flex-wrap items-start gap-2 [&>:not([data-slot=generative-view-button])]:min-w-[10rem] [&>:not([data-slot=generative-view-button])]:flex-1"
         >
           <Nodes nodes={node.children} />
         </div>
@@ -562,6 +744,10 @@ function Block({ node }: { node: ViewNode }) {
           <DiffStat additions={node.added} deletions={node.removed} />
         </div>
       )
+    case "button":
+      return <ViewButton node={node} />
+    case "form":
+      return <ViewForm node={node} />
     case "unknown":
       return (
         <div
@@ -585,6 +771,17 @@ export type GenerativeViewProps = Omit<React.ComponentProps<"div">, "children"> 
   view: ViewSpec
   /** Per-part overrides, applied to every block of that kind in the tree. */
   classNames?: ClassNames
+  /**
+   * What a button or a form asks for — today, a message to send as the
+   * user's next turn. Without it, actions are drawn disabled. Keep it stable:
+   * the view is memoized.
+   */
+  onAction?: (action: ViewAction) => void
+  /**
+   * The view is still streaming: actions are drawn but not yet clickable, so
+   * nothing half-written can be sent.
+   */
+  pending?: boolean
 }
 
 /**
@@ -599,24 +796,33 @@ export type GenerativeViewProps = Omit<React.ComponentProps<"div">, "children"> 
 export const GenerativeView = React.memo(function GenerativeView({
   view,
   classNames,
+  onAction,
+  pending = false,
   className,
   ...props
 }: GenerativeViewProps) {
   const context = React.useMemo(() => classNames ?? {}, [classNames])
+  const actions = React.useMemo(
+    () => ({ onAction, pending }),
+    [onAction, pending]
+  )
   return (
-    <ClassNamesContext.Provider value={context}>
-      <div
-        data-slot="generative-view"
-        className={cn(
-          "min-w-0 space-y-2.5 text-foreground",
-          classNames?.root,
-          className
-        )}
-        {...props}
-      >
-        <Nodes nodes={view} />
-      </div>
-    </ClassNamesContext.Provider>
+    <ActionContext.Provider value={actions}>
+      <ClassNamesContext.Provider value={context}>
+        <div
+          data-slot="generative-view"
+          data-pending={pending || undefined}
+          className={cn(
+            "min-w-0 space-y-2.5 text-foreground",
+            classNames?.root,
+            className
+          )}
+          {...props}
+        >
+          <Nodes nodes={view} />
+        </div>
+      </ClassNamesContext.Provider>
+    </ActionContext.Provider>
   )
 })
 
@@ -625,25 +831,34 @@ export type GenerativeViewBlockProps = {
   code: string
   /** The fence is still streaming in. */
   isIncomplete?: boolean
+  /** Forwarded to `GenerativeView`. Keep it stable. */
+  onAction?: (action: ViewAction) => void
   className?: string
 }
 
 /**
  * A view written into an answer as a ` ```ui ` fence. While the fence is
- * still arriving its JSON is unfinished, so the block holds a placeholder
- * rather than flashing a parse error on every token; once it closes, JSON that
- * still does not parse shows the reason above its own source.
+ * still arriving, its JSON is closed where it stands and drawn — the view
+ * grows with the stream, its actions held until the fence ends — and only
+ * before anything whole has arrived does it hold a placeholder. Once it
+ * closes, JSON that still does not parse shows the reason above its source.
  */
 export const GenerativeViewBlock = React.memo(function GenerativeViewBlock({
   code,
   isIncomplete = false,
+  onAction,
   className,
 }: GenerativeViewBlockProps) {
-  const parsed = React.useMemo(() => parseViewSpec(code), [code])
+  const parsed = React.useMemo(
+    () => parseViewSpec(code, { partial: isIncomplete }),
+    [code, isIncomplete]
+  )
   if (parsed.ok) {
     return (
       <GenerativeView
         view={parsed.view}
+        onAction={onAction}
+        pending={isIncomplete}
         data-state={isIncomplete ? "streaming" : "done"}
         className={cn("my-3", className)}
       />

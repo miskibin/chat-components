@@ -388,6 +388,16 @@ function streamingScenario(topic: string): MockStep[] {
                 { title: "text", meta: "markdown", tone: "success" },
               ],
             },
+            {
+              type: "row",
+              children: [
+                {
+                  type: "button",
+                  label: "Show the tool calls",
+                  send: "Run a few tools so I can see the rows.",
+                },
+              ],
+            },
           ],
         }),
         "```",
