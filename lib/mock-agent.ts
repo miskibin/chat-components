@@ -500,6 +500,15 @@ function composerScenario(topic: string): MockStep[] {
       ].join("\n"),
     },
     {
+      // A leading sleep: the running row counts it down.
+      kind: "tool",
+      name: "Shell",
+      input: { command: "sleep 5 && tail -2 \"$TMPDIR/watch.log\" # dev server" },
+      status: "done",
+      runMs: 5_400,
+      output: "ready in 412ms\nwatching for changes…",
+    },
+    {
       kind: "tool",
       name: "Shell",
       input: { command: "npm run typecheck" },

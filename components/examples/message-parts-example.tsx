@@ -103,6 +103,21 @@ export function MessagePartsExample() {
         }}
       />
 
+      {/* A command that opens with a sleep counts it down while it runs, and
+          every shell line is tinted: programs, flags, strings, operators. */}
+      <MessageToolCall
+        defaultOpen
+        tool={{
+          id: "t6",
+          name: "Bash",
+          status: "running",
+          input: JSON.stringify({
+            command:
+              'sleep 195; D="$HOME/.cache/ci"\ntail -3 "$D/status.log" | grep -E \'passed|failed\' # latest run',
+          }),
+        }}
+      />
+
       <MessageCode
         block={{
           language: "ts",

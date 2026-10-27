@@ -379,10 +379,19 @@ function isFileMutationTool(name: string) {
   )
 }
 
+/**
+ * A `+3` / `−1` count standing on its own. Bounded on both sides because a
+ * tool's output is mostly prose with paths in it, and a bare `-(\d+)` read
+ * `File created successfully at: …/babysit-107347/watcher.sh` as 107k lines
+ * deleted from a file that had just been written.
+ */
+const ADDED_STAT = /(?:^|[\s([,])\+(\d+)(?=$|[\s)\],])/
+const REMOVED_STAT = /(?:^|[\s([,])[-−](\d+)(?=$|[\s)\],])/
+
 function parseOutputStats(output?: string) {
   if (!output) return { additions: 0, deletions: 0 }
-  const added = output.match(/\+(\d+)/)
-  const removed = output.match(/[-−](\d+)/)
+  const added = output.match(ADDED_STAT)
+  const removed = output.match(REMOVED_STAT)
   return {
     additions: added ? Number(added[1]) : 0,
     deletions: removed ? Number(removed[1]) : 0,

@@ -62,7 +62,12 @@ import {
   shineClassName,
 } from "@/components/ui/generation-status"
 import { RenderErrorBoundary } from "@/components/ui/render-error-boundary"
-import { commandProgramName } from "@/lib/command-label"
+import {
+  commandProgramName,
+  leadingSleepSeconds,
+  tokenizeShell,
+  type ShellTokenKind,
+} from "@/lib/command-label"
 import { fnv1a32, LRUCache } from "@/lib/lru-cache"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
@@ -511,11 +516,117 @@ export function summarizeCommand(command: string): {
   return { display, label: second ? `${program} ${second}` : program, program }
 }
 
+/**
+ * How each piece of a shell line is tinted — mostly by weight rather than hue,
+ * so a theme never has to agree with it: the programs carry the line, flags
+ * and plumbing step back, and only a quoted string takes a colour.
+ */
+const SHELL_TOKEN_CLASSES: Record<ShellTokenKind, string | undefined> = {
+  program: "text-foreground",
+  flag: "text-muted-foreground",
+  string: "text-chart-2",
+  variable: "text-chart-2/80",
+  operator: "text-muted-foreground",
+  comment: "text-muted-foreground/70 italic",
+  text: undefined,
+}
+
+/** A shell command, tinted. One lexer pass per command, memoized. */
+function ShellText({ command }: { command: string }) {
+  const tokens = React.useMemo(() => tokenizeShell(command), [command])
+  return tokens.map((token, index) => {
+    const className = SHELL_TOKEN_CLASSES[token.kind]
+    return className ? (
+      <span key={index} data-token={token.kind} className={className}>
+        {token.text}
+      </span>
+    ) : (
+      <React.Fragment key={index}>{token.text}</React.Fragment>
+    )
+  })
+}
+
+/** Shorter than this, a countdown would only flicker. */
+const MIN_COUNTDOWN_SECONDS = 5
+const MAX_SLEEP_STARTS = 200
+
+/**
+ * When each sleeping tool was first seen, by id — module state rather than
+ * component state so a row that remounts (a virtualized list, a re-opened
+ * chat) keeps counting from where it was instead of starting over.
+ */
+const sleepStarts = new Map<string, number>()
+
+function sleepStartedAt(toolId: string) {
+  let started = sleepStarts.get(toolId)
+  if (started == null) {
+    started = Date.now()
+    sleepStarts.set(toolId, started)
+    if (sleepStarts.size > MAX_SLEEP_STARTS) {
+      sleepStarts.delete(sleepStarts.keys().next().value as string)
+    }
+  }
+  return started
+}
+
+function formatCountdown(seconds: number) {
+  const total = Math.ceil(seconds)
+  if (total < 60) return `${total}s`
+  const minutes = Math.floor(total / 60)
+  if (minutes < 60) return `${minutes}:${String(total % 60).padStart(2, "0")}`
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`
+}
+
+/**
+ * "Sleeping · 2:31 left" beside a command that opened with `sleep 195`. The
+ * text is written straight to the node once a second, so the memoized row
+ * never re-renders for it, and it goes quiet at zero — whatever the command
+ * does after its sleep is not something this can time.
+ */
+function SleepCountdown({
+  toolId,
+  seconds,
+}: {
+  toolId: string
+  seconds: number
+}) {
+  const ref = React.useRef<HTMLSpanElement>(null)
+  React.useEffect(() => {
+    const node = ref.current
+    if (!node || seconds < MIN_COUNTDOWN_SECONDS) return
+    const endsAt = sleepStartedAt(toolId) + seconds * 1000
+    const render = () => {
+      const left = (endsAt - Date.now()) / 1000
+      node.textContent =
+        left > 0 ? `sleeping · ${formatCountdown(left)} left` : ""
+      return left > 0
+    }
+    if (!render()) return
+    const timer = setInterval(() => {
+      if (!render()) clearInterval(timer)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [toolId, seconds])
+  return (
+    <span
+      ref={ref}
+      data-slot="message-tool-call-countdown"
+      // The first paint has no clock to read; the effect fills it in.
+      suppressHydrationWarning
+      className="shrink-0 text-[12px] text-muted-foreground tabular-nums empty:hidden"
+    />
+  )
+}
+
 type ToolHeadline = {
   label: string
   detail?: string
   /** Hover text for the detail — the untouched command behind a summary. */
   title?: string
+  /** A command that starts by sleeping this long; the row counts it down. */
+  sleepSeconds?: number
+  /** The detail is a shell line, and is tinted as one. */
+  shell?: boolean
 }
 
 function toolHeadline(tool: MessageToolCallData): ToolHeadline {
@@ -561,6 +672,8 @@ function toolHeadline(tool: MessageToolCallData): ToolHeadline {
   }
   if (kind.includes("shell") || kind === "bash" || kind === "command") {
     const summary = command ? summarizeCommand(command) : null
+    const sleepSeconds =
+      (summary && leadingSleepSeconds(summary.display)) ?? undefined
     if (!summary?.program) {
       return {
         label: failed
@@ -571,6 +684,8 @@ function toolHeadline(tool: MessageToolCallData): ToolHeadline {
         // Nothing to name, but the line itself is still worth showing.
         detail: summary ? clip(summary.display) : undefined,
         title: command,
+        sleepSeconds,
+        shell: true,
       }
     }
     return {
@@ -582,6 +697,8 @@ function toolHeadline(tool: MessageToolCallData): ToolHeadline {
       detail: clip(summary.display),
       // The row shows the unwrapped line; the hover keeps the original.
       title: command,
+      sleepSeconds,
+      shell: true,
     }
   }
   if (kind.includes("read")) {
@@ -1843,8 +1960,18 @@ export const MessageToolCall = React.memo(function MessageToolCall({
           )}
           title={headline.title ?? headline.detail}
         >
-          {headline.detail}
+          {headline.shell && !errored ? (
+            <ShellText command={headline.detail} />
+          ) : (
+            headline.detail
+          )}
         </span>
+      ) : null}
+      {running && headline.sleepSeconds ? (
+        <SleepCountdown
+          toolId={displayTool.id}
+          seconds={headline.sleepSeconds}
+        />
       ) : null}
       {stats ? (
         <DiffStats added={stats.added} removed={stats.removed} />
@@ -1971,7 +2098,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
                 data-slot="message-tool-command"
                 className="m-0 overflow-x-auto rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 font-mono text-[12.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground/90"
               >
-                {commandText}
+                <ShellText command={commandText} />
               </pre>
             ) : null}
             {argRows.length > 0 ? (

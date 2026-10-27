@@ -1054,6 +1054,32 @@ export function Answer() {
             ),
           },
           {
+            name: "leadingSleepSeconds",
+            type: "(command: string) => number | null",
+            description: (
+              <>
+                From <DocsCode>@/lib/command-label</DocsCode>: how long a
+                command sleeps before doing anything else —{" "}
+                <DocsCode>sleep 195; tail log</DocsCode> is 195,{" "}
+                <DocsCode>Start-Sleep -Seconds 30</DocsCode> is 30. A running
+                shell row counts it down (“sleeping · 2:31 left”) and goes quiet
+                at zero. A backgrounded, variable or mid-script sleep is null.
+              </>
+            ),
+          },
+          {
+            name: "tokenizeShell",
+            type: "(command: string) => ShellToken[]",
+            description: (
+              <>
+                The lexer behind the tinted command line: program, flag,
+                string, variable, operator, comment or plain text, one pass,
+                lossless. Restyle a kind through{" "}
+                <DocsCode>[data-token=&quot;flag&quot;]</DocsCode>.
+              </>
+            ),
+          },
+          {
             name: "isImagePath",
             type: "(path?: string) => boolean",
             description:
@@ -1202,6 +1228,8 @@ export function Answer() {
       "message-tool-call-header",
       "message-tool-call-chevron",
       "message-tool-call-body",
+      "message-tool-call-countdown",
+      "message-tool-command",
       "message-tool-calls",
       "message-tool-calls-trigger",
       "message-tool-list",
