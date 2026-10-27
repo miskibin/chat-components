@@ -20,7 +20,7 @@ promise backward compatibility) but must be propagated to agent-ui in the same e
 product; this registry exists to serve it. So a behaviour the two disagree about is settled by
 taking agent-ui's, landing it here properly — component, docs entry, example, `registry.json`,
 `registry:build` — and copying back, never by leaving the app patched. After any change that
-touches `components/ui/**` or a shared `lib/` module, run `npm run vendor:check` from an
+touches `components/ui/**` or a shared `lib/` module, run `bun run vendor:check` from an
 agent-ui checkout beside this one; it fails on a single differing byte.
 
 ## Checklist for ANY component change
@@ -36,10 +36,10 @@ A component change is not done until all of these are true:
    `example` over a `code` snippet — reach for `code` only when the change is a source edit or
    an integration the docs site cannot run.
 4. `registry.json` is accurate (dependencies, registryDependencies, description) and
-   `npm run registry:build` has regenerated `public/r/*.json`.
-5. `npm run lint`, `npm run typecheck`, `npm run build` pass.
+   `bun run registry:build` has regenerated `public/r/*.json`.
+5. `bun run lint`, `bun run typecheck`, `bun run build` pass.
 6. The vendored copies in agent-ui are updated — **every** change, not only an API change
-   — and `npm run vendor:check` passes there (see its `AGENTS.md`).
+   — and `bun run vendor:check` passes there (see its `AGENTS.md`).
 
 ## Idiom (enforced by review, not optional)
 
@@ -70,21 +70,24 @@ A component change is not done until all of these are true:
   every production deploy.
 - The playground auto-falls back to `lib/mock-agent.ts` when no `agent` binary exists
   (`MOCK_CURSOR_AGENT=1` forces it); keep the mock exercising every UI part.
-- `@pierre/diffs` is patched through `patch-package` (`postinstall`,
-  `patches/@pierre+diffs+1.4.1.patch`): 1.4.1 never invalidates its wrapped-line height cache
-  when the container or gutter width changes, so a `DiffView` in a resizable panel drifts out
-  of its own scroll range. Regenerate the patch against the new version on every upgrade —
-  do not drop it, and do not hand-edit `node_modules`.
+- The package manager is **bun** (`bun.lock`, `bunfig.toml` pins the hoisted linker that Next's
+  standalone tracing expects). Scripts still run on Node — `bun run <script>` only launches them.
+- `@pierre/diffs` is patched through bun's `patchedDependencies`
+  (`patches/@pierre%2Fdiffs@1.6.2.patch`): upstream never invalidates its wrapped-line height
+  cache when the container or gutter width changes, so a `DiffView` in a resizable panel drifts
+  out of its own scroll range. Regenerate the patch against the new version on every upgrade
+  (`bun patch @pierre/diffs`, edit, `bun patch --commit node_modules/@pierre/diffs`) — do not
+  drop it, and do not hand-edit `node_modules` outside that flow.
 
 ## Commands
 
 ```bash
-npm run dev             # site + playground
-npm run lint            # eslint (CI)
-npm run typecheck       # tsc --noEmit (CI)
-npm run build           # next build (CI)
-npm run registry:build  # regenerate public/r/*.json — required after component/registry edits
-npm run test            # node --test over tests/*.test.ts (no runner dependency:
+bun run dev             # site + playground
+bun run lint            # eslint (CI)
+bun run typecheck       # tsc --noEmit (CI)
+bun run build           # next build (CI)
+bun run registry:build  # regenerate public/r/*.json — required after component/registry edits
+bun run test            # node --test over tests/*.test.ts (no runner dependency:
                         #   Node strips the types, tests/register.mjs resolves `@/`).
                         #   Only the framework-free lib/ modules are testable this way.
 ```

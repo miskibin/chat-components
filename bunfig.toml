@@ -1,0 +1,3 @@
+[install]
+# Next standalone tracing and the vendored copies expect a flat node_modules.
+linker = "hoisted"

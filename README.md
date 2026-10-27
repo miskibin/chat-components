@@ -128,15 +128,15 @@ must update docs, examples, the registry build, and the vendored copy in
 ## Development
 
 ```bash
-npm install
-npm run dev
-npm run lint
-npm run typecheck
-npm run registry:build
-npm run build
+bun install
+bun run dev
+bun run lint
+bun run typecheck
+bun run registry:build
+bun run build
 ```
 
-Requires Node.js 20.9 or newer.
+Requires Node.js 20.9 or newer, with [bun](https://bun.sh) as the package manager.
 
 ## License
 

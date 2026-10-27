@@ -1,7 +1,7 @@
-diff --git a/node_modules/@pierre/diffs/dist/components/VirtualizedFile.js b/node_modules/@pierre/diffs/dist/components/VirtualizedFile.js
-index 89e2d37..ccb65dc 100644
---- a/node_modules/@pierre/diffs/dist/components/VirtualizedFile.js
-+++ b/node_modules/@pierre/diffs/dist/components/VirtualizedFile.js
+diff --git a/dist/components/VirtualizedFile.js b/dist/components/VirtualizedFile.js
+index 95d4ca8fdf9e176e23d354094a11022eefdb2321..f884208c936ebb3bfe0fbc928054bcc8258cf942 100644
+--- a/dist/components/VirtualizedFile.js
++++ b/dist/components/VirtualizedFile.js
 @@ -22,6 +22,7 @@ var VirtualizedFile = class extends File {
  	cache = {
  		heights: /* @__PURE__ */ new Map(),
@@ -10,8 +10,8 @@ index 89e2d37..ccb65dc 100644
  		fileAnnotationHeight: 0,
  		ghostTextRows: NO_GHOST_TEXT_ROWS
  	};
-@@ -35,6 +36,8 @@ var VirtualizedFile = class extends File {
- 		super(options, workerManager, isContainerManaged);
+@@ -34,6 +35,8 @@ var VirtualizedFile = class extends File {
+ 		super(options, workerManager, requestOwnerRender);
  		this.virtualizer = virtualizer;
  		this.metrics = metrics;
 +		const simpleVirtualizer = this.getSimpleVirtualizer();
@@ -19,7 +19,7 @@ index 89e2d37..ccb65dc 100644
  	}
  	setMetrics(metrics, force = false) {
  		const nextMetrics = computeVirtualFileMetrics(metrics);
-@@ -131,6 +134,13 @@ var VirtualizedFile = class extends File {
+@@ -134,6 +137,13 @@ var VirtualizedFile = class extends File {
  		if (this.code == null) return hasHeightChange;
  		const content = this.code.children[1];
  		if (!(content instanceof HTMLElement)) return hasHeightChange;
@@ -30,13 +30,13 @@ index 89e2d37..ccb65dc 100644
 +			hasHeightChange = true;
 +		}
 +		this.cache.codeWidth = codeWidth;
- 		const hasFileAnnotations = includesFileAnnotations(this.getLatestAnnotations());
- 		if (this.renderRange != null && hasFileAnnotations && shouldRenderFileAnnotations(this.renderRange)) {
+ 		if (this.renderRange != null && shouldRenderFileAnnotations(this.renderRange)) {
  			const nextFileAnnotationHeight = measureFileAnnotationHeight(content) ?? 0;
-diff --git a/node_modules/@pierre/diffs/dist/managers/ResizeManager.d.ts b/node_modules/@pierre/diffs/dist/managers/ResizeManager.d.ts
-index 202b6e5..eedaa58 100644
---- a/node_modules/@pierre/diffs/dist/managers/ResizeManager.d.ts
-+++ b/node_modules/@pierre/diffs/dist/managers/ResizeManager.d.ts
+ 			if (nextFileAnnotationHeight !== this.cache.fileAnnotationHeight) {
+diff --git a/dist/managers/ResizeManager.d.ts b/dist/managers/ResizeManager.d.ts
+index 3efafc41324e09c546e66645c0dc474e68417896..9e5b7511f9f82702c4e15fe7063b3e9a0b05a79d 100644
+--- a/dist/managers/ResizeManager.d.ts
++++ b/dist/managers/ResizeManager.d.ts
 @@ -5,6 +5,8 @@ interface ResizeManagerSetupOptions {
    columnVariables?: ResizeManagerColumnVariableMode;
  }
@@ -46,10 +46,10 @@ index 202b6e5..eedaa58 100644
    private static resizeObserver;
    private static managersByElement;
    private static getResizeObserver;
-diff --git a/node_modules/@pierre/diffs/dist/managers/ResizeManager.js b/node_modules/@pierre/diffs/dist/managers/ResizeManager.js
-index 9724cb1..14145d8 100644
---- a/node_modules/@pierre/diffs/dist/managers/ResizeManager.js
-+++ b/node_modules/@pierre/diffs/dist/managers/ResizeManager.js
+diff --git a/dist/managers/ResizeManager.js b/dist/managers/ResizeManager.js
+index 9724cb1e344af1ac8763b592f671a9ceb63f1a76..14145d832900e7a9734786dbb6223d03424f7cb6 100644
+--- a/dist/managers/ResizeManager.js
++++ b/dist/managers/ResizeManager.js
 @@ -19,6 +19,7 @@ var ResizeManager = class ResizeManager {
  		for (const [manager, managerEntries] of entriesByManager) manager.handleResizeEntries(managerEntries);
  	}
@@ -66,35 +66,36 @@ index 9724cb1..14145d8 100644
  		codeUpdates.clear();
  	}
  	applyAnnotationUpdates(annotationUpdates) {
-diff --git a/node_modules/@pierre/diffs/dist/renderers/FileRenderer.js b/node_modules/@pierre/diffs/dist/renderers/FileRenderer.js
-index b57de57..8ef4416 100644
---- a/node_modules/@pierre/diffs/dist/renderers/FileRenderer.js
-+++ b/node_modules/@pierre/diffs/dist/renderers/FileRenderer.js
-@@ -163,10 +163,10 @@ var FileRenderer = class {
+diff --git a/dist/renderers/FileRenderer.js b/dist/renderers/FileRenderer.js
+index 4c65f0554cbb6403c5e45affb33ff6e8d18adcf3..c32c889f8172b6d8be60d6e7da7d0dfbb11975ba 100644
+--- a/dist/renderers/FileRenderer.js
++++ b/dist/renderers/FileRenderer.js
+@@ -179,11 +179,11 @@ var FileRenderer = class {
  			result: massiveFile ? void 0 : cache?.result,
  			renderRange: void 0
  		};
 +		this.computedLang = file.lang ?? getFiletypeFromFileName(file.name);
- 		if (!this.editSessionActive && this.workerManager?.isWorkingPool() === true) {
- 			if (this.renderCache.result == null && !massiveFile) this.workerManager.highlightFileAST(this, file);
- 		} else if (this.highlighter == null) {
+ 		const workerManager = this.getHighlightWorkerManager(file);
+ 		if (workerManager != null) {
+ 			if (this.renderCache.result == null && !massiveFile) workerManager.highlightFileAST(this, file);
+ 		} else if (getHighlighterIfLoaded({ theme: this.getLocalHighlightTheme() }) == null) {
 -			this.computedLang = file.lang ?? getFiletypeFromFileName(file.name);
- 			this.initializeHighlighter();
- 		}
- 	}
-@@ -395,6 +395,7 @@ var FileRenderer = class {
+ 			this.initializeHighlighter().catch((error) => {
+ 				if (!(error instanceof HighlighterDisposedError)) this.onHighlightError(error);
+ 			});
+@@ -433,6 +433,7 @@ var FileRenderer = class {
  		const canRenderFile = this.canRenderFile(file, options, forcePlainText);
  		const newContent = !areFileTargetsEqual(file, this.renderCache.file);
  		const newRenderRange = !areRenderRangesEqual(this.renderCache.renderRange, renderRange);
 +		this.computedLang = file.lang ?? getFiletypeFromFileName(file.name);
- 		if (!this.editSessionActive && this.workerManager?.isWorkingPool() === true) {
+ 		const workerManager = this.getHighlightWorkerManager(file);
+ 		if (workerManager != null) {
  			const preserveHydratedContent = this.renderCache.result == null && this.renderCache.highlighted && !forcePlainText && !newContent && isDefaultRenderRange(renderRange);
- 			if (canRenderFile && !preserveHydratedContent && (forcePlainText || this.renderCache.result == null || !this.renderCache.highlighted && (newContent || newRenderRange))) {
-@@ -406,7 +407,6 @@ var FileRenderer = class {
+@@ -445,7 +446,6 @@ var FileRenderer = class {
  			}
- 			if (!forcePlainText && hasContent && (!this.renderCache.highlighted || forceHighlight)) this.workerManager.highlightFileAST(this, file);
+ 			if (!forcePlainText && hasContent && (!this.renderCache.highlighted || forceHighlight)) workerManager.highlightFileAST(this, file);
  		} else {
 -			this.computedLang = file.lang ?? getFiletypeFromFileName(file.name);
- 			this.highlighter ??= getHighlighterIfLoaded();
- 			const hasThemes = this.highlighter != null && areThemesAttached(options.theme);
- 			const hasLangs = this.highlighter != null && areLanguagesAttached(this.computedLang);
+ 			const highlighter = getHighlighterIfLoaded();
+ 			const hasThemes = highlighter != null && areThemesAttached(options.theme, highlighter);
+ 			const hasLangs = highlighter != null && areLanguagesAttached(this.computedLang, highlighter);
