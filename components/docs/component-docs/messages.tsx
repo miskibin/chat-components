@@ -8,6 +8,7 @@ import { AskQuestionStyledExample } from "@/components/examples/ask-question-sty
 import { ChangeSummaryActionsExample } from "@/components/examples/change-summary-actions-example"
 import { ChangeSummaryExample } from "@/components/examples/change-summary-example"
 import { ChangeSummaryStyledExample } from "@/components/examples/change-summary-styled-example"
+import { DiffStatExample } from "@/components/examples/diff-stat-example"
 import { DiffViewCommentsExample } from "@/components/examples/diff-view-comments-example"
 import { DiffStackExample } from "@/components/examples/diff-stack-example"
 import { DiffViewExample } from "@/components/examples/diff-view-example"
@@ -22,9 +23,11 @@ import { FileTreeExample } from "@/components/examples/file-tree-example"
 import { FileTreeLazyExample } from "@/components/examples/file-tree-lazy-example"
 import { GenerationStatusElapsedExample } from "@/components/examples/generation-status-elapsed-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
+import { GenerationStatusShineExample } from "@/components/examples/generation-status-shine-example"
 import { GenerationStatusStyledExample } from "@/components/examples/generation-status-styled-example"
 import { MessageActionsExample } from "@/components/examples/message-actions-example"
 import { MessageCitationsExample } from "@/components/examples/message-citations-example"
+import { MessageDividerExample } from "@/components/examples/message-divider-example"
 import { MessageExample } from "@/components/examples/message-example"
 import { MessageFileActionsExample } from "@/components/examples/message-file-actions-example"
 import { MessageListActionsExample } from "@/components/examples/message-list-actions-example"
@@ -47,6 +50,7 @@ import { MessagePartsExample } from "@/components/examples/message-parts-example
 import { MessagePartsOutputExample } from "@/components/examples/message-parts-output-example"
 import { MessageProcessExample } from "@/components/examples/message-process-example"
 import { PlanCardExample } from "@/components/examples/plan-card-example"
+import { PlanCardLongExample } from "@/components/examples/plan-card-long-example"
 import { MessageQuoteExample } from "@/components/examples/message-quote-example"
 import { MessageSenderExample } from "@/components/examples/message-sender-example"
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
@@ -191,7 +195,9 @@ export function Turn() {
                 <DocsCode>
                   {"{ id, icon, onClick, title?, position? }"}
                 </DocsCode>
-                .
+                . On a touch screen (<DocsCode>pointer: coarse</DocsCode>),
+                which has no hover, they — and the user bubble&apos;s edit
+                button — simply stay visible.
               </>
             ),
           },
@@ -847,14 +853,16 @@ export function Conversation({ messages }: { messages: ChatMessageData[] }) {
   "message-parts": {
     title: "Message Parts",
     description:
-      "The atoms an assistant turn is made of — reasoning, tool calls, ask questions, highlighted code, and artifact cards. Use them directly when you build your own turn layout.",
+      "The atoms an assistant turn is made of — reasoning, tool calls, ask questions, highlighted code, dividers between turns, and artifact cards. Use them directly when you build your own turn layout.",
     registry: "message-parts",
     registryDependencies: [
       "collapsible",
       "message-markdown",
       "ask-question",
       "change-summary",
+      "diff-stat",
       "file-icon",
+      "generation-status",
       "todo-list",
     ],
     preview: { name: "message-parts-example", node: <MessagePartsExample /> },
@@ -1072,9 +1080,52 @@ export function Answer() {
             required: true,
             description: (
               <>
-                <DocsCode>{"{ language?, code, title? }"}</DocsCode>. Language{" "}
-                <DocsCode>mermaid</DocsCode> is handed to the markdown renderer
-                instead.
+                <DocsCode>{"{ language?, code, title? }"}</DocsCode>. The header
+                is a quiet line inside the frame — the{" "}
+                <DocsCode>title</DocsCode> with its file icon, else the
+                language&apos;s own icon and name — beside a wrap toggle and
+                copy. Language <DocsCode>mermaid</DocsCode> is handed to the
+                markdown renderer instead.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "MessageDivider",
+        rows: [
+          {
+            name: "label",
+            type: "React.ReactNode",
+            required: true,
+            description:
+              "What happened between the turns — “Context compacted”, “Switched to Opus”.",
+          },
+          {
+            name: "detail",
+            type: "React.ReactNode",
+            description: "A muted second half after a dot — a model name, a token count.",
+          },
+          {
+            name: "icon",
+            type: "React.ReactNode",
+            description: "Leading glyph, sized to 12px.",
+          },
+          {
+            name: "tone",
+            type: '"neutral" | "danger"',
+            default: '"neutral"',
+            description:
+              "danger for something that broke between turns — a crash, a lost session.",
+          },
+          {
+            name: "onAction / actionLabel",
+            type: "() => void / string",
+            description: (
+              <>
+                Makes the pill a button. <DocsCode>actionLabel</DocsCode> is
+                its accessible name and tooltip — the label alone says what
+                happened, not what clicking does.
               </>
             ),
           },
@@ -1166,6 +1217,8 @@ export function Answer() {
       "message-tool-show-all",
       "message-code",
       "message-code-header",
+      "message-code-title",
+      "message-code-wrap",
       "message-code-copy",
       "message-code-fallback",
       "message-artifact",
@@ -1173,8 +1226,29 @@ export function Answer() {
       "message-artifact-content",
       "message-attachments",
       "message-attachment",
+      "message-divider",
+      "message-divider-label",
+      "message-divider-action",
+      "message-divider-detail",
+      "disclosure-icon",
     ],
     examples: [
+      {
+        title: "Between two turns",
+        description: (
+          <>
+            <DocsCode>MessageDivider</DocsCode> is a line across the
+            transcript with a pill in the middle, for something the app did
+            rather than something anyone wrote: a compaction, a model switch, a
+            lost session. Give it <DocsCode>onAction</DocsCode> and the pill
+            becomes a button. <DocsCode>message</DocsCode> re-exports it.
+          </>
+        ),
+        example: {
+          name: "message-divider-example",
+          node: <MessageDividerExample />,
+        },
+      },
       {
         title: "Shell rows say what ran",
         description: (
@@ -1239,7 +1313,13 @@ export function Answer() {
           <>
             Every row stamps <DocsCode>data-status</DocsCode>, so failures and
             running states are themed from an ancestor without the component
-            knowing your palette.
+            knowing your palette. Rows carry no spinner: the glyph in the icon
+            column keeps saying what kind of work it is (a file&apos;s own
+            icon for a file), and the label of a running call shines instead —
+            tint the sweep with <DocsCode>--lc-shine-base</DocsCode>. Every
+            disclosure row, thinking and folded groups included, puts its glyph
+            in the same fixed column (<DocsCode>disclosure-icon</DocsCode>), so
+            the labels of a turn start at one x.
           </>
         ),
         example: {
@@ -1741,6 +1821,20 @@ export function Thread() {
             ),
           },
           {
+            name: "collapsible",
+            type: "boolean",
+            default: "true",
+            description: (
+              <>
+                Folds a long plan — past 900 characters or 20 lines, its
+                checklist counted — to its first screen, with a fade and an{" "}
+                <DocsCode>Expand plan</DocsCode> button. Pass{" "}
+                <DocsCode>false</DocsCode> where the card already has the room,
+                such as a side panel.
+              </>
+            ),
+          },
+          {
             name: "onOpen",
             type: "() => void",
             description:
@@ -1778,6 +1872,8 @@ export function Thread() {
       "plan-card-title",
       "plan-card-count",
       "plan-card-body",
+      "plan-card-content",
+      "plan-card-expand",
       "plan-card-overview",
       "plan-card-todos",
       "plan-card-actions",
@@ -1818,6 +1914,22 @@ export function Thread() {
         example: {
           name: "plan-card-compact-example",
           node: <PlanCardCompactExample />,
+        },
+      },
+      {
+        title: "A long plan folds",
+        description: (
+          <>
+            A forty-step plan in a message column pushed the turn after it a
+            page out of sight. Past about one screen the body folds behind a
+            fade and an <DocsCode>Expand plan</DocsCode> button;{" "}
+            <DocsCode>plan-card-content</DocsCode> carries{" "}
+            <DocsCode>data-folded</DocsCode> while it is.
+          </>
+        ),
+        example: {
+          name: "plan-card-long-example",
+          node: <PlanCardLongExample />,
         },
       },
     ],
@@ -2251,7 +2363,7 @@ export function Fence({ code }: { code: string }) {
     description:
       "The card Cursor shows after a coding turn: file count, a Review action, a few rows with +/- stats, and “Show N more”. Pair it with WorkedFor for the elapsed-time badge.",
     registry: "change-summary",
-    registryDependencies: ["collapsible", "context-menu", "file-icon"],
+    registryDependencies: ["collapsible", "context-menu", "diff-stat", "file-icon"],
     preview: {
       name: "change-summary-example",
       node: <ChangeSummaryExample />,
@@ -3107,7 +3219,7 @@ const EXTENSION_MAP: Record<string, FileIconId> = {
   "generation-status": {
     title: "Generation Status",
     description:
-      "A single breathing dot with an optional label, for the gap between sending a message and the first token.",
+      "A dot and a shining label — \"Working for 1m 05s\" — for the gap between sending a message and the first token.",
     registry: "generation-status",
     preview: {
       name: "generation-status-example",
@@ -3143,7 +3255,16 @@ export function Pending({ busy }: { busy: boolean }) {
           {
             name: "label",
             type: "string",
-            description: "Overrides the stage label. Omit for a bare dot.",
+            default: '"Working"',
+            description: (
+              <>
+                Overrides the stage label. With <DocsCode>startedAt</DocsCode>{" "}
+                it reads as one sentence — <DocsCode>Thinking for 12s</DocsCode>{" "}
+                — and a trailing ellipsis is dropped so{" "}
+                <DocsCode>Loading model…</DocsCode> does not read “Loading
+                model… for 3s”.
+              </>
+            ),
           },
           {
             name: "size",
@@ -3158,9 +3279,9 @@ export function Pending({ busy }: { busy: boolean }) {
             description: (
               <>
                 When the work started, in epoch ms. Adds a ticking{" "}
-                <DocsCode>12s</DocsCode> / <DocsCode>1m 05s</DocsCode> after the
-                label, written straight to the DOM once a second — a long turn
-                costs no React renders.
+                <DocsCode>for 12s</DocsCode> / <DocsCode>for 1m 05s</DocsCode>{" "}
+                after the label, written straight to the DOM once a second — a
+                long turn costs no React renders.
               </>
             ),
           },
@@ -3193,15 +3314,34 @@ export function Pending({ busy }: { busy: boolean }) {
         description: (
           <>
             <DocsCode>size</DocsCode> scales the box and the dot together, and
-            the wrapper and the dot each carry a slot. The pulse is a CSS
-            animation behind <DocsCode>motion-safe</DocsCode>, so it is already
-            off for readers who asked for less motion — no timer, no frame
-            state; drop it for everyone by overriding the animation.
+            the wrapper and the dot each carry a slot. The pulse and the shine
+            are CSS animations that already stop for readers who asked for
+            less motion — no timer, no frame state.
           </>
         ),
         example: {
           name: "generation-status-styled-example",
           node: <GenerationStatusStyledExample />,
+        },
+      },
+      {
+        title: "The shine, on your own text",
+        description: (
+          <>
+            The label does not spin or pulse: a highlight sweeps across it,
+            stepped so a live row repaints 14 times a second rather than 60,
+            and paused off screen through{" "}
+            <DocsCode>--visible-animation-state</DocsCode>. It is exported —{" "}
+            <DocsCode>shineClassName</DocsCode> plus{" "}
+            <DocsCode>{"<ShineStyles />"}</DocsCode>, which React hoists and
+            dedupes — and tinted with <DocsCode>--lc-shine-base</DocsCode> and{" "}
+            <DocsCode>--lc-shine-peak</DocsCode>. Tool rows, the reasoning
+            trigger and streaming sidebar rows use the same one.
+          </>
+        ),
+        example: {
+          name: "generation-status-shine-example",
+          node: <GenerationStatusShineExample />,
         },
       },
     ],
@@ -3219,6 +3359,84 @@ export function Pending({ busy }: { busy: boolean }) {
       },
     ],
   },
+  "diff-stat": {
+    title: "Diff Stat",
+    description:
+      "Lines added and removed — +42 −7 — inline in a sentence, or aligned in fixed columns down a list of files, with counts that keep to four characters.",
+    registry: "diff-stat",
+    preview: { name: "diff-stat-example", node: <DiffStatExample /> },
+    usage: `import { DiffStat } from "@/components/ui/diff-stat"
+
+export function FileRow({ file }: { file: { path: string; additions: number; deletions: number } }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex-1 truncate">{file.path}</span>
+      <DiffStat layout="aligned" additions={file.additions} deletions={file.deletions} />
+    </div>
+  )
+}`,
+    props: [
+      {
+        caption: "DiffStat",
+        rows: [
+          {
+            name: "additions / deletions",
+            type: "number",
+            default: "0",
+            description:
+              "Lines added and removed. Nothing renders when both are zero.",
+          },
+          {
+            name: "layout",
+            type: '"inline" | "aligned"',
+            default: '"inline"',
+            description: (
+              <>
+                <DocsCode>inline</DocsCode> sits in a sentence and drops a zero
+                side. <DocsCode>aligned</DocsCode> keeps two right-aligned 4ch
+                cells, so every <DocsCode>+</DocsCode> and every{" "}
+                <DocsCode>−</DocsCode> down a list lines up with the one above
+                it — <DocsCode>ChangeSummary</DocsCode> rows use it.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "Helpers",
+        rows: [
+          {
+            name: "formatDiffCount",
+            type: "(value: number) => string",
+            description: (
+              <>
+                <DocsCode>999</DocsCode>, <DocsCode>1.2k</DocsCode>,{" "}
+                <DocsCode>34k</DocsCode>, <DocsCode>1.5m</DocsCode> — what{" "}
+                <DocsCode>FileTree</DocsCode> uses for its row decorations,
+                which are text rather than elements.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: ["diff-stat", "diff-stat-additions", "diff-stat-deletions"],
+    notes: [
+      {
+        title: "Read once",
+        description: (
+          <>
+            The group carries one <DocsCode>aria-label</DocsCode> — “42
+            added, 7 removed” — and hides the two numbers from assistive
+            tech, so a screen reader does not spell out the punctuation.
+            Green and red are the one raw-palette exception: no theme token
+            means “grew”, and both ship a dark variant.
+          </>
+        ),
+      },
+    ],
+  },
+
   "diff-view": {
     title: "Diff View",
     description:
@@ -3580,7 +3798,7 @@ export function Review({ file }: { file: ChangedFile }) {
     description:
       "A directory tree over a flat file list — git status colours, +/- counts, keyboard navigation, type-to-filter and per-node menus, virtualized by @pierre/trees.",
     registry: "file-tree",
-    registryDependencies: ["change-summary"],
+    registryDependencies: ["change-summary", "diff-stat"],
     preview: {
       name: "file-tree-example",
       node: <FileTreeExample />,

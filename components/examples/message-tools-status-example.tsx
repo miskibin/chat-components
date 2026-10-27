@@ -11,11 +11,12 @@ const TOOLS = [
 
 /**
  * Each row stamps `data-status`, so one selector on an ancestor tints failures
- * without the component knowing your palette.
+ * without the component knowing your palette. A running row's label shines;
+ * `--lc-shine-base` tints the sweep the same way.
  */
 export function MessageToolsStatusExample() {
   return (
-    <div className="w-full max-w-2xl [&_[data-slot=message-tool-call][data-status=error]]:bg-destructive/5 [&_[data-slot=message-tool-call][data-status=error]]:text-destructive [&_[data-slot=message-tool-call][data-status=running]]:text-primary">
+    <div className="w-full max-w-2xl [&_[data-slot=message-tool-call][data-status=error]]:bg-destructive/5 [&_[data-slot=message-tool-call][data-status=error]]:text-destructive [&_[data-slot=message-tool-call][data-status=running]]:text-primary [&_[data-slot=message-tool-call][data-status=running]]:[--lc-shine-base:var(--primary)]">
       <MessageToolCalls tools={TOOLS} collapseAt={99} />
     </div>
   )

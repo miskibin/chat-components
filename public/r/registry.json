@@ -73,6 +73,7 @@
       "registryDependencies": [
         "collapsible",
         "miskibin/chat-components/context-menu",
+        "miskibin/chat-components/diff-stat",
         "miskibin/chat-components/file-icon"
       ],
       "files": [
@@ -86,10 +87,46 @@
       "name": "generation-status",
       "type": "registry:ui",
       "title": "Generation Status",
-      "description": "Quiet pulsing-dot status for a run that has not produced its first token yet, with an optional stage label and a render-free elapsed timer.",
+      "description": "Quiet status for a run that has not produced its first token yet: a dot, a shining label (\"Working\" by default) and a render-free \"for 1m 05s\" timer — plus the shine itself, exported for any live label.",
       "files": [
         {
           "path": "components/ui/generation-status.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "diff-stat",
+      "type": "registry:ui",
+      "title": "Diff Stat",
+      "description": "Lines added and removed as +12 −3 with compact counts (1.2k), inline in a sentence or aligned in fixed 4ch columns down a list of files.",
+      "files": [
+        {
+          "path": "components/ui/diff-stat.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "middle-truncate",
+      "type": "registry:ui",
+      "title": "Middle Truncate",
+      "description": "Truncates a path, branch or file name in the middle, keeping the end that tells two apart, with the ellipsis flush against the tail.",
+      "files": [
+        {
+          "path": "components/ui/middle-truncate.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "kbd",
+      "type": "registry:ui",
+      "title": "Kbd",
+      "description": "A key as a quiet tinted square, and a group for chords — for shortcut hints in menus, palettes and tooltips.",
+      "files": [
+        {
+          "path": "components/ui/kbd.tsx",
           "type": "registry:ui"
         }
       ]
@@ -147,12 +184,29 @@
       ]
     },
     {
+      "name": "composer-banner",
+      "type": "registry:ui",
+      "title": "Composer Banner",
+      "description": "Permission requests, questions and notices as drawer sections tucked under a composer's top edge — a dock, variants that tint by two CSS variables, and compound rows of icon, content and actions.",
+      "dependencies": ["lucide-react", "class-variance-authority"],
+      "files": [
+        {
+          "path": "components/ui/composer-banner.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "chat-input",
       "type": "registry:ui",
       "title": "Chat Input",
-      "description": "Responsive composer with 36px mobile touch targets and a wrapping toolbar, attachments, drag-and-drop, $-skills, a slash menu whose provider commands are offered only at the head of a message, @-mentions, a mid-turn message queue, collapsed long pastes, shell-style prompt recall on the arrow keys, and Enter-to-send.",
+      "description": "Responsive composer with 36px mobile touch targets and a toolbar that folds to icons and then into a … menu instead of wrapping, round send/stop buttons, banners docked to its top edge, attachments, drag-and-drop, $-skills, a slash menu whose provider commands are offered only at the head of a message, @-mentions, a mid-turn \"Up next\" message queue, collapsed long pastes, shell-style prompt recall on the arrow keys, and Enter-to-send.",
       "dependencies": ["lucide-react", "class-variance-authority"],
-      "registryDependencies": ["miskibin/chat-components/file-icon"],
+      "registryDependencies": [
+        "dropdown-menu",
+        "miskibin/chat-components/composer-banner",
+        "miskibin/chat-components/file-icon"
+      ],
       "files": [
         {
           "path": "components/ui/chat-input.tsx",
@@ -332,14 +386,16 @@
       "name": "message-parts",
       "type": "registry:ui",
       "title": "Message Parts",
-      "description": "Atomic assistant parts: the \"Worked for 12s\" process group, reasoning, tool calls that headline the program a shell command really ran, a semantic summary above a folded group, ask questions, highlighted code, and artifacts.",
+      "description": "Atomic assistant parts: the \"Worked for 12s\" process group, reasoning, tool calls that headline the program a shell command really ran, a semantic summary above a folded group, live labels that shine instead of spinning, ask questions, highlighted code with a wrap toggle, dividers between turns, and artifacts.",
       "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
       "registryDependencies": [
         "collapsible",
         "miskibin/chat-components/message-markdown",
         "miskibin/chat-components/ask-question",
         "miskibin/chat-components/change-summary",
+        "miskibin/chat-components/diff-stat",
         "miskibin/chat-components/file-icon",
+        "miskibin/chat-components/generation-status",
         "miskibin/chat-components/todo-list",
         "miskibin/chat-components/plan-card",
         "miskibin/chat-components/render-error-boundary"
@@ -420,7 +476,10 @@
       "title": "File Tree",
       "description": "Directory tree over a flat file list: git status colours, +/- counts, keyboard navigation, type-to-filter and per-node menus, virtualized by @pierre/trees, with an optional lazy loader per folder.",
       "dependencies": ["@pierre/trees", "lucide-react", "next-themes"],
-      "registryDependencies": ["miskibin/chat-components/change-summary"],
+      "registryDependencies": [
+        "miskibin/chat-components/change-summary",
+        "miskibin/chat-components/diff-stat"
+      ],
       "files": [
         {
           "path": "components/ui/file-tree.tsx",
@@ -498,7 +557,7 @@
       "name": "sidebar-item",
       "type": "registry:ui",
       "title": "Sidebar Item",
-      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta, folder/branch badge) or fully custom content, hover actions that swap with the meta label, receding background rows, rename, pin, delete, Shift-click range select with bulk pin/delete, status dots, context menu, drag and drag-to-reorder, FLIP row motion and content-visibility.",
+      "description": "Memoized session row plus sortable list: single- or multi-line rows (subtitle, meta, folder/branch badge) or fully custom content, hover actions that swap with the meta label, receding background rows, rename, pin, delete, Shift-click range select with bulk pin/delete, status dots and status labels with a ticking elapsed time, ⌘1–9 jump hints, context menu, drag and drag-to-reorder, FLIP row motion and content-visibility.",
       "dependencies": [
         "lucide-react",
         "@dnd-kit/core",
@@ -508,6 +567,8 @@
       ],
       "registryDependencies": [
         "miskibin/chat-components/context-menu",
+        "miskibin/chat-components/generation-status",
+        "miskibin/chat-components/middle-truncate",
         "miskibin/chat-components/sidebar-dnd"
       ],
       "files": [
@@ -537,7 +598,7 @@
       "name": "chat-sidebar",
       "type": "registry:ui",
       "title": "Chat Sidebar",
-      "description": "Collapsible sidebar chrome with slot-based composition, icon quick actions that pop on click, section headers as rules with a live dot, a resizable width variable, and generic drag-and-drop zones (pin, trash, custom).",
+      "description": "Collapsible sidebar chrome with slot-based composition, icon quick actions that pop on click, section headers as rules with a live dot, jump hints revealed while ⌘ is held, a resizable width variable, and generic drag-and-drop zones (pin, trash, custom).",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/sidebar-item",

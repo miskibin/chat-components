@@ -10,6 +10,10 @@
 @source "../node_modules/@streamdown/math/dist/*.js";
 
 :root {
+  /* Accents are a neutral shade of the surface's own ink (T3 Code's
+     highlight): a hover is a step of the page, never a colour — the hue is
+     left to `primary`. Borders in dark are translucent white for the same
+     reason: they lift with the surface instead of sitting on it as grey. */
   --background: oklch(1.00 0 0);
   --foreground: oklch(0.32 0 0);
   --card: oklch(1.00 0 0);
@@ -22,8 +26,8 @@
   --secondary-foreground: oklch(0.45 0.03 256.80);
   --muted: oklch(0.98 0.00 247.84);
   --muted-foreground: oklch(0.55 0.02 264.36);
-  --accent: oklch(0.95 0.03 236.82);
-  --accent-foreground: oklch(0.38 0.14 265.52);
+  --accent: oklch(0.966 0 0);
+  --accent-foreground: oklch(0.32 0 0);
   --destructive: oklch(0.64 0.21 25.33);
   --destructive-foreground: oklch(1.00 0 0);
   --border: oklch(0.93 0.01 264.53);
@@ -38,8 +42,8 @@
   --sidebar-foreground: oklch(0.32 0 0);
   --sidebar-primary: oklch(0.62 0.19 259.81);
   --sidebar-primary-foreground: oklch(1.00 0 0);
-  --sidebar-accent: oklch(0.95 0.03 236.82);
-  --sidebar-accent-foreground: oklch(0.38 0.14 265.52);
+  --sidebar-accent: oklch(0.9437 0 0);
+  --sidebar-accent-foreground: oklch(0.32 0 0);
   --sidebar-border: oklch(0.93 0.01 264.53);
   --sidebar-ring: oklch(0.62 0.19 259.81);
   --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, -apple-system,
@@ -90,12 +94,12 @@
   --secondary-foreground: oklch(0.92 0 0);
   --muted: oklch(0.27 0 0);
   --muted-foreground: oklch(0.72 0 0);
-  --accent: oklch(0.38 0.14 265.52);
-  --accent-foreground: oklch(0.88 0.06 254.13);
+  --accent: oklch(0.2504 0 0);
+  --accent-foreground: oklch(0.92 0 0);
   --destructive: oklch(0.64 0.21 25.33);
   --destructive-foreground: oklch(1.00 0 0);
-  --border: oklch(0.37 0 0);
-  --input: oklch(0.37 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 13%);
   --ring: oklch(0.62 0.19 259.81);
   --chart-1: oklch(0.71 0.14 254.62);
   --chart-2: oklch(0.62 0.19 259.81);
@@ -106,9 +110,9 @@
   --sidebar-foreground: oklch(0.92 0 0);
   --sidebar-primary: oklch(0.62 0.19 259.81);
   --sidebar-primary-foreground: oklch(1.00 0 0);
-  --sidebar-accent: oklch(0.38 0.14 265.52);
-  --sidebar-accent-foreground: oklch(0.88 0.06 254.13);
-  --sidebar-border: oklch(0.37 0 0);
+  --sidebar-accent: oklch(0.2612 0 0);
+  --sidebar-accent-foreground: oklch(0.92 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.62 0.19 259.81);
   --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif,

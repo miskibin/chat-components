@@ -6,6 +6,7 @@ import { SidebarDropVerbExample } from "@/components/examples/sidebar-drop-verb-
 import { SidebarExample } from "@/components/examples/sidebar-example"
 import { SidebarItemExample } from "@/components/examples/sidebar-item-example"
 import { SidebarItemMenuExample } from "@/components/examples/sidebar-item-menu-example"
+import { SidebarItemStatusLabelExample } from "@/components/examples/sidebar-item-status-label-example"
 import { SidebarItemStatusExample } from "@/components/examples/sidebar-item-status-example"
 import { SidebarMobileExample } from "@/components/examples/sidebar-mobile-example"
 import { SidebarMotionExample } from "@/components/examples/sidebar-motion-example"
@@ -171,6 +172,34 @@ export function Nav() {
             default: "true",
             description:
               "Eases the collapse over 300ms and fades the inactive view so the swap is visible. Pass false to snap — width is a layout property, and the transition reflows everything beside the sidebar.",
+          },
+          {
+            name: "showJumpHints",
+            type: "boolean",
+            default: "false",
+            description: (
+              <>
+                Holding the jump modifier on its own for a moment reveals each
+                row&apos;s <DocsCode>jumpLabel</DocsCode> as a small key over
+                its end. An attribute on the root (
+                <DocsCode>data-jump-hints</DocsCode>) rather than state, so no
+                row re-renders; any other key, the release or the window losing
+                focus hides them again. Off by default — only advertise
+                shortcuts your app binds.
+              </>
+            ),
+          },
+          {
+            name: "jumpHintModifier",
+            type: '"mod" | "alt"',
+            default: '"mod"',
+            description: (
+              <>
+                Which key reveals the hints: <DocsCode>mod</DocsCode> is ⌘ on
+                Apple and Ctrl elsewhere; <DocsCode>alt</DocsCode> is ⌥ / Alt —
+                for a web app, where the browser owns ⌘1…9.
+              </>
+            ),
           },
           {
             name: "classNames",
@@ -464,9 +493,14 @@ export function Nav() {
   "sidebar-item": {
     title: "Sidebar Item",
     description:
-      "The session row and its list: one line or two, rename in place, pin, delete, Shift-click range select with bulk pin/delete, status dots, a context menu, drag-to-reorder, and a full render escape hatch.",
+      "The session row and its list: one line or two, rename in place, pin, delete, Shift-click range select with bulk pin/delete, status dots and labels, jump hints, a context menu, drag-to-reorder, and a full render escape hatch.",
     registry: "sidebar-item",
-    registryDependencies: ["context-menu", "sidebar-dnd"],
+    registryDependencies: [
+      "context-menu",
+      "generation-status",
+      "middle-truncate",
+      "sidebar-dnd",
+    ],
     preview: { name: "sidebar-item-example", node: <SidebarItemExample /> },
     usage: `"use client"
 
@@ -719,6 +753,17 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
             description:
               "Dims the row until it is hovered, active or selected. Background work should not compete with things awaiting you: a row that is merely busy recedes, a row that needs an answer does not.",
           },
+          {
+            name: "jumpLabel",
+            type: "string",
+            description: (
+              <>
+                The shortcut that opens this row — <DocsCode>⌘1</DocsCode>.
+                Shown while the user holds the modifier, with{" "}
+                <DocsCode>ChatSidebar showJumpHints</DocsCode>.
+              </>
+            ),
+          },
         ],
       },
       {
@@ -748,6 +793,20 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
               "The dot on its own, for legends or custom leading nodes.",
           },
           {
+            name: "SidebarItemStatusLabel",
+            type: "{ status, label, startedAt?, className? }",
+            description: (
+              <>
+                The state in words, for the <DocsCode>meta</DocsCode> slot —
+                “Working”, “Awaiting input”, “Failed” — tinted like the dot,
+                shining while <DocsCode>streaming</DocsCode>, and with{" "}
+                <DocsCode>startedAt</DocsCode> a ticking{" "}
+                <DocsCode>· 1m 05s</DocsCode> written straight to the DOM, so a
+                sidebar of running chats costs no renders for its clocks.
+              </>
+            ),
+          },
+          {
             name: "SidebarItemBadge",
             type: "{ folder?, branch?, fullPath?, className? }",
             description: (
@@ -755,8 +814,9 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
                 Muted 11px folder + branch line for the{" "}
                 <DocsCode>subtitle</DocsCode> slot — a Folder glyph with the
                 path&apos;s last segment (<DocsCode>fullPath</DocsCode> keeps
-                all of it) and a GitBranch glyph with the branch, both
-                truncating. Purely presentational: it reads nothing and derives
+                all of it) and a GitBranch glyph with the branch, which
+                truncates in the middle (<DocsCode>MiddleTruncate</DocsCode>) so
+                the end that tells two branches apart stays. Purely presentational: it reads nothing and derives
                 nothing, so pass what your app already knows and omit the half
                 you do not have.
               </>
@@ -809,6 +869,9 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
       "sidebar-item-meta",
       "sidebar-item-badge",
       "sidebar-item-status",
+      "sidebar-item-status-label",
+      "sidebar-item-status-elapsed",
+      "sidebar-item-jump",
       "sidebar-item-actions",
       "sidebar-item-drop-verb",
       "sidebar-item-list",
@@ -862,6 +925,23 @@ export function Chats({ items }: { items: ChatSidebarItemData[] }) {
         example: {
           name: "sidebar-item-status-example",
           node: <SidebarItemStatusExample />,
+        },
+      },
+      {
+        title: "Say what it is doing, and for how long",
+        description: (
+          <>
+            The dot says that something is happening;{" "}
+            <DocsCode>SidebarItemStatusLabel</DocsCode> in the{" "}
+            <DocsCode>meta</DocsCode> slot says what, and with{" "}
+            <DocsCode>startedAt</DocsCode> for how long. The rows here also
+            carry a <DocsCode>jumpLabel</DocsCode>: hold ⌘ (Ctrl off Apple) for
+            a moment and each shows its shortcut.
+          </>
+        ),
+        example: {
+          name: "sidebar-item-status-label-example",
+          node: <SidebarItemStatusLabelExample />,
         },
       },
       {

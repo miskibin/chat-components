@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
 /**
- * `chatInputButtonVariants` is the same recipe the built-in attach and send
- * buttons use, so a custom control lines up with the toolbar automatically.
+ * `chatInputButtonVariants` is the same recipe the built-in attach button and
+ * the pickers use, so a custom control lines up with the toolbar automatically.
+ * Its label is marked `data-composer-label`, so a cramped row keeps the icon.
  */
 export function ChatInputCustomButtonExample() {
   const [search, setSearch] = useState(false)
@@ -30,7 +31,7 @@ export function ChatInputCustomButtonExample() {
             )}
           >
             <Globe />
-            <span>Search</span>
+            <span data-composer-label>Search</span>
           </button>
         }
         onSend={({ text }) =>
