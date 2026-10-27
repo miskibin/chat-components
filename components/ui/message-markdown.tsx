@@ -600,9 +600,58 @@ const PACE_FROM_START_CHARS = 120
  * as it is. `settling` stays true while what arrived before the stream ended
  * is still being drawn.
  */
+/**
+ * How much of each streamed text has already been on screen, by its opening
+ * characters. A streaming answer is remounted when the list regroups it — the
+ * text before a tool call moves under the "worked for" disclosure the moment
+ * that call arrives — and a fresh instance would otherwise start from nothing:
+ * reveal the text again and fade every word in again, so the paragraph the
+ * reader was on blinked out and back. Module state, because the instance that
+ * knew is gone; bounded, because it only has to bridge a remount.
+ */
+const revealedTexts = new Map<string, number>()
+const REVEAL_KEY_CHARS = 64
+const MIN_REVEAL_KEY_CHARS = 20
+const MAX_REVEALED_TEXTS = 300
+
+function rememberRevealed(text: string, length: number) {
+  if (length <= 0) return
+  const key = text.slice(0, Math.min(REVEAL_KEY_CHARS, length))
+  if ((revealedTexts.get(key) ?? 0) >= length) return
+  revealedTexts.delete(key)
+  revealedTexts.set(key, length)
+  if (revealedTexts.size > MAX_REVEALED_TEXTS) {
+    revealedTexts.delete(revealedTexts.keys().next().value as string)
+  }
+}
+
+/**
+ * How much of `text` an earlier instance already showed, or 0. A short key
+ * only matches exactly: "I'll check" opens too many answers to be evidence.
+ */
+function recallRevealed(text: string) {
+  let best = 0
+  for (const [key, length] of revealedTexts) {
+    if (length <= best) continue
+    const matches =
+      key.length >= MIN_REVEAL_KEY_CHARS ? text.startsWith(key) : text === key
+    if (matches) best = Math.min(length, text.length)
+  }
+  return best
+}
+
 function usePacedText(text: string, streaming: boolean, enabled: boolean) {
+  // Decided once, at mount: text this component has seen before (in an
+  // earlier instance) continues from where it was and does not fade again.
+  const [restored] = React.useState(() =>
+    enabled && streaming ? recallRevealed(text) : 0
+  )
   const [shown, setShown] = React.useState(() =>
-    enabled && streaming && text.length <= PACE_FROM_START_CHARS ? 0 : text.length
+    restored > 0
+      ? restored
+      : enabled && streaming && text.length <= PACE_FROM_START_CHARS
+        ? 0
+        : text.length
   )
   const [source, setSource] = React.useState(text)
   let length = shown
@@ -619,6 +668,10 @@ function usePacedText(text: string, streaming: boolean, enabled: boolean) {
     length = text.length
     setShown(length)
   }
+
+  React.useEffect(() => {
+    if (enabled) rememberRevealed(text, length)
+  }, [enabled, length, text])
 
   const behind = enabled && length < text.length
   /**
@@ -650,6 +703,7 @@ function usePacedText(text: string, streaming: boolean, enabled: boolean) {
   return {
     text: length >= text.length ? text : text.slice(0, length),
     settling: behind,
+    restored: restored > 0,
   }
 }
 
@@ -671,7 +725,11 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
   onViewAction,
 }: MessageMarkdownProps) {
   const paced = streaming === "paced"
-  const { text: visibleText, settling } = usePacedText(
+  const {
+    text: visibleText,
+    settling,
+    restored,
+  } = usePacedText(
     children,
     isAnimating,
     paced
@@ -831,7 +889,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
             shikiTheme={shikiTheme}
             mermaid={mermaidConfig}
             isAnimating={live}
-            animated={paced ? SENTENCE_FADE : undefined}
+            animated={paced && !restored ? SENTENCE_FADE : undefined}
             caret={caret}
             linkSafety={linkSafety}
             parseIncompleteMarkdown
