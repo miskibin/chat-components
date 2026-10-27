@@ -185,6 +185,8 @@ export function ModelPicker({
           {currentEffort ? (
             <span
               data-slot="model-picker-trigger-effort"
+              // A cramped composer row keeps the model and drops the effort.
+              data-composer-label
               className="shrink-0 opacity-60"
             >
               {currentEffort.label}

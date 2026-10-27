@@ -13,6 +13,9 @@ import { ChatInputHistoryExample } from "@/components/examples/chat-input-histor
 import { ChatInputMentionsExample } from "@/components/examples/chat-input-mentions-example"
 import { ChatInputPasteExample } from "@/components/examples/chat-input-paste-example"
 import { ChatInputQueueExample } from "@/components/examples/chat-input-queue-example"
+import { ChatInputBannersExample } from "@/components/examples/chat-input-banners-example"
+import { ComposerBannerExample } from "@/components/examples/composer-banner-example"
+import { ChatInputFoldingExample } from "@/components/examples/chat-input-folding-example"
 import { ChatInputSkillsExample } from "@/components/examples/chat-input-skills-example"
 import { ChatNavbarExample } from "@/components/examples/chat-navbar-example"
 import { ChatNavbarStyledExample } from "@/components/examples/chat-navbar-styled-example"
@@ -229,12 +232,228 @@ export default function Page() {
     ],
   },
 
+  "composer-banner": {
+    title: "Composer Banner",
+    description:
+      "Permission requests, questions and notices as drawer sections tucked under the composer's top edge — rows of icon, content and actions, tinted by variant.",
+    registry: "composer-banner",
+    preview: {
+      name: "composer-banner-example",
+      node: <ComposerBannerExample />,
+      align: "stretch" as const,
+    },
+    usage: `"use client"
+
+import { ShieldAlert } from "lucide-react"
+
+import { ChatInput } from "@/components/ui/chat-input"
+import {
+  ComposerBanner,
+  ComposerBannerAction,
+  ComposerBannerActions,
+  ComposerBannerContent,
+  ComposerBannerIcon,
+  ComposerBannerRow,
+  ComposerBannerTitle,
+} from "@/components/ui/composer-banner"
+
+export function Composer({ request }: { request?: { title: string } }) {
+  return (
+    <ChatInput
+      onSend={send}
+      banners={
+        request ? (
+          <ComposerBanner variant="warning" aria-label="Permission requested">
+            <ComposerBannerRow>
+              <ComposerBannerIcon>
+                <ShieldAlert />
+              </ComposerBannerIcon>
+              <ComposerBannerContent>
+                <ComposerBannerTitle>{request.title}</ComposerBannerTitle>
+              </ComposerBannerContent>
+              <ComposerBannerActions>
+                <ComposerBannerAction onClick={deny}>Deny</ComposerBannerAction>
+                <ComposerBannerAction variant="primary" onClick={allow}>
+                  Allow
+                </ComposerBannerAction>
+              </ComposerBannerActions>
+            </ComposerBannerRow>
+          </ComposerBanner>
+        ) : null
+      }
+    />
+  )
+}`,
+    props: [
+      {
+        caption: "ComposerDock",
+        rows: [
+          {
+            name: "children",
+            type: "React.ReactNode",
+            description: (
+              <>
+                The banners, stacked. Each tucks its bottom rem under whatever
+                follows it, so the surface below needs{" "}
+                <DocsCode>relative z-10</DocsCode> and an opaque background.{" "}
+                <DocsCode>ChatInput</DocsCode>&apos;s <DocsCode>banners</DocsCode>{" "}
+                prop renders the dock for you. Hidden while empty.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "ComposerBanner",
+        rows: [
+          {
+            name: "variant",
+            type: '"default" | "info" | "warning" | "error"',
+            default: '"default"',
+            description: (
+              <>
+                Moves two variables and nothing else — the outline (
+                <DocsCode>--banner-outline</DocsCode>) and a tint over the
+                opaque surface (<DocsCode>--banner-tint</DocsCode>) — and
+                recolors the row icons. Set either variable yourself for a
+                variant of your own.
+              </>
+            ),
+          },
+          {
+            name: "role / aria-label",
+            type: "string",
+            description: (
+              <>
+                Yours to set: <DocsCode>role=&quot;alert&quot;</DocsCode> for a
+                failure nobody asked about, an{" "}
+                <DocsCode>aria-label</DocsCode> when the banner asks something.
+              </>
+            ),
+          },
+        ],
+      },
+      {
+        caption: "Parts",
+        rows: [
+          {
+            name: "ComposerBannerRow",
+            type: "div",
+            description:
+              "icon · content · actions on one line, at least 28px tall. A row without an icon starts its content flush.",
+          },
+          {
+            name: "ComposerBannerIcon",
+            type: "span",
+            description: "A fixed 28px column for a 14px glyph, tinted by the banner's variant.",
+          },
+          {
+            name: "ComposerBannerContent / Title / Description",
+            type: "div / span / span",
+            description:
+              "The line itself: a medium-weight title and a muted description that truncates first.",
+          },
+          {
+            name: "ComposerBannerCount",
+            type: "span",
+            description: "“1/3” — which of several waiting requests this is.",
+          },
+          {
+            name: "ComposerBannerActions",
+            type: "div",
+            description: "The trailing cluster of actions.",
+          },
+          {
+            name: "ComposerBannerAction",
+            type: "button",
+            description: (
+              <>
+                24px action with <DocsCode>variant</DocsCode>{" "}
+                <DocsCode>ghost · outline · primary</DocsCode>;{" "}
+                <DocsCode>composerBannerActionVariants</DocsCode> is exported
+                for a link or a menu trigger.
+              </>
+            ),
+          },
+          {
+            name: "ComposerBannerDismiss",
+            type: "button",
+            description: (
+              <>
+                A ghost X. Its <DocsCode>aria-label</DocsCode> defaults to
+                &ldquo;Dismiss&rdquo;.
+              </>
+            ),
+          },
+          {
+            name: "ComposerBannerBody",
+            type: "div",
+            description: (
+              <>
+                What does not fit on a row — a command to approve, a form.
+                Capped at <DocsCode>min(24rem, 40dvh)</DocsCode> and scrolling
+                inside the drawer; <DocsCode>inset</DocsCode> indents it to the
+                content column when the rows above carry icons.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "composer-dock",
+      "composer-banner",
+      "composer-banner-row",
+      "composer-banner-icon",
+      "composer-banner-content",
+      "composer-banner-title",
+      "composer-banner-description",
+      "composer-banner-count",
+      "composer-banner-actions",
+      "composer-banner-action",
+      "composer-banner-dismiss",
+      "composer-banner-body",
+    ],
+    examples: [
+      {
+        title: "Docked to ChatInput",
+        description: (
+          <>
+            Pass the banners to <DocsCode>ChatInput</DocsCode>&apos;s{" "}
+            <DocsCode>banners</DocsCode> prop. Two banners read as one drawer
+            with sections: the lower one drops its top corners and border and
+            continues the one above it. Answer the request or dismiss the
+            notice to watch the drawer close.
+          </>
+        ),
+        example: {
+          name: "chat-input-banners-example",
+          node: <ChatInputBannersExample />,
+          align: "stretch" as const,
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Why under, not above",
+        description: (
+          <>
+            A card floating over the composer reads as one more thing in the
+            transcript. Tucked under the composer&apos;s edge and a little
+            narrower than it, the same card reads as part of the composer — the
+            question it is asking is about what you send next.
+          </>
+        ),
+      },
+    ],
+  },
+
   "chat-input": {
     title: "Chat Input",
     description:
-      "Composer with auto-growing textarea, attachments (button, paste, drag-and-drop), $-skills and a slash menu for commands, @-mentions, a queue for messages typed mid-turn, and Enter-to-send.",
+      "Composer with auto-growing textarea, attachments (button, paste, drag-and-drop), $-skills and a slash menu for commands, @-mentions, an \"Up next\" queue for messages typed mid-turn, banners docked to its top edge, a toolbar that folds instead of wrapping, and Enter-to-send.",
     registry: "chat-input",
-    registryDependencies: ["file-icon"],
+    registryDependencies: ["dropdown-menu", "composer-banner", "file-icon"],
     preview: { name: "chat-input-example", node: <ChatInputExample /> },
     usage: `"use client"
 
@@ -295,8 +514,15 @@ export function Composer() {
             name: "isGenerating",
             type: "boolean",
             default: "false",
-            description:
-              "Swaps send for stop and disables the textarea while a response streams.",
+            description: (
+              <>
+                Swaps send for a round stop button and disables the textarea
+                while a response streams. With <DocsCode>onQueue</DocsCode> both
+                stay: stop goes quiet, and send turns into a queue button (its{" "}
+                <DocsCode>data-action</DocsCode> reads{" "}
+                <DocsCode>queue</DocsCode>).
+              </>
+            ),
           },
           {
             name: "placeholder",
@@ -398,8 +624,45 @@ export function Composer() {
           {
             name: "tools",
             type: "React.ReactNode",
-            description:
-              "Rendered in the toolbar next to the attach button — model and mode pickers belong here.",
+            description: (
+              <>
+                Rendered in the toolbar next to the attach button — model and
+                mode pickers belong here. When the row runs out of room it folds
+                rather than wrapping: first every element marked{" "}
+                <DocsCode>data-composer-label</DocsCode> is hidden (the pickers
+                mark theirs), then — given <DocsCode>toolsMenu</DocsCode> —
+                every element marked <DocsCode>data-composer-overflow</DocsCode>.
+                The step in force is written to{" "}
+                <DocsCode>data-fit</DocsCode> on{" "}
+                <DocsCode>chat-input-tools</DocsCode> (
+                <DocsCode>full · compact · overflow · wrap</DocsCode>), measured
+                on resize and when <DocsCode>tools</DocsCode> changes — never on
+                a keystroke.
+              </>
+            ),
+          },
+          {
+            name: "toolsMenu",
+            type: "React.ReactNode",
+            description: (
+              <>
+                What the &ldquo;…&rdquo; button opens once the overflow controls
+                are hidden — <DocsCode>DropdownMenu</DocsCode> items, usually a
+                radio group per hidden control. Without it a row that still does
+                not fit wraps onto a second line.
+              </>
+            ),
+          },
+          {
+            name: "banners",
+            type: "React.ReactNode",
+            description: (
+              <>
+                <DocsCode>ComposerBanner</DocsCode>s docked to the composer&apos;s
+                top edge — a permission request, a question, a notice. They tuck
+                under the surface and stack as one drawer.
+              </>
+            ),
           },
           {
             name: "skills",
@@ -535,6 +798,8 @@ export function Composer() {
       "chat-input-surface",
       "chat-input-textarea",
       "chat-input-toolbar",
+      "chat-input-tools",
+      "chat-input-tools-menu",
       "chat-input-send",
       "chat-input-stop",
       "chat-input-chips",
@@ -570,9 +835,9 @@ export function Composer() {
         title: "Stop a streaming answer",
         description: (
           <>
-            <DocsCode>isGenerating</DocsCode> swaps send for stop and locks the
-            textarea; <DocsCode>onStop</DocsCode> is where you abort the
-            request. Send something below, then hit stop.
+            <DocsCode>isGenerating</DocsCode> swaps the round send button for a
+            round stop and locks the textarea; <DocsCode>onStop</DocsCode> is
+            where you abort the request. Send something below, then hit stop.
           </>
         ),
         example: {
@@ -585,9 +850,11 @@ export function Composer() {
         description: (
           <>
             With <DocsCode>onQueue</DocsCode> the textarea stays live during a
-            turn: Enter queues the message, the list above the surface shows
-            what is waiting, and the host sends the next entry when the turn
-            settles. Click a queued row to edit it.
+            turn: Enter queues the message and the send button becomes a queue
+            button. What is waiting sits above the surface as &ldquo;Up
+            next&rdquo; — right-aligned, dashed bubbles shaped like the
+            messages they will become — and the host sends the next entry when
+            the turn settles. Click a queued bubble to edit it.
           </>
         ),
         example: {
@@ -668,8 +935,8 @@ export function Composer() {
         description: (
           <>
             The <DocsCode>tools</DocsCode> slot sits next to the attach button.
-            On narrow screens its controls use 36px touch targets and wrap
-            before the send action, which stays reachable. Pass{" "}
+            On narrow screens its controls use 36px touch targets, and the send
+            action always stays reachable. Pass{" "}
             <DocsCode>side=&quot;top&quot;</DocsCode> so the menus open away from
             the composer.
           </>
@@ -680,12 +947,48 @@ export function Composer() {
         },
       },
       {
+        title: "A toolbar that folds instead of wrapping",
+        description: (
+          <>
+            Narrow the composer below. The mode picker&apos;s name goes first
+            and its icon stays; then the access control — marked{" "}
+            <DocsCode>data-composer-overflow</DocsCode> — leaves the row and
+            comes back as a radio group in the &ldquo;…&rdquo; menu, which is
+            the <DocsCode>toolsMenu</DocsCode> you pass. Mark your own
+            controls&apos; words with <DocsCode>data-composer-label</DocsCode>{" "}
+            to take part in the first step.
+          </>
+        ),
+        example: {
+          name: "chat-input-folding-example",
+          node: <ChatInputFoldingExample />,
+          align: "stretch" as const,
+        },
+      },
+      {
+        title: "Banners docked to the composer",
+        description: (
+          <>
+            <DocsCode>banners</DocsCode> takes{" "}
+            <DocsCode>ComposerBanner</DocsCode>s and docks them to the top edge:
+            each one is a little narrower than the composer and tucks a rem
+            under it, so a notice and a permission request read as one drawer
+            pulled out of the composer rather than cards floating above it.
+          </>
+        ),
+        example: {
+          name: "chat-input-banners-example",
+          node: <ChatInputBannersExample />,
+          align: "stretch" as const,
+        },
+      },
+      {
         title: "Custom composer buttons",
         description: (
           <>
             <DocsCode>chatInputButtonVariants</DocsCode> is exported so your own
             controls inherit the exact height, radius, and focus ring of the
-            built-in attach and send buttons.
+            built-in attach button and the pickers beside it.
           </>
         ),
         example: {
@@ -854,7 +1157,7 @@ export function Plan({ toolInput }: { toolInput?: string }) {
         example: {
           name: "todo-list-composer-example",
           node: <TodoListComposerExample />,
-          align: "stretch",
+          align: "stretch" as const,
         },
       },
       {
@@ -872,7 +1175,7 @@ export function Plan({ toolInput }: { toolInput?: string }) {
         example: {
           name: "todo-list-settled-example",
           node: <TodoListSettledExample />,
-          align: "stretch",
+          align: "stretch" as const,
         },
       },
       {
@@ -1103,7 +1406,7 @@ export function Header({ title }: { title: string }) {
     preview: {
       name: "resizable-example",
       node: <ResizableExample />,
-      align: "stretch",
+      align: "stretch" as const,
     },
     usage: `"use client"
 

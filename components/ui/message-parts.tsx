@@ -6,11 +6,11 @@ import {
   Check,
   ChevronDown,
   Copy,
+  WrapText,
   FilePenLine,
   FileText,
   Globe,
   ListChecks,
-  Loader2,
   Search,
   Table2,
   Terminal,
@@ -55,7 +55,12 @@ import {
   formatWorkedFor,
   type FileActionItem,
 } from "@/components/ui/change-summary"
-import { FileIcon } from "@/components/ui/file-icon"
+import { DiffStat, type DiffStatProps } from "@/components/ui/diff-stat"
+import { FileIcon, fileIconId } from "@/components/ui/file-icon"
+import {
+  ShineStyles,
+  shineClassName,
+} from "@/components/ui/generation-status"
 import { RenderErrorBoundary } from "@/components/ui/render-error-boundary"
 import { commandProgramName } from "@/lib/command-label"
 import { fnv1a32, LRUCache } from "@/lib/lru-cache"
@@ -96,6 +101,28 @@ export type MessageAttachmentData = {
 /** Shared look for the quiet, text-only disclosure rows. */
 const disclosureTrigger =
   "inline-flex max-w-full items-center gap-1.5 rounded-sm py-0.5 text-left text-[13px] leading-snug text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+
+// Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.
+/**
+ * The leading glyph of a disclosure row, in a column of its own. Every label
+ * in a turn — thinking, a tool, a folded group — then starts at the same x
+ * whatever icon precedes it, which is what lets a stack of rows read as one
+ * list rather than a ragged edge. The body below a row is indented to the same
+ * column (`disclosureBody`).
+ */
+function DisclosureIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      data-slot="disclosure-icon"
+      className="inline-flex w-4 shrink-0 items-center justify-center [&_svg:not([class*='size-'])]:size-3.5"
+    >
+      {children}
+    </span>
+  )
+}
+
+/** Hangs a row's body off its icon column: the rule under the glyph, the text under the label. */
+const disclosureBody = "ml-[7px] border-l border-border/70 pl-3.5"
 
 /** "Thought for 1 second", "Thought for 12 seconds", "Thought for 2m 5s". */
 export function formatThoughtDuration(seconds: number) {
@@ -182,8 +209,15 @@ export const MessageReasoning = React.memo(function MessageReasoning({
           data-slot="message-reasoning-trigger"
           className={disclosureTrigger}
         >
-          <Brain className="size-3.5 opacity-70" />
-          <span className="min-w-0 truncate">{label}</span>
+          <DisclosureIcon>
+            <Brain className="opacity-70" />
+          </DisclosureIcon>
+          {streaming ? <ShineStyles /> : null}
+          <span
+            className={cn("min-w-0 truncate", streaming && shineClassName)}
+          >
+            {label}
+          </span>
           <ChevronDown
             className={cn(
               "size-3.5 opacity-50 transition-transform duration-150",
@@ -199,7 +233,10 @@ export const MessageReasoning = React.memo(function MessageReasoning({
         <div
           ref={bodyRef}
           data-slot="message-reasoning-content"
-          className="mt-2 max-h-80 overflow-y-auto overscroll-contain border-l pl-3 text-[13px] leading-relaxed opacity-60"
+          className={cn(
+            "mt-2 max-h-80 overflow-y-auto overscroll-contain text-[13px] leading-relaxed opacity-60",
+            disclosureBody
+          )}
         >
           <MessageMarkdown className="text-inherit! text-[13px]! leading-relaxed!">
             {children}
@@ -938,29 +975,18 @@ function formatDiffStats(lines: ToolDiffLine[]) {
 export function DiffStats({
   added,
   removed,
-  className,
   ...props
-}: React.ComponentProps<"span"> & {
+}: Omit<DiffStatProps, "additions" | "deletions"> & {
   added: number
   removed: number
 }) {
-  if (added === 0 && removed === 0) return null
   return (
-    <span
+    <DiffStat
       data-slot="message-tool-stats"
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 font-mono text-[12px] tabular-nums",
-        className
-      )}
+      additions={added}
+      deletions={removed}
       {...props}
-    >
-      {added > 0 ? (
-        <span className="text-emerald-600 dark:text-emerald-400">+{added}</span>
-      ) : null}
-      {removed > 0 ? (
-        <span className="text-red-500 dark:text-red-400">-{removed}</span>
-      ) : null}
-    </span>
+    />
   )
 }
 
@@ -1790,15 +1816,25 @@ export const MessageToolCall = React.memo(function MessageToolCall({
   const iconPath =
     path && headline.detail === fileName(path) ? path : undefined
 
+  const ActionIcon = TOOL_GROUP_ICONS[toolGroupAction(displayTool)]
+
+  /* No spinner: the label itself shines while the call runs, and the icon
+     keeps saying *what* is running. A file row's glyph is the file's own. */
   const headlineContent = (
     <>
-      {running ? (
-        <Loader2 className="size-3 animate-spin opacity-70" />
-      ) : errored ? (
-        <TriangleAlert className="size-3 text-destructive" />
-      ) : null}
-      <span className="shrink-0">{headline.label}</span>
-      {iconPath ? <FileIcon path={iconPath} size={14} /> : null}
+      <DisclosureIcon>
+        {errored ? (
+          <TriangleAlert className="text-destructive" />
+        ) : iconPath ? (
+          <FileIcon path={iconPath} size={14} />
+        ) : (
+          <ActionIcon className="opacity-70" />
+        )}
+      </DisclosureIcon>
+      {running ? <ShineStyles /> : null}
+      <span className={cn("shrink-0", running && shineClassName)}>
+        {headline.label}
+      </span>
       {headline.detail ? (
         <span
           className={cn(
@@ -1902,7 +1938,7 @@ export const MessageToolCall = React.memo(function MessageToolCall({
         <CollapsibleContent>
           <div
             data-slot="message-tool-call-body"
-            className="mb-1.5 ml-0.5 space-y-1.5 border-l border-border/70 pl-3"
+            className={cn("mb-1.5 space-y-1.5", disclosureBody)}
           >
             {showAskSummary && ask && resolvedAsk ? (
               <AskQuestionSummary
@@ -2220,7 +2256,9 @@ export function MessageToolCalls({
           data-kind={summaryKind}
           className={cn(disclosureTrigger, "w-full")}
         >
-          <SummaryIcon className="size-3.5 opacity-70" />
+          <DisclosureIcon>
+            <SummaryIcon className="opacity-70" />
+          </DisclosureIcon>
           <span className="min-w-0 truncate">{summary}</span>
           <ChevronDown
             className={cn(
@@ -2314,12 +2352,40 @@ export function MessageProcess({
   )
 }
 
+/** Fence names that are not also the file extension the icon set keys on. */
+const LANGUAGE_EXTENSIONS: Record<string, string> = {
+  typescript: "ts",
+  javascript: "js",
+  python: "py",
+  rust: "rs",
+  golang: "go",
+  bash: "sh",
+  shell: "sh",
+  shellscript: "sh",
+  zsh: "sh",
+  console: "sh",
+  markdown: "md",
+  "c++": "cpp",
+  dockerfile: "dockerfile",
+}
+
+/**
+ * A file name whose icon stands for a fence's language — or undefined where
+ * the icon set has nothing more specific than a blank page, in which case the
+ * header says the language in words instead.
+ */
+function languageIconPath(language: string): string | undefined {
+  const ext = LANGUAGE_EXTENSIONS[language] ?? language
+  const path = ext === "dockerfile" ? ext : `code.${ext}`
+  return fileIconId(path) === "document" ? undefined : path
+}
+
 /** What a block that could not be drawn falls back to: the text, unstyled. */
 function CodeFallback({ code }: { code: string }) {
   return (
     <pre
       data-slot="message-code-fallback"
-      className="m-0 overflow-x-auto bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-foreground"
+      className="m-0 overflow-x-auto px-3 pt-1.5 pb-3 font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap text-foreground"
     >
       <code>{code}</code>
     </pre>
@@ -2330,11 +2396,14 @@ function HighlightedCode({
   code,
   language,
   streaming = false,
+  wrap = false,
 }: {
   code: string
   language?: string
   /** The fence is still growing — highlight it, but do not cache the result. */
   streaming?: boolean
+  /** Soft-wrap long lines instead of scrolling them sideways. */
+  wrap?: boolean
 }) {
   const { resolvedTheme } = useTheme()
   const lang = normalizeLang(language)
@@ -2364,7 +2433,12 @@ function HighlightedCode({
 
   if (!html) {
     return (
-      <pre className="m-0 overflow-x-auto bg-muted px-3.5 py-3 font-mono text-[12.5px] leading-[1.55] text-foreground">
+      <pre
+        className={cn(
+          "m-0 overflow-x-auto px-3 pt-1.5 pb-3 font-mono text-[12.5px] leading-[1.55] text-foreground",
+          wrap && "break-words whitespace-pre-wrap"
+        )}
+      >
         <code>{code}</code>
       </pre>
     )
@@ -2372,7 +2446,10 @@ function HighlightedCode({
 
   return (
     <div
-      className="lc-code-shiki overflow-x-auto bg-muted text-[12.5px] leading-[1.55] [&_code]:font-mono [&_pre]:m-0 [&_pre]:px-3.5 [&_pre]:py-3 [&_pre]:!bg-transparent"
+      className={cn(
+        "lc-code-shiki overflow-x-auto text-[12.5px] leading-[1.55] [&_code]:font-mono [&_pre]:m-0 [&_pre]:px-3 [&_pre]:pt-1.5 [&_pre]:pb-3 [&_pre]:!bg-transparent",
+        wrap && "[&_pre]:break-words [&_pre]:whitespace-pre-wrap"
+      )}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
@@ -2394,6 +2471,7 @@ export const MessageCode = React.memo(function MessageCode({
   streaming?: boolean
 }) {
   const [copied, setCopied] = React.useState(false)
+  const [wrap, setWrap] = React.useState(false)
 
   /* "Copied" waits for the write to land: `navigator.clipboard` is undefined
      outside a secure context, and a write can still be refused. */
@@ -2427,28 +2505,45 @@ export const MessageCode = React.memo(function MessageCode({
     )
   }
 
+  // Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.
+  /* No bar across the top: the header is a quiet line inside the frame — the
+     file it is, or the language's own icon, and two ghost buttons — so the
+     code is the thing the block is made of. */
+  const iconPath = block.title ?? languageIconPath(langLabel)
+
   return (
     <div
       data-slot="message-code"
+      data-wrap={wrap || undefined}
       className={cn(
-        "my-3 overflow-hidden rounded-lg border bg-muted animate-in fade-in duration-150",
+        "my-3 overflow-hidden rounded-lg border border-border/70 bg-muted animate-in fade-in duration-150 dark:border-transparent",
         className
       )}
     >
       <div
         data-slot="message-code-header"
-        className="flex h-8 items-center gap-2 border-b px-2.5"
+        className="flex items-center gap-2 pt-1.5 pr-1.5 pl-3 select-none"
       >
-        <span className="rounded-sm border px-1.5 py-0.5 font-mono text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-          {langLabel}
+        <span
+          data-slot="message-code-title"
+          className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-[11px] text-muted-foreground"
+          title={block.title ? langLabel : undefined}
+        >
+          {iconPath ? <FileIcon path={iconPath} size={14} /> : null}
+          <span className="truncate">{block.title ?? langLabel}</span>
         </span>
-        {block.title ? (
-          <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground">
-            {block.title}
-          </span>
-        ) : (
-          <span className="flex-1" />
-        )}
+        <button
+          type="button"
+          data-slot="message-code-wrap"
+          data-state={wrap ? "on" : "off"}
+          aria-pressed={wrap}
+          onClick={() => setWrap((value) => !value)}
+          title={wrap ? "Don’t wrap lines" : "Wrap lines"}
+          aria-label={wrap ? "Don’t wrap lines" : "Wrap lines"}
+          className={codeHeaderButton}
+        >
+          <WrapText />
+        </button>
         <button
           type="button"
           data-slot="message-code-copy"
@@ -2456,7 +2551,7 @@ export const MessageCode = React.memo(function MessageCode({
           onClick={copy}
           title={copied ? "Copied" : "Copy"}
           aria-label={copied ? "Copied" : "Copy code"}
-          className="inline-grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-background hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:size-3.5"
+          className={codeHeaderButton}
         >
           {copied ? <Check /> : <Copy />}
         </button>
@@ -2469,11 +2564,103 @@ export const MessageCode = React.memo(function MessageCode({
           code={block.code}
           language={block.language}
           streaming={streaming}
+          wrap={wrap}
         />
       </RenderErrorBoundary>
     </div>
   )
 })
+
+const codeHeaderButton =
+  "inline-grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=on]:text-foreground [&_svg]:pointer-events-none [&_svg]:size-3.5"
+
+// Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.
+export type MessageDividerProps = Omit<
+  React.ComponentProps<"div">,
+  "children"
+> & {
+  /** What happened between the turns — "Context compacted", "Switched to Opus". */
+  label: React.ReactNode
+  /** A muted second half after a dot — a model name, a token count, a time. */
+  detail?: React.ReactNode
+  icon?: React.ReactNode
+  /** `danger` for something that went wrong *between* turns — a crash, a lost session. */
+  tone?: "neutral" | "danger"
+  /** Makes the pill a button — "Restore", "Show what changed". */
+  onAction?: () => void
+  /** The action's accessible name and tooltip; the label alone is not one. */
+  actionLabel?: string
+}
+
+/**
+ * A line across the transcript with a pill in the middle: something the app
+ * did between two turns rather than a message anyone wrote. Not memoized —
+ * it is a few spans, and a host renders one between rows it already memoizes.
+ */
+export function MessageDivider({
+  label,
+  detail,
+  icon,
+  tone = "neutral",
+  onAction,
+  actionLabel,
+  className,
+  ...props
+}: MessageDividerProps) {
+  const content = (
+    <>
+      {icon}
+      <span className="font-medium">{label}</span>
+      {detail != null ? (
+        <span
+          data-slot="message-divider-detail"
+          className="inline-flex max-w-80 min-w-0 items-center truncate opacity-70"
+        >
+          ·&nbsp;{detail}
+        </span>
+      ) : null}
+    </>
+  )
+  const pill =
+    "flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 [&_svg]:size-3 [&_svg]:shrink-0"
+
+  return (
+    <div
+      // A separator holds no focusable content, so a divider with an action
+      // is just a row with a button in it.
+      role={onAction ? undefined : "separator"}
+      data-slot="message-divider"
+      data-tone={tone}
+      className={cn(
+        "flex min-w-0 items-center gap-2 py-2 text-[11px] text-muted-foreground data-[tone=danger]:text-destructive",
+        className
+      )}
+      {...props}
+    >
+      <span aria-hidden className="h-px flex-1 bg-border/70" />
+      {onAction ? (
+        <button
+          type="button"
+          data-slot="message-divider-action"
+          onClick={onAction}
+          title={actionLabel}
+          aria-label={actionLabel}
+          className={cn(
+            pill,
+            "cursor-pointer border border-border/70 bg-background outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          )}
+        >
+          {content}
+        </button>
+      ) : (
+        <span data-slot="message-divider-label" className={pill}>
+          {content}
+        </span>
+      )}
+      <span aria-hidden className="h-px flex-1 bg-border/70" />
+    </div>
+  )
+}
 
 function ArtifactIcon({ kind }: { kind?: string }) {
   return kind === "table" ? (

@@ -5,6 +5,7 @@ export const REPO_URL = "https://github.com/miskibin/chat-components"
 export const componentSlugs = [
   "chat",
   "chat-input",
+  "composer-banner",
   "prompt-suggestions",
   "todo-list",
   "chat-navbar",
@@ -22,11 +23,14 @@ export const componentSlugs = [
   "file-tree",
   "file-icon",
   "generation-status",
+  "diff-stat",
   "folder-picker",
   "model-picker",
   "mode-picker",
   "context-meter",
   "theme-toggle",
+  "kbd",
+  "middle-truncate",
   "chat-sidebar",
   "sidebar-item",
   "sidebar-dnd",
@@ -67,6 +71,7 @@ export const docsNav: DocsNavSection[] = [
     items: [
       component("chat", "Chat", "block"),
       component("chat-input", "Chat Input"),
+      component("composer-banner", "Composer Banner"),
       component("prompt-suggestions", "Prompt Suggestions"),
       component("todo-list", "Todo List"),
       component("chat-navbar", "Chat Navbar"),
@@ -89,6 +94,7 @@ export const docsNav: DocsNavSection[] = [
       component("file-tree", "File Tree"),
       component("file-icon", "File Icon"),
       component("generation-status", "Generation Status"),
+      component("diff-stat", "Diff Stat"),
     ],
   },
   {
@@ -99,6 +105,8 @@ export const docsNav: DocsNavSection[] = [
       component("mode-picker", "Mode Picker"),
       component("context-meter", "Context Meter"),
       component("theme-toggle", "Theme Toggle"),
+      component("kbd", "Kbd"),
+      component("middle-truncate", "Middle Truncate"),
     ],
   },
   {

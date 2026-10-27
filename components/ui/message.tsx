@@ -455,7 +455,8 @@ export const Message = React.memo(function Message({
               onClick={startEdit}
               className={cn(
                 messageActionButton,
-                "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                // A touch screen has no hover: there the action simply stays.
+                "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"
               )}
             >
               <Pencil />
@@ -465,7 +466,7 @@ export const Message = React.memo(function Message({
             <div
               data-slot="message-content"
               className={cn(
-                "max-w-[85%] min-w-0 rounded-xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
+                "max-w-[85%] min-w-0 rounded-2xl bg-muted px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap text-foreground sm:max-w-[70%] sm:px-4",
                 contentClassName
               )}
             >
@@ -644,7 +645,7 @@ export const Message = React.memo(function Message({
         (editable && onEdit) ? (
           <div
             data-slot="message-actions"
-            className="mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
+            className="mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100"
           >
             {[...insideButtons, ...outsideButtons].map((button) => (
               <button
@@ -703,11 +704,13 @@ export {
   MessageArtifact,
   MessageAttachments,
   MessageCode,
+  MessageDivider,
   MessageProcess,
   MessageReasoning,
   MessageToolCall,
   MessageToolCalls,
 } from "@/components/ui/message-parts"
+export type { MessageDividerProps } from "@/components/ui/message-parts"
 export {
   AskQuestion,
   isAskToolName,

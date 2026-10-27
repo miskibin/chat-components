@@ -2,6 +2,8 @@ import type { ComponentDoc } from "@/components/docs/component-doc"
 import { DocsCode } from "@/components/docs/typography"
 import { FolderPickerEmptyExample } from "@/components/examples/folder-picker-empty-example"
 import { FolderPickerExample } from "@/components/examples/folder-picker-example"
+import { KbdExample } from "@/components/examples/kbd-example"
+import { MiddleTruncateExample } from "@/components/examples/middle-truncate-example"
 import { ContextMeterDetailsExample } from "@/components/examples/context-meter-details-example"
 import { ContextMeterExample } from "@/components/examples/context-meter-example"
 import { ContextMeterToolbarExample } from "@/components/examples/context-meter-toolbar-example"
@@ -556,7 +558,9 @@ export function Picker() {
             <DocsCode>ChatInput</DocsCode> with{" "}
             <DocsCode>side=&quot;top&quot;</DocsCode>; the trigger already
             matches the toolbar height, and carries no icon of its own so it
-            sits flush next to the other tool buttons.
+            sits flush next to the other tool buttons. Its effort label is
+            marked <DocsCode>data-composer-label</DocsCode>, so a cramped
+            composer row drops the effort first and keeps the model name.
           </>
         ),
       },
@@ -632,6 +636,19 @@ export function Picker() {
       "mode-picker-trigger",
       "mode-picker-content",
       "mode-picker-item",
+    ],
+    notes: [
+      {
+        title: "Inside a composer",
+        description: (
+          <>
+            The mode&apos;s name is marked{" "}
+            <DocsCode>data-composer-label</DocsCode>: when{" "}
+            <DocsCode>ChatInput</DocsCode>&apos;s toolbar runs out of room the
+            name goes and the icon stays, before anything leaves the row.
+          </>
+        ),
+      },
     ],
     examples: [
       {
@@ -881,6 +898,128 @@ export function Meter({ used, total }: { used: number; total: number }) {
       "context-meter-ring",
       "context-meter-arc",
       "context-meter-value",
+    ],
+  },
+
+  kbd: {
+    title: "Kbd",
+    description:
+      "A key as a quiet tinted square, and a group for chords — shortcut hints for menus, palettes and tooltips.",
+    registry: "kbd",
+    preview: { name: "kbd-example", node: <KbdExample /> },
+    usage: `import { Kbd, KbdGroup } from "@/components/ui/kbd"
+
+export function Hint() {
+  return (
+    <KbdGroup>
+      <Kbd>⌘</Kbd>
+      <Kbd>K</Kbd>
+    </KbdGroup>
+  )
+}`,
+    props: [
+      {
+        caption: "Kbd / KbdGroup",
+        rows: [
+          {
+            name: "children",
+            type: "React.ReactNode",
+            description: (
+              <>
+                A key&apos;s label or a 12px icon. <DocsCode>KbdGroup</DocsCode>{" "}
+                spaces several <DocsCode>Kbd</DocsCode>s as one chord.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: ["kbd", "kbd-group"],
+    notes: [
+      {
+        title: "A hint, not a button",
+        description: (
+          <>
+            A shade of the ink rather than a bordered keycap, and{" "}
+            <DocsCode>pointer-events-none</DocsCode>: a row of hints should
+            never read as a row of controls. A host restyles every key in a
+            region at once through <DocsCode>[data-slot=kbd]</DocsCode> — the
+            command palette&apos;s footer shrinks them that way.
+          </>
+        ),
+      },
+    ],
+  },
+
+  "middle-truncate": {
+    title: "Middle Truncate",
+    description:
+      "Truncates a path, branch or file name in the middle, keeping the end that tells two of them apart.",
+    registry: "middle-truncate",
+    preview: { name: "middle-truncate-example", node: <MiddleTruncateExample /> },
+    usage: `import { MiddleTruncate } from "@/components/ui/middle-truncate"
+
+export function Branch({ name }: { name: string }) {
+  return <MiddleTruncate value={name} className="max-w-48" />
+}`,
+    props: [
+      {
+        caption: "MiddleTruncate",
+        rows: [
+          {
+            name: "value",
+            type: "string",
+            required: true,
+            description: "The text. Short values that fit are shown whole.",
+          },
+          {
+            name: "tail",
+            type: "number",
+            description: (
+              <>
+                Characters always kept at the end. Defaults to the last path
+                segment when it is 16 characters or fewer, else 10 — snapped to
+                a word boundary on <DocsCode>- _ . /</DocsCode>, so the end
+                reads <DocsCode>machine</DocsCode> and not{" "}
+                <DocsCode>er-machine</DocsCode>.
+              </>
+            ),
+          },
+          {
+            name: "showTitle",
+            type: "boolean",
+            default: "true",
+            description: "Puts the whole value in a native tooltip.",
+          },
+        ],
+      },
+      {
+        caption: "Helpers",
+        rows: [
+          {
+            name: "splitForMiddleTruncate",
+            type: "(value: string, tail?: number) => { head, tail } | null",
+            description:
+              "Where a value splits into the head that may shrink and the tail that never does — null when it is too short to split.",
+          },
+        ],
+      },
+    ],
+    dataSlots: ["middle-truncate", "middle-truncate-head", "middle-truncate-tail"],
+    notes: [
+      {
+        title: "No ragged gap",
+        description: (
+          <>
+            The cut lands after the last whole character that fits: the
+            partial glyph is clipped, the tail slides over the slack, and the
+            ellipsis rides on the tail rather than at the end of a CSS{" "}
+            <DocsCode>text-overflow</DocsCode>. None of it changes layout, so
+            the width it measures is the real one. It refits on resize and
+            whenever the value changes.
+          </>
+        ),
+      },
     ],
   },
 } satisfies Record<string, ComponentDoc>

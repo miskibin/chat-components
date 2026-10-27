@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowUp, Square } from "lucide-react"
+import { ArrowUp } from "lucide-react"
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
@@ -90,9 +90,9 @@ export function ChatComposer({
             data-slot="chat-composer-stop"
             aria-label="Stop generating"
             onClick={onStop}
-            className="absolute bottom-2 right-2 grid size-9 place-items-center rounded-lg bg-foreground text-background outline-none transition-colors hover:opacity-85 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="absolute right-2 bottom-2 grid size-9 place-items-center rounded-full bg-destructive/90 text-destructive-foreground outline-none transition-[background-color,transform] duration-150 hover:scale-105 hover:bg-destructive focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-95 motion-reduce:transform-none"
           >
-            <Square className="size-3 fill-current" />
+            <span aria-hidden className="size-2.5 rounded-[3px] bg-current" />
           </button>
         ) : (
           <button
@@ -101,7 +101,7 @@ export function ChatComposer({
             aria-label="Send message"
             disabled={!canSend}
             onClick={onSend}
-            className="absolute bottom-2 right-2 grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground outline-none transition-colors hover:bg-primary/90 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-35"
+            className="absolute right-2 bottom-2 grid size-9 place-items-center rounded-full bg-primary text-primary-foreground outline-none transition-[background-color,color,transform] duration-150 hover:scale-105 hover:bg-primary/90 focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-95 disabled:pointer-events-none disabled:bg-foreground/10 disabled:text-muted-foreground motion-reduce:transform-none"
           >
             <ArrowUp className="size-4" />
           </button>

@@ -156,19 +156,30 @@
   padding: 0;
   gap: 0;
   overflow: hidden;
-  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: calc(var(--radius) + 2px);
   background: var(--muted);
   content-visibility: visible;
   contain-intrinsic-size: none;
 }
 
+/* Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026
+   T3 Tools Inc. — the frame is the surface in dark mode, not a line around it,
+   and the header below is a quiet line inside the frame rather than a bar. */
+.dark .lc-markdown [data-streamdown="code-block"] {
+  border-color: transparent;
+}
+
 .lc-markdown [data-streamdown="code-block-header"] {
   grid-column: 1;
   grid-row: 1;
-  height: 2rem;
-  min-height: 2rem;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
+  height: 1.75rem;
+  min-height: 1.75rem;
+  padding: 6px 6px 0 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted-foreground);
+  border-bottom: 0;
 }
 
 .lc-markdown [data-streamdown="code-block"] > :has(> [data-streamdown="code-block-actions"]) {
@@ -177,13 +188,13 @@
   position: static;
   top: auto;
   margin-top: 0;
-  height: 2rem;
-  padding-right: 6px;
+  height: 1.75rem;
+  padding: 6px 6px 0 0;
   align-self: stretch;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
 }
 
 .lc-markdown [data-streamdown="code-block-actions"] {
@@ -199,7 +210,7 @@
   grid-row: 2;
   border: 0;
   border-radius: 0;
-  padding: 8px 10px;
+  padding: 6px 12px 12px;
   background: transparent;
 }
 

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "diff-stat",
+  "title": "Diff Stat",
+  "description": "Lines added and removed as +12 −3 with compact counts (1.2k), inline in a sentence or aligned in fixed 4ch columns down a list of files.",
+  "files": [
+    {
+      "path": "components/ui/diff-stat.tsx",
+      "content": "import * as React from \"react\"\n\nimport { cn } from \"@/lib/utils\"\n\n// Adapted from T3 Code (github.com/pingdotgg/t3code), MIT License, (c) 2026 T3 Tools Inc.\n\n/** \"999\", \"1.2k\", \"34k\", \"1.5m\" — a count that keeps to four characters. */\nexport function formatDiffCount(value: number): string {\n  const compact = (n: number, unit: string) =>\n    `${n < 10 ? n.toFixed(1).replace(/\\.0$/, \"\") : Math.round(n)}${unit}`\n  if (value < 1000) return String(value)\n  if (value < 1_000_000) return compact(value / 1000, \"k\")\n  return compact(value / 1_000_000, \"m\")\n}\n\nexport type DiffStatProps = Omit<React.ComponentProps<\"span\">, \"children\"> & {\n  additions?: number\n  deletions?: number\n  /**\n   * `inline` sits in a sentence and drops a zero side. `aligned` is for a\n   * column of rows: two fixed 4ch cells, right-aligned, so every `+` and every\n   * `−` in a list lines up with the one above it.\n   * @default \"inline\"\n   */\n  layout?: \"inline\" | \"aligned\"\n}\n\n/**\n * Lines added and removed. Green and red are the one raw-palette exception —\n * no theme token means \"grew\" — and both ship a dark variant. The numbers are\n * hidden from assistive tech in favour of one sentence on the group.\n */\nexport function DiffStat({\n  additions = 0,\n  deletions = 0,\n  layout = \"inline\",\n  className,\n  ...props\n}: DiffStatProps) {\n  if (additions === 0 && deletions === 0) return null\n  const aligned = layout === \"aligned\"\n  return (\n    <span\n      role=\"group\"\n      aria-label={`${additions} added, ${deletions} removed`}\n      data-slot=\"diff-stat\"\n      data-layout={layout}\n      className={cn(\n        \"shrink-0 font-mono text-[12px] tabular-nums\",\n        aligned\n          ? \"inline-grid grid-cols-[4ch_4ch] gap-1.5 text-right\"\n          : \"inline-flex items-center gap-1.5\",\n        className\n      )}\n      {...props}\n    >\n      {additions > 0 || aligned ? (\n        <span\n          aria-hidden\n          data-slot=\"diff-stat-additions\"\n          className=\"text-emerald-600 dark:text-emerald-400\"\n        >\n          {additions > 0 ? `+${formatDiffCount(additions)}` : null}\n        </span>\n      ) : null}\n      {deletions > 0 || aligned ? (\n        <span\n          aria-hidden\n          data-slot=\"diff-stat-deletions\"\n          className=\"text-red-500 dark:text-red-400\"\n        >\n          {deletions > 0 ? `-${formatDiffCount(deletions)}` : null}\n        </span>\n      ) : null}\n    </span>\n  )\n}\n",
+      "type": "registry:ui"
+    }
+  ],
+  "type": "registry:ui"
+}
