@@ -2331,11 +2331,11 @@ export function Answer({ text }: { text: string }) {
         description: (
           <>
             The same bursty stream — a dozen words, a pause, three words — twice.
-            Paced, it lands a whole sentence (or line) at a time, each one
-            washing in word by word, and the screen holds still in between; a
-            sentence still being written shows its words after a moment rather
-            than stalling. Instant, the bursts land as lumps. The rules are{" "}
-            <DocsCode>nextSentenceReveal</DocsCode> in{" "}
+            Paced, it emerges a phrase at a time — a few words, cut where the
+            text pauses, on a calm beat — each phrase fading in as one while the
+            last is still settling, and the screen is quiet in between. Instant,
+            the bursts land as lumps. The rules are{" "}
+            <DocsCode>nextPhraseReveal</DocsCode> in{" "}
             <DocsCode>lib/stream-pacing.ts</DocsCode>, pure and unit-tested.
           </>
         ),

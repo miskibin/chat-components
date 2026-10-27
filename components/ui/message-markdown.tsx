@@ -32,7 +32,7 @@ import {
 import { VIEW_FENCE_LANGUAGE, type ViewAction } from "@/lib/generative-view"
 import { remarkGithubAlerts } from "@/lib/markdown-github-alerts"
 import { remarkNormalizeListItemIndentation } from "@/lib/markdown-list-indentation"
-import { isContinuation, nextSentenceReveal } from "@/lib/stream-pacing"
+import { isContinuation, nextPhraseReveal } from "@/lib/stream-pacing"
 import { cn } from "@/lib/utils"
 
 const math = createMathPlugin({
@@ -577,25 +577,27 @@ function useStableCallback<A extends unknown[], R>(
 }
 
 /**
- * A sentence lands whole and washes in: each word fades, a few milliseconds
- * after the one before it, so the eye is led along the line once rather than
- * chasing a cursor.
+ * A phrase emerges as one: its words fade in together over most of a second,
+ * each a hair after the last, so the newest few words are a soft gradient
+ * rather than a hard edge — and the fade outlasts the beat, so one phrase is
+ * still settling as the next begins. Slow on purpose: the point is a calm
+ * screen, not a fast one.
  */
-const SENTENCE_FADE = {
+const EMERGE_FADE = {
   animation: "fadeIn",
-  duration: 320,
+  duration: 700,
+  easing: "cubic-bezier(0.25, 0.1, 0.25, 1)",
   sep: "word",
-  stagger: 12,
+  stagger: 18,
+  maxBacklogMs: 400,
 } as const
 
-/** How often the reveal checks whether a sentence is ready — not how often it moves. */
-const PACE_FRAME_MS = 32
 /** A first chunk this short is typed out rather than painted whole. */
 const PACE_FROM_START_CHARS = 120
 
 /**
- * The text to paint this frame: whole sentences, one at a time, trailing
- * `text` by little while it streams (see `nextSentenceReveal`). Only growth while
+ * The text to paint this frame: a phrase more per beat, trailing `text` by a
+ * little while it streams (see `nextPhraseReveal`). Only growth while
  * paced is spread out: a mount, a transcript swap or an edit shows the text
  * as it is. `settling` stays true while what arrived before the stream ended
  * is still being drawn.
@@ -676,21 +678,17 @@ function usePacedText(text: string, streaming: boolean, enabled: boolean) {
   const behind = enabled && length < text.length
   /**
    * When the reveal last moved. A ref, not effect-local: the effect restarts
-   * on every token that arrives, and the cadence and the hold on an
-   * unfinished sentence are measured across those restarts.
+   * on every token that arrives, and the beat is measured across restarts.
    */
   const advancedAtRef = React.useRef(0)
   React.useEffect(() => {
     if (!behind) return
     let frame = 0
-    let checked = 0
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick)
-      if (now - checked < PACE_FRAME_MS) return
-      checked = now
-      if (!advancedAtRef.current) advancedAtRef.current = now
-      const next = nextSentenceReveal(text, length, now - advancedAtRef.current, streaming)
-      // Most checks change nothing — and then nothing re-renders.
+      if (!advancedAtRef.current) advancedAtRef.current = now - 10_000
+      const next = nextPhraseReveal(text, length, now - advancedAtRef.current, streaming)
+      // Most frames change nothing — and then nothing re-renders.
       if (next > length) {
         advancedAtRef.current = now
         setShown(next)
@@ -889,7 +887,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
             shikiTheme={shikiTheme}
             mermaid={mermaidConfig}
             isAnimating={live}
-            animated={paced && !restored ? SENTENCE_FADE : undefined}
+            animated={paced && !restored ? EMERGE_FADE : undefined}
             caret={caret}
             linkSafety={linkSafety}
             parseIncompleteMarkdown

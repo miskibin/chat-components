@@ -87,106 +87,102 @@ export function isContinuation(previous: string, next: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Sentence by sentence                                                        */
+/* Phrase by phrase                                                            */
 /* -------------------------------------------------------------------------- */
 
 /**
- * The reveal the chat actually uses: a whole sentence (or line) at a time.
+ * The reveal the chat uses: a phrase at a time — a few words, cut where the
+ * text itself pauses (a comma, a full stop, the end of a line), never more
+ * than `maxWords` — on a calm, steady beat.
  *
- * Word-by-word pacing is smooth in the sense that nothing jumps, but it is
- * still a screen that changes thirty times a second, and a reader tracks a
- * moving edge instead of reading. A sentence is the unit people read in: it
- * lands whole, fades in (the component's job), and the screen is still until
- * the next one — the way T3 Code's answers settle a block at a time, one step
- * finer. A line counts as a sentence, so code, lists and tables arrive line by
- * line.
+ * Word-by-word pacing never sits still: the screen changes dozens of times a
+ * second and the reader chases the edge. Whole sentences sit still but land
+ * as lumps. A phrase is the unit in between — small enough to arrive
+ * gently, large enough that the screen is quiet between arrivals — and it
+ * fades in as one (the component's job), so text *emerges* a few words at a
+ * time.
  *
- * Three guards keep it honest. A sentence that is still being written does not
- * hold the screen hostage: after `holdMs`, or once it is longer than
- * `tailChars`, its finished words show. A stream that outruns the cadence is
- * never left more than `maxLagChars` behind — past that, every complete
- * sentence goes at once. And once the stream has ended, what is left drains on
- * the faster `settleSentenceMs`.
+ * Guards: an unfinished phrase shows its arrived words after `holdMs` rather
+ * than stalling; a stream that outruns the beat is never left more than
+ * `maxLagChars` behind (several phrases go at once until it is not); and once
+ * the stream ends, the rest drains on the faster `settleMs`.
  */
-export type SentencePacing = {
-  /** Least time between two sentences while streaming. */
-  sentenceMs: number
+export type PhrasePacing = {
+  /** Least time between two phrases while streaming. */
+  phraseMs: number
   /** The same once the stream has ended and the rest is draining. */
-  settleSentenceMs: number
-  /** How far behind the arrived text the screen may fall before catching up. */
+  settleMs: number
+  /** A phrase is at least this many words, unless the text ends first. */
+  minWords: number
+  /** And at most this many, wherever the text pauses. */
+  maxWords: number
+  /** How far behind the arrived text the screen may fall. */
   maxLagChars: number
-  /** How long an unfinished sentence holds the reveal before its words show. */
+  /** How long an unfinished phrase holds the reveal before its words show. */
   holdMs: number
-  /** An unfinished sentence this long shows its words without waiting. */
-  tailChars: number
 }
 
-export const DEFAULT_SENTENCE_PACING: SentencePacing = {
-  sentenceMs: 140,
-  settleSentenceMs: 60,
-  maxLagChars: 600,
-  holdMs: 700,
-  tailChars: 220,
+export const DEFAULT_PHRASE_PACING: PhrasePacing = {
+  phraseMs: 280,
+  settleMs: 90,
+  minWords: 2,
+  maxWords: 7,
+  maxLagChars: 320,
+  holdMs: 650,
 }
 
-/** `.`, `!`, `?`, `…` and their CJK forms end a sentence. */
-function isTerminator(code: number) {
+/** Characters after which the text pauses: `, ; : . ! ? …` and CJK forms. */
+function isPause(code: number) {
   return (
+    code === 44 || // ,
+    code === 59 || // ;
+    code === 58 || // :
     code === 46 || // .
     code === 33 || // !
     code === 63 || // ?
     code === 0x2026 || // …
+    code === 0x3001 || // 、
     code === 0x3002 || // 。
+    code === 0xff0c || // ，
     code === 0xff01 || // ！
     code === 0xff1f // ？
   )
 }
 
 /**
- * Whether the terminator at `index` ends a sentence rather than a list marker
- * (`1. `) — a numbered item would otherwise show its number and nothing else.
+ * The end of the next phrase after `from`, within what has arrived (`limit`),
+ * or -1 when not enough has arrived to know. A word only counts once the
+ * whitespace after it has arrived — `implement` might still become
+ * `implementation`.
  */
-function endsSentence(text: string, index: number) {
-  let at = index - 1
-  while (at >= 0 && text.charCodeAt(at) >= 48 && text.charCodeAt(at) <= 57) at--
-  if (at === index - 1) return true // no digits before it
-  // Only digits back to the start of the line (after indentation): a marker.
-  while (at >= 0 && (text[at] === " " || text[at] === "\t")) at--
-  return !(at < 0 || text[at] === "\n")
-}
-
-/**
- * The end of the first sentence that finishes after `from` and before `limit`,
- * or -1. A terminator only counts once the character after it has arrived and
- * is whitespace — `3.` might still become `3.14`.
- */
-export function nextSentenceEnd(text: string, from: number, limit = text.length): number {
+export function nextPhraseEnd(
+  text: string,
+  from: number,
+  limit = text.length,
+  pacing: Pick<PhrasePacing, "minWords" | "maxWords"> = DEFAULT_PHRASE_PACING
+): number {
+  let words = 0
+  let inWord = false
   for (let at = from; at < limit; at++) {
     const code = text.charCodeAt(at)
-    if (code === 10) return at + 1
-    if (isTerminator(code) && at + 1 < limit && isBreak(text.charCodeAt(at + 1))) {
-      if (endsSentence(text, at)) return at + 1
+    if (code === 10) {
+      // A line ends a phrase however short: code, lists and tables arrive
+      // line by line.
+      if (inWord || words > 0) return at + 1
+      continue
     }
-  }
-  return -1
-}
-
-/** The furthest complete sentence's end at or before `limit`, or -1. */
-function lastSentenceEnd(text: string, from: number, limit: number): number {
-  let found = -1
-  let at = from
-  for (;;) {
-    const end = nextSentenceEnd(text, at, limit)
-    if (end < 0) return found
-    found = end
-    at = end
-  }
-}
-
-/** The end of the last whole word that has arrived after `from`, or -1. */
-function lastWordEnd(text: string, from: number, limit: number): number {
-  for (let at = limit - 1; at > from; at--) {
-    if (isBreak(text.charCodeAt(at))) return at
+    if (isBreak(code)) {
+      if (inWord) {
+        words++
+        inWord = false
+        const before = text.charCodeAt(at - 1)
+        if ((words >= pacing.minWords && isPause(before)) || words >= pacing.maxWords) {
+          return at
+        }
+      }
+      continue
+    }
+    inWord = true
   }
   return -1
 }
@@ -195,30 +191,32 @@ function lastWordEnd(text: string, from: number, limit: number): number {
  * How much of `text` to show now, `sinceAdvanceMs` after the reveal last moved
  * forward, given `shown` on screen. Returns `shown` when it should hold still.
  */
-export function nextSentenceReveal(
+export function nextPhraseReveal(
   text: string,
   shown: number,
   sinceAdvanceMs: number,
   streaming: boolean,
-  pacing: SentencePacing = DEFAULT_SENTENCE_PACING
+  pacing: PhrasePacing = DEFAULT_PHRASE_PACING
 ): number {
   const target = text.length
   if (shown >= target) return target
-  const cadence = streaming ? pacing.sentenceMs : pacing.settleSentenceMs
-  if (sinceAdvanceMs < cadence) return shown
+  if (sinceAdvanceMs < (streaming ? pacing.phraseMs : pacing.settleMs)) return shown
 
-  const next = nextSentenceEnd(text, shown)
+  let next = nextPhraseEnd(text, shown, target, pacing)
   if (next > 0) {
-    if (target - shown > pacing.maxLagChars) {
-      // Far behind: everything complete, at once.
-      return keepPairs(text, Math.max(next, lastSentenceEnd(text, next, target)))
+    // Far behind: phrase after phrase until the backlog is back in bounds.
+    while (target - next > pacing.maxLagChars) {
+      const further = nextPhraseEnd(text, next, target, pacing)
+      if (further < 0) break
+      next = further
     }
     return keepPairs(text, next)
   }
-  // Nothing finished past what is shown. Once the stream is over, the rest is
-  // all there is.
   if (!streaming) return target
-  if (sinceAdvanceMs < pacing.holdMs && target - shown < pacing.tailChars) return shown
-  const word = lastWordEnd(text, shown, target)
-  return word > shown ? keepPairs(text, word) : shown
+  if (sinceAdvanceMs < pacing.holdMs) return shown
+  // Held long enough: the words that have arrived whole.
+  for (let at = target - 1; at > shown; at--) {
+    if (isBreak(text.charCodeAt(at))) return keepPairs(text, at)
+  }
+  return shown
 }

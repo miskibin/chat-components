@@ -245,7 +245,12 @@ export const MessageReasoning = React.memo(function MessageReasoning({
             disclosureBody
           )}
         >
-          <MessageMarkdown className="text-inherit! text-[13px]! leading-relaxed!">
+          {/* Paced like the answer: a thought streams in too, and one that
+              landed in raw chunks was the jumpiest thing on the screen. */}
+          <MessageMarkdown
+            isAnimating={streaming}
+            className="text-inherit! text-[13px]! leading-relaxed!"
+          >
             {children}
           </MessageMarkdown>
         </div>
