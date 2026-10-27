@@ -81,8 +81,8 @@ test("phrases: a few words at a time, cut where the text pauses", () => {
   // The comma is a pause.
   assert.equal(text.slice(0, one), "The retry loop backs off exponentially,")
   const two = nextPhraseReveal(text, one, P.phraseMs, true)
-  // Seven words with no pause among them: the cap.
-  assert.equal(text.slice(one, two), " so a flaky upstream gets room to")
+  // Six words with no pause among them: the cap.
+  assert.equal(text.slice(one, two), " so a flaky upstream gets room")
 })
 
 test("phrases: a pause ends a phrase once it has two words", () => {

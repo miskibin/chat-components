@@ -123,12 +123,12 @@ export type PhrasePacing = {
 }
 
 export const DEFAULT_PHRASE_PACING: PhrasePacing = {
-  phraseMs: 280,
-  settleMs: 90,
+  phraseMs: 180,
+  settleMs: 70,
   minWords: 2,
-  maxWords: 7,
-  maxLagChars: 320,
-  holdMs: 650,
+  maxWords: 6,
+  maxLagChars: 120,
+  holdMs: 300,
 }
 
 /** Characters after which the text pauses: `, ; : . ! ? …` and CJK forms. */

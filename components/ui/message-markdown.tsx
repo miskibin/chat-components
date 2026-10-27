@@ -577,19 +577,16 @@ function useStableCallback<A extends unknown[], R>(
 }
 
 /**
- * A phrase emerges as one: its words fade in together over most of a second,
- * each a hair after the last, so the newest few words are a soft gradient
- * rather than a hard edge — and the fade outlasts the beat, so one phrase is
- * still settling as the next begins. Slow on purpose: the point is a calm
- * screen, not a fast one.
+ * A phrase arrives as one: its words fade in together, quickly — long enough
+ * to soften the edge, short enough that nothing reads as lagging behind.
  */
-const EMERGE_FADE = {
+const PHRASE_FADE = {
   animation: "fadeIn",
-  duration: 700,
-  easing: "cubic-bezier(0.25, 0.1, 0.25, 1)",
+  duration: 240,
+  easing: "ease-out",
   sep: "word",
-  stagger: 18,
-  maxBacklogMs: 400,
+  stagger: 6,
+  maxBacklogMs: 120,
 } as const
 
 /** A first chunk this short is typed out rather than painted whole. */
@@ -887,7 +884,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
             shikiTheme={shikiTheme}
             mermaid={mermaidConfig}
             isAnimating={live}
-            animated={paced && !restored ? EMERGE_FADE : undefined}
+            animated={paced && !restored ? PHRASE_FADE : undefined}
             caret={caret}
             linkSafety={linkSafety}
             parseIncompleteMarkdown
