@@ -42,17 +42,17 @@ export type GenerativeViewSlot =
  * dark variant.
  */
 const badgeVariants = cva(
-  "inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-[11px] leading-none font-medium whitespace-nowrap",
+  "inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full px-2 text-[11px] leading-none font-medium whitespace-nowrap",
   {
     variants: {
       tone: {
-        neutral: "border-border bg-muted text-muted-foreground",
-        info: "border-primary/20 bg-primary/10 text-primary",
+        neutral: "bg-muted text-muted-foreground",
+        info: "bg-primary/10 text-primary",
         success:
-          "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+          "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400",
         warning:
-          "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-        danger: "border-destructive/25 bg-destructive/10 text-destructive",
+          "bg-amber-500/12 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400",
+        danger: "bg-destructive/10 text-destructive",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -68,15 +68,16 @@ const TONE_TEXT: Record<ViewTone, string> = {
 }
 
 const TONE_FILL: Record<ViewTone, string> = {
-  neutral: "bg-muted-foreground/50",
+  neutral: "bg-muted-foreground/40",
   info: "bg-primary",
   success: "bg-emerald-500",
   warning: "bg-amber-500",
   danger: "bg-destructive",
 }
 
+/** Quiet until pointed at: the underline carries the affordance, not a colour. */
 const linkClassName =
-  "rounded-sm text-primary underline-offset-2 transition-colors hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+  "rounded-sm text-foreground underline decoration-foreground/20 underline-offset-[3px] transition-colors hover:decoration-foreground/70 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
 type ClassNames = Partial<Record<GenerativeViewSlot, string>>
 
@@ -99,21 +100,20 @@ type ActionContextValue = {
 const ActionContext = React.createContext<ActionContextValue>({ pending: false })
 
 const controlClassName =
-  "w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-1 text-[12.5px] transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+  "w-full min-w-0 rounded-md border border-transparent bg-muted/60 px-2.5 py-1.5 text-[12.5px] transition-colors outline-none placeholder:text-muted-foreground/70 hover:bg-muted focus-visible:border-ring focus-visible:bg-transparent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
 
 const buttonVariants = cva(
-  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium whitespace-nowrap transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
+  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-3 text-[12px] font-medium whitespace-nowrap transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
   {
     variants: {
       tone: {
-        neutral: "bg-background hover:bg-muted",
-        info: "border-primary bg-primary text-primary-foreground hover:bg-primary/90",
+        neutral: "bg-muted/70 text-foreground hover:bg-muted",
+        info: "bg-foreground text-background hover:bg-foreground/85",
         success:
-          "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300",
+          "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400",
         warning:
-          "border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300",
-        danger:
-          "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15",
+          "bg-amber-500/12 text-amber-700 hover:bg-amber-500/20 dark:text-amber-400",
+        danger: "bg-destructive/10 text-destructive hover:bg-destructive/15",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -129,6 +129,7 @@ function ViewBadge({ label, tone }: { label: string; tone: ViewTone }) {
       data-tone={tone}
       className={cn(badgeVariants({ tone }), useSlotClass("badge"))}
     >
+      <span aria-hidden className="size-1.5 rounded-full bg-current opacity-60" />
       {label}
     </span>
   )
@@ -171,21 +172,18 @@ function Card({ node }: { node: Extract<ViewNode, { type: "card" }> }) {
     <section
       data-slot="generative-view-card"
       className={cn(
-        "min-w-0 overflow-hidden rounded-lg border bg-card text-card-foreground",
+        "min-w-0 overflow-hidden rounded-xl border border-border/60 bg-card text-card-foreground",
         slotClass
       )}
     >
       {hasHeader ? (
         <header
           data-slot="generative-view-card-header"
-          className={cn(
-            "flex items-start gap-2 px-3 py-2",
-            node.children.length > 0 && "border-b"
-          )}
+          className="flex items-start gap-3 px-4 pt-3.5 pb-1 last:pb-3.5"
         >
           <div className="min-w-0 flex-1">
             {node.title ? (
-              <div className="text-[13px] leading-snug font-medium break-words">
+              <div className="text-[13.5px] leading-snug font-semibold tracking-tight break-words">
                 {node.href ? (
                   <ViewLink label={node.title} href={node.href} />
                 ) : (
@@ -205,7 +203,10 @@ function Card({ node }: { node: Extract<ViewNode, { type: "card" }> }) {
         </header>
       ) : null}
       {node.children.length > 0 ? (
-        <div data-slot="generative-view-card-body" className="space-y-2.5 px-3 py-2.5">
+        <div
+          data-slot="generative-view-card-body"
+          className="space-y-4 px-4 pt-3 pb-4 first:pt-4"
+        >
           <Nodes nodes={node.children} />
         </div>
       ) : null}
@@ -285,13 +286,15 @@ function Fields({ node }: { node: Extract<ViewNode, { type: "fields" }> }) {
     <dl
       data-slot="generative-view-fields"
       className={cn(
-        "grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[12.5px] leading-relaxed",
+        "grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)] items-baseline gap-x-6 gap-y-1.5 text-[12.5px] leading-relaxed",
         useSlotClass("fields")
       )}
     >
       {node.items.map((item, index) => (
         <React.Fragment key={index}>
-          <dt className="truncate text-muted-foreground">{item.label}</dt>
+          <dt className="truncate text-[12px] text-muted-foreground">
+            {item.label}
+          </dt>
           <dd className="min-w-0 break-words">
             <Inline value={item.value} />
           </dd>
@@ -313,21 +316,21 @@ function Table({ node }: { node: Extract<ViewNode, { type: "table" }> }) {
     <div
       data-slot="generative-view-table"
       className={cn(
-        "min-w-0 overflow-hidden rounded-md border",
+        "min-w-0",
         useSlotClass("table")
       )}
     >
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-[12.5px]">
           {hasHeader ? (
-            <thead className="bg-muted/40 text-[11.5px] text-muted-foreground">
+            <thead className="border-b border-border/70 text-[11.5px] text-muted-foreground">
               <tr>
                 {node.columns.map((column, index) => (
                   <th
                     key={index}
                     scope="col"
                     className={cn(
-                      "px-2 py-1 font-medium whitespace-nowrap",
+                      "px-2.5 pb-1.5 font-medium whitespace-nowrap first:pl-0 last:pr-0",
                       column.align === "end" ? "text-right" : "text-left"
                     )}
                   >
@@ -341,13 +344,13 @@ function Table({ node }: { node: Extract<ViewNode, { type: "table" }> }) {
             {rows.map((row, rowIndex) => (
               <tr
                 key={rowIndex}
-                className={cn((hasHeader || rowIndex > 0) && "border-t")}
+                className="border-b border-border/40 last:border-0"
               >
                 {row.map((cell, cellIndex) => (
                   <td
                     key={cellIndex}
                     className={cn(
-                      "px-2 py-1 align-top",
+                      "px-2.5 py-1.5 align-top first:pl-0 last:pr-0",
                       node.columns[cellIndex]?.align === "end"
                         ? "text-right tabular-nums"
                         : "text-left",
@@ -367,7 +370,7 @@ function Table({ node }: { node: Extract<ViewNode, { type: "table" }> }) {
           type="button"
           data-slot="generative-view-table-more"
           onClick={() => setExpanded(true)}
-          className="w-full cursor-pointer border-t px-2 py-1 text-left text-[11.5px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset"
+          className="mt-1 cursor-pointer rounded-sm text-[11.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           Show all {node.rows.length} rows
         </button>
@@ -377,24 +380,31 @@ function Table({ node }: { node: Extract<ViewNode, { type: "table" }> }) {
 }
 
 function List({ node }: { node: Extract<ViewNode, { type: "list" }> }) {
+  /* One toned item gives every row a dot column, so titles stay aligned. */
+  const dotted = node.items.some((item) => item.tone)
   return (
     <ul
       data-slot="generative-view-list"
-      className={cn("space-y-1 text-[12.5px] leading-relaxed", useSlotClass("list"))}
+      className={cn(
+        "divide-y divide-border/40 text-[12.5px] leading-relaxed",
+        useSlotClass("list")
+      )}
     >
       {node.items.map((item, index) => (
         <li
           key={index}
           data-tone={item.tone}
-          className="flex min-w-0 items-start gap-2"
+          className="flex min-w-0 items-start gap-2.5 py-1.5 first:pt-0 last:pb-0"
         >
-          <span
-            aria-hidden
-            className={cn(
-              "mt-[0.55em] size-1.5 shrink-0 rounded-full",
-              TONE_FILL[item.tone ?? "neutral"]
-            )}
-          />
+          {dotted ? (
+            <span
+              aria-hidden
+              className={cn(
+                "mt-[0.6em] size-1.5 shrink-0 rounded-full",
+                item.tone ? TONE_FILL[item.tone] : "bg-transparent"
+              )}
+            />
+          ) : null}
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="min-w-0 flex-1 break-words">
@@ -423,7 +433,7 @@ function Timeline({ node }: { node: Extract<ViewNode, { type: "timeline" }> }) {
     <ol
       data-slot="generative-view-timeline"
       className={cn(
-        "relative ml-1 space-y-2.5 border-l pl-4 text-[12.5px] leading-relaxed",
+        "relative ml-[3px] space-y-3 border-l border-border/60 pl-4 text-[12.5px] leading-relaxed",
         useSlotClass("timeline")
       )}
     >
@@ -432,7 +442,7 @@ function Timeline({ node }: { node: Extract<ViewNode, { type: "timeline" }> }) {
           <span
             aria-hidden
             className={cn(
-              "absolute top-[0.45em] -left-[calc(1rem+4.5px)] size-2 rounded-full ring-2 ring-card",
+              "absolute top-[0.5em] -left-[calc(1rem+4px)] size-[7px] rounded-full ring-[3px] ring-card",
               TONE_FILL[item.tone ?? "neutral"]
             )}
           />
@@ -462,7 +472,7 @@ function Stats({ node }: { node: Extract<ViewNode, { type: "stats" }> }) {
     <div
       data-slot="generative-view-stats"
       className={cn(
-        "grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2",
+        "grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-x-6 gap-y-3",
         useSlotClass("stats")
       )}
     >
@@ -471,14 +481,14 @@ function Stats({ node }: { node: Extract<ViewNode, { type: "stats" }> }) {
           key={index}
           data-slot="generative-view-stat"
           data-tone={item.tone}
-          className="min-w-0 rounded-md border px-2.5 py-1.5"
+          className="min-w-0"
         >
-          <div className="truncate text-[11px] text-muted-foreground">
+          <div className="truncate text-[11.5px] text-muted-foreground">
             {item.label}
           </div>
           <div
             className={cn(
-              "truncate text-[13.5px] font-semibold tabular-nums",
+              "mt-0.5 truncate text-[13.5px] font-semibold tracking-tight tabular-nums",
               item.tone && item.tone !== "neutral" && TONE_TEXT[item.tone]
             )}
           >
@@ -498,7 +508,11 @@ function Stats({ node }: { node: Extract<ViewNode, { type: "stats" }> }) {
 function Progress({ node }: { node: Extract<ViewNode, { type: "progress" }> }) {
   const percent = Math.round((node.value / node.max) * 100)
   return (
-    <div data-slot="generative-view-progress" data-tone={node.tone} className="space-y-1">
+    <div
+      data-slot="generative-view-progress"
+      data-tone={node.tone}
+      className="space-y-1.5"
+    >
       <div className="flex items-baseline justify-between gap-2 text-[12px]">
         <span className="truncate text-muted-foreground">{node.label}</span>
         <span className="shrink-0 tabular-nums">
@@ -511,10 +525,13 @@ function Progress({ node }: { node: Extract<ViewNode, { type: "progress" }> }) {
         aria-valuemin={0}
         aria-valuemax={node.max}
         aria-valuenow={node.value}
-        className="h-1.5 overflow-hidden rounded-full bg-muted"
+        className="h-1 overflow-hidden rounded-full bg-muted"
       >
         <div
-          className={cn("h-full rounded-full", TONE_FILL[node.tone ?? "info"])}
+          className={cn(
+            "h-full rounded-full transition-[width] duration-300",
+            node.tone ? TONE_FILL[node.tone] : "bg-foreground/80"
+          )}
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -579,12 +596,15 @@ function ViewForm({ node }: { node: Extract<ViewNode, { type: "form" }> }) {
         onAction?.({ type: "send", text: formMessage(node, values) })
       }}
       className={cn(
-        "min-w-0 space-y-2 rounded-md border px-3 py-2.5",
+        // Framed on its own; inside a card the card is the frame.
+        "min-w-0 space-y-3 rounded-xl border border-border/60 p-4 [[data-slot=generative-view-card-body]_&]:rounded-none [[data-slot=generative-view-card-body]_&]:border-0 [[data-slot=generative-view-card-body]_&]:p-0",
         useSlotClass("form")
       )}
     >
       {node.title ? (
-        <div className="text-[12.5px] font-medium">{node.title}</div>
+        <div className="text-[13px] font-semibold tracking-tight">
+          {node.title}
+        </div>
       ) : null}
       {node.fields.map((field) => {
         const fieldId = `${id}-${field.name}`
@@ -733,7 +753,7 @@ function Block({ node }: { node: ViewNode }) {
         <pre
           data-slot="generative-view-code"
           data-lang={node.lang}
-          className="m-0 max-h-80 overflow-auto rounded-md border bg-muted/30 px-2 py-1.5 font-mono text-[12px] leading-relaxed whitespace-pre"
+          className="m-0 max-h-80 overflow-auto rounded-lg bg-muted/50 px-3 py-2 font-mono text-[12px] leading-relaxed whitespace-pre"
         >
           {node.code}
         </pre>
@@ -752,7 +772,7 @@ function Block({ node }: { node: ViewNode }) {
       return (
         <div
           data-slot="generative-view-unknown"
-          className="rounded-md border border-dashed px-2 py-1 text-[11.5px] text-muted-foreground"
+          className="rounded-lg bg-muted/40 px-3 py-1.5 text-[11.5px] text-muted-foreground"
         >
           Unsupported block “{node.name}”
         </div>
@@ -813,7 +833,7 @@ export const GenerativeView = React.memo(function GenerativeView({
           data-slot="generative-view"
           data-pending={pending || undefined}
           className={cn(
-            "min-w-0 space-y-2.5 text-foreground",
+            "min-w-0 space-y-3 text-foreground",
             classNames?.root,
             className
           )}
@@ -870,7 +890,7 @@ export const GenerativeViewBlock = React.memo(function GenerativeViewBlock({
         data-slot="generative-view-pending"
         role="status"
         className={cn(
-          "my-3 rounded-lg border border-dashed px-3 py-2 text-[12px] text-muted-foreground motion-safe:animate-pulse",
+          "my-3 rounded-xl bg-muted/40 px-4 py-3 text-[12px] text-muted-foreground motion-safe:animate-pulse",
           className
         )}
       >

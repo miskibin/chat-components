@@ -125,7 +125,7 @@ fields{items[{label,value}]} table{columns[],rows[[]]} list{items[]} timeline{it
 stats{items[{label,value,hint?,tone?}]} progress{value,max?,label?,tone?} code{code,lang?} diffstat{added,removed}
 button{label,send,tone?} form{title?,fields[{name,label,type?:text|textarea|select|checkbox,options?,required?,value?}],submit,send?}
 list/timeline items: a string or {title,meta?,body?,href?,tone?}. Field values and table cells: a string, a number, or a badge/link node. status: a string or a badge node. tone: neutral|info|success|warning|danger.
-A button sends its \`send\` text to you as the user's next message; a form sends \`send\` (or its submit label) followed by the answers. Use them to offer next steps or ask for input you need.
+A button sends its \`send\` text to you as the user's next message; a form sends \`send\` (or its submit label) followed by the answers. Use them to offer next steps or collect input; to ask the user a question, prefer your own ask tool if you have one.
 Only when it reads better than prose; keep the prose around it short and do not repeat what the view shows.`
 
 /* ---------------------------------------------------------------- limits -- */
