@@ -1,0 +1,208 @@
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
+
+import {
+  jsonToView,
+  normalizeView,
+  parseViewSpec,
+  safeHref,
+  toneForStatus,
+  type ViewNode,
+} from "@/lib/generative-view"
+
+describe("parseViewSpec", () => {
+  it("accepts one node or an array of them", () => {
+    const one = parseViewSpec('{"type":"badge","label":"MERGED"}')
+    assert.deepEqual(one, {
+      ok: true,
+      view: [{ type: "badge", label: "MERGED", tone: "success" }],
+    })
+    const many = parseViewSpec('[{"type":"divider"},"plain words"]')
+    assert.equal(many.ok, true)
+    assert.deepEqual(many.ok && many.view.map((node) => node.type), [
+      "divider",
+      "text",
+    ])
+  })
+
+  it("reports invalid JSON instead of throwing", () => {
+    const parsed = parseViewSpec('{"type":"card"')
+    assert.equal(parsed.ok, false)
+  })
+
+  it("keeps a block it does not know as a visible marker", () => {
+    const parsed = parseViewSpec('{"type":"chart","series":[]}')
+    assert.deepEqual(parsed, {
+      ok: true,
+      view: [{ type: "unknown", name: "chart" }],
+    })
+  })
+
+  it("normalizes a review card end to end", () => {
+    const parsed = parseViewSpec(
+      JSON.stringify({
+        type: "card",
+        title: "Fix login redirect",
+        href: "https://review.example.com/c/web/+/4211",
+        status: "NEW",
+        children: [
+          {
+            type: "fields",
+            items: [
+              { label: "Verified", value: { type: "badge", label: "+1" } },
+              { label: "Owner", value: "jan" },
+            ],
+          },
+          {
+            type: "table",
+            columns: ["File", { label: "+", align: "right" }],
+            rows: [["src/auth.ts", 12]],
+          },
+        ],
+      })
+    )
+    assert.ok(parsed.ok)
+    const card = parsed.view[0] as Extract<ViewNode, { type: "card" }>
+    assert.equal(card.status?.tone, "info")
+    assert.equal(card.href, "https://review.example.com/c/web/+/4211")
+    const fields = card.children[0] as Extract<ViewNode, { type: "fields" }>
+    assert.deepEqual(fields.items[0].value, {
+      type: "badge",
+      label: "+1",
+      tone: "success",
+    })
+    const table = card.children[1] as Extract<ViewNode, { type: "table" }>
+    assert.deepEqual(table.rows, [["src/auth.ts", "12"]])
+    assert.equal(table.columns[1].align, "end")
+  })
+})
+
+describe("safety", () => {
+  it("only lets http(s) and mailto links through", () => {
+    assert.equal(safeHref("https://a.example"), "https://a.example")
+    assert.equal(safeHref("mailto:a@example.com"), "mailto:a@example.com")
+    assert.equal(safeHref("javascript:alert(1)"), undefined)
+    assert.equal(safeHref("/relative"), undefined)
+  })
+
+  it("turns a link with an unsafe href into its label", () => {
+    const view = normalizeView({
+      type: "link",
+      label: "click",
+      href: "javascript:alert(1)",
+    })
+    assert.deepEqual(view, [{ type: "text", text: "click", mono: false }])
+  })
+
+  it("bounds depth", () => {
+    let node: Record<string, unknown> = { type: "text", text: "deep" }
+    for (let i = 0; i < 20; i++) node = { type: "section", title: `${i}`, children: [node] }
+    const view = normalizeView(node)
+    let depth = 0
+    let current: ViewNode | undefined = view[0]
+    while (current && current.type === "section") {
+      depth++
+      current = current.children[0]
+    }
+    assert.ok(depth <= 9, `depth ${depth}`)
+  })
+})
+
+describe("toneForStatus", () => {
+  for (const [word, tone] of [
+    ["MERGED", "success"],
+    ["failure", "danger"],
+    ["ABANDONED", "danger"],
+    ["In Progress", "info"],
+    ["draft", "warning"],
+    ["whatever", "neutral"],
+  ] as const) {
+    it(word, () => assert.equal(toneForStatus(word), tone))
+  }
+})
+
+describe("jsonToView", () => {
+  it("ignores text and scalars", () => {
+    assert.equal(jsonToView("total 3\nfoo"), undefined)
+    assert.equal(jsonToView("42"), undefined)
+    assert.equal(jsonToView('{"ok":true}'), undefined)
+  })
+
+  it("reads newline-delimited records and drops the stats trailer", () => {
+    const lines = [
+      {
+        project: "web",
+        number: 4211,
+        subject: "Fix login redirect",
+        owner: { name: "Jan Kowalski", email: "jan@example.com" },
+        url: "https://review.example.com/4211",
+        status: "NEW",
+        lastUpdated: 1761550000,
+      },
+      {
+        project: "web",
+        number: 4198,
+        subject: "Bump deps",
+        owner: { name: "Ola" },
+        url: "https://review.example.com/4198",
+        status: "MERGED",
+        lastUpdated: 1761450000,
+      },
+      { type: "stats", rowCount: 2, runTimeMilliseconds: 9 },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n")
+    const view = jsonToView(lines)
+    assert.ok(view)
+    const table = view[0] as Extract<ViewNode, { type: "table" }>
+    assert.equal(table.type, "table")
+    assert.equal(table.rows.length, 2)
+    assert.deepEqual(
+      table.columns.slice(0, 4).map((column) => column.label),
+      ["Number", "Subject", "Status", "Owner"]
+    )
+    assert.deepEqual(table.rows[0][1], {
+      type: "link",
+      label: "Fix login redirect",
+      href: "https://review.example.com/4211",
+    })
+    assert.deepEqual(table.rows[1][2], {
+      type: "badge",
+      label: "MERGED",
+      tone: "success",
+    })
+    assert.equal(table.rows[0][3], "Jan Kowalski")
+  })
+
+  it("turns a single record into a card with its nested lists", () => {
+    const view = jsonToView(
+      JSON.stringify({
+        key: "PROJ-12",
+        summary: "Login loops",
+        status: { name: "In Progress" },
+        assignee: { displayName: "Ola" },
+        comments: [
+          { author: { displayName: "Jan" }, body: "Repro on staging" },
+          { author: { displayName: "Ola" }, body: "Looking" },
+        ],
+      })
+    )
+    assert.ok(view)
+    const card = view[0] as Extract<ViewNode, { type: "card" }>
+    assert.equal(card.title, "PROJ-12 · Login loops")
+    assert.deepEqual(card.status, {
+      type: "badge",
+      label: "In Progress",
+      tone: "info",
+    })
+    assert.equal(card.children[0].type, "fields")
+    assert.equal(card.children[1].type, "section")
+  })
+
+  it("unwraps a single-key wrapper", () => {
+    const view = jsonToView(
+      JSON.stringify({ items: [{ id: 1, name: "a" }, { id: 2, name: "b" }] })
+    )
+    assert.equal(view?.[0].type, "table")
+  })
+})

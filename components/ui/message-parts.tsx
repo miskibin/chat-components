@@ -57,12 +57,14 @@ import {
 } from "@/components/ui/change-summary"
 import { DiffStat, type DiffStatProps } from "@/components/ui/diff-stat"
 import { FileIcon, fileIconId } from "@/components/ui/file-icon"
+import { GenerativeView } from "@/components/ui/generative-view"
 import {
   ShineStyles,
   shineClassName,
 } from "@/components/ui/generation-status"
 import { RenderErrorBoundary } from "@/components/ui/render-error-boundary"
 import { commandProgramName } from "@/lib/command-label"
+import { jsonToView } from "@/lib/generative-view"
 import { fnv1a32, LRUCache } from "@/lib/lru-cache"
 import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/components/ui/message-markdown"
@@ -1645,6 +1647,24 @@ export const MessageToolCall = React.memo(function MessageToolCall({
     [deferredTool]
   )
   /**
+   * A tool that answered in JSON — an MCP server, `gh … --json`, `gerrit
+   * query --format=JSON` — is drawn as a view rather than printed, read off the
+   * shape of the data with no knowledge of the service. Only once it has
+   * finished: half a JSON document is not one.
+   */
+  const outputView = React.useMemo(
+    () =>
+      (deferredTool.status ?? "done") === "done"
+        ? jsonToView(cleanToolOutput(deferredTool.output))
+        : undefined,
+    [deferredTool]
+  )
+  const [rawOutput, setRawOutput] = React.useState(false)
+  const toggleRawOutput = React.useCallback(
+    () => setRawOutput((raw) => !raw),
+    []
+  )
+  /**
    * An ask the agent closed without a selection is still the user's to answer,
    * but only where the owner says so: `onAskAnswer` is the signal that this row
    * is the live one. Without it an ask from an old turn would reopen on reload.
@@ -1993,7 +2013,24 @@ export const MessageToolCall = React.memo(function MessageToolCall({
               </dl>
             ) : null}
             {rawInput ? <ToolText text={rawInput} /> : null}
-            {showOutput && outputText ? (
+            {showOutput && outputText && outputView && !errored ? (
+              <div data-slot="message-tool-output-view" className="space-y-1">
+                {rawOutput ? (
+                  <ToolText text={outputText} />
+                ) : (
+                  <GenerativeView view={outputView} className="py-0.5" />
+                )}
+                <button
+                  type="button"
+                  data-slot="message-tool-output-toggle"
+                  data-state={rawOutput ? "raw" : "view"}
+                  onClick={toggleRawOutput}
+                  className="cursor-pointer rounded-sm text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  {rawOutput ? "Show as view" : "Show raw output"}
+                </button>
+              </div>
+            ) : showOutput && outputText ? (
               <ToolText
                 text={outputText}
                 tone={errored ? "error" : undefined}

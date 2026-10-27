@@ -366,6 +366,32 @@ function streamingScenario(topic: string): MockStep[] {
         "  C -->|text| F[Markdown]",
         "```",
         "",
+        "```ui",
+        JSON.stringify({
+          type: "card",
+          title: "Stream pipeline",
+          subtitle: "lib/message-stream.ts",
+          status: "passed",
+          children: [
+            {
+              type: "stats",
+              items: [
+                { label: "Events", value: 4 },
+                { label: "Per chunk", value: "O(1)", tone: "success" },
+              ],
+            },
+            {
+              type: "timeline",
+              items: [
+                { title: "thinking", meta: "reasoning block" },
+                { title: "tool", meta: "running → done" },
+                { title: "text", meta: "markdown", tone: "success" },
+              ],
+            },
+          ],
+        }),
+        "```",
+        "",
         MOCK_NOTE,
         "",
       ].join("\n"),

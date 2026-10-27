@@ -297,10 +297,32 @@
       ]
     },
     {
+      "name": "generative-view",
+      "type": "registry:ui",
+      "title": "Generative View",
+      "description": "A closed vocabulary of display blocks — cards, fields, tables, lists, timelines, stats, progress, tabs — drawn from JSON an agent writes in a ```ui fence, or read off a tool's JSON output by shape alone. Data, never code: normalized, bounded, safe links only. Ships VIEW_SPEC_PROMPT, the vocabulary for a model in ~200 tokens.",
+      "dependencies": ["lucide-react", "class-variance-authority"],
+      "registryDependencies": [
+        "collapsible",
+        "tabs",
+        "miskibin/chat-components/diff-stat"
+      ],
+      "files": [
+        {
+          "path": "components/ui/generative-view.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "lib/generative-view.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "message-markdown",
       "type": "registry:ui",
       "title": "Message Markdown",
-      "description": "Streamdown renderer for assistant markdown: GFM, GitHub alerts, code, Mermaid, KaTeX, inline data: images, clickable file references — inline paths and relative links — with their line, a right-click menu per file, per-block render isolation, copy-as-markdown, and paced streaming with a word fade.",
+      "description": "Streamdown renderer for assistant markdown: GFM, GitHub alerts, code, Mermaid, KaTeX, inline data: images, ```ui fences drawn as generative views, clickable file references — inline paths and relative links — with their line, a right-click menu per file, per-block render isolation, copy-as-markdown, and paced streaming with a word fade.",
       "dependencies": [
         "streamdown",
         "@streamdown/code",
@@ -313,7 +335,8 @@
       "registryDependencies": [
         "miskibin/chat-components/file-icon",
         "miskibin/chat-components/change-summary",
-        "miskibin/chat-components/render-error-boundary"
+        "miskibin/chat-components/render-error-boundary",
+        "miskibin/chat-components/generative-view"
       ],
       "files": [
         {
@@ -386,7 +409,7 @@
       "name": "message-parts",
       "type": "registry:ui",
       "title": "Message Parts",
-      "description": "Atomic assistant parts: the \"Worked for 12s\" process group, reasoning, tool calls that headline the program a shell command really ran, a semantic summary above a folded group, live labels that shine instead of spinning, ask questions, highlighted code with a wrap toggle, dividers between turns, and artifacts.",
+      "description": "Atomic assistant parts: the \"Worked for 12s\" process group, reasoning, tool calls that headline the program a shell command really ran, a semantic summary above a folded group, live labels that shine instead of spinning, ask questions, highlighted code with a wrap toggle, dividers between turns, artifacts, and JSON tool output drawn as a generative view.",
       "dependencies": ["lucide-react", "shiki", "next-themes", "diff"],
       "registryDependencies": [
         "collapsible",
@@ -398,7 +421,8 @@
         "miskibin/chat-components/generation-status",
         "miskibin/chat-components/todo-list",
         "miskibin/chat-components/plan-card",
-        "miskibin/chat-components/render-error-boundary"
+        "miskibin/chat-components/render-error-boundary",
+        "miskibin/chat-components/generative-view"
       ],
       "files": [
         {

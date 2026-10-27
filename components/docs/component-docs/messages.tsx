@@ -21,6 +21,9 @@ import { FilePreviewImageExample } from "@/components/examples/file-preview-imag
 import { FilePreviewSplitExample } from "@/components/examples/file-preview-split-example"
 import { FileTreeExample } from "@/components/examples/file-tree-example"
 import { FileTreeLazyExample } from "@/components/examples/file-tree-lazy-example"
+import { GenerativeViewExample } from "@/components/examples/generative-view-example"
+import { GenerativeViewJsonExample } from "@/components/examples/generative-view-json-example"
+import { GenerativeViewMarkdownExample } from "@/components/examples/generative-view-markdown-example"
 import { GenerationStatusElapsedExample } from "@/components/examples/generation-status-elapsed-example"
 import { GenerationStatusExample } from "@/components/examples/generation-status-example"
 import { GenerationStatusShineExample } from "@/components/examples/generation-status-shine-example"
@@ -1935,6 +1938,157 @@ export function Thread() {
     ],
   },
 
+  "generative-view": {
+    title: "Generative View",
+    description:
+      "UI an agent composes rather than one you wrote for it: a closed vocabulary of display blocks — cards, fields, tables, lists, timelines, stats, progress, tabs — drawn from JSON in a ```ui fence, or read straight off a tool's JSON output.",
+    registry: "generative-view",
+    registryDependencies: ["collapsible", "tabs", "diff-stat"],
+    preview: { name: "generative-view-example", node: <GenerativeViewExample /> },
+    usage: `import { GenerativeView } from "@/components/ui/generative-view"
+import { parseViewSpec } from "@/lib/generative-view"
+
+export function View({ json }: { json: string }) {
+  const parsed = parseViewSpec(json)
+  return parsed.ok ? <GenerativeView view={parsed.view} /> : null
+}`,
+    examples: [
+      {
+        title: "In an answer",
+        description: (
+          <>
+            <DocsCode>MessageMarkdown</DocsCode> draws every{" "}
+            <DocsCode>```ui</DocsCode> fence as a view. While the fence streams
+            it holds a placeholder; JSON that still does not parse once it
+            closes shows the reason above its source.
+          </>
+        ),
+        example: {
+          name: "generative-view-markdown-example",
+          node: <GenerativeViewMarkdownExample />,
+        },
+      },
+      {
+        title: "From a tool’s JSON",
+        description: (
+          <>
+            A tool row whose output is JSON — an MCP server,{" "}
+            <DocsCode>gh … --json</DocsCode>, newline-delimited query output —
+            is drawn by <DocsCode>jsonToView</DocsCode>, which reads the shape
+            of the data (an id, a title, a status, a person, a time, a url) and
+            nothing about the service. The raw output stays one click away.
+          </>
+        ),
+        example: {
+          name: "generative-view-json-example",
+          node: <GenerativeViewJsonExample />,
+        },
+      },
+      {
+        title: "Teaching an agent the vocabulary",
+        description: (
+          <>
+            <DocsCode>VIEW_SPEC_PROMPT</DocsCode> is the whole vocabulary in
+            about two hundred tokens. Send it as standing context — a system
+            prompt, or the first turn of a resumed CLI session — so it costs
+            once per conversation, not once per turn.
+          </>
+        ),
+        code: {
+          code: `import { VIEW_SPEC_PROMPT } from "@/lib/generative-view"
+
+const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
+          lang: "ts",
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Data, never code",
+        description: (
+          <>
+            A spec cannot run, style itself, or reach past the listed blocks,
+            so it renders straight from a model&rsquo;s answer without a
+            sandbox. Everything is normalized: unknown keys dropped, text and
+            lists capped, depth and size bounded, links held to{" "}
+            <DocsCode>http(s):</DocsCode> and <DocsCode>mailto:</DocsCode>. A
+            block the vocabulary lacks shows as a visible “Unsupported block”
+            marker instead of vanishing.
+          </>
+        ),
+      },
+    ],
+    props: [
+      {
+        caption: "GenerativeView",
+        rows: [
+          {
+            name: "view",
+            type: "ViewSpec",
+            required: true,
+            description: (
+              <>
+                Normalized blocks, from <DocsCode>parseViewSpec</DocsCode> (a
+                fence&rsquo;s text), <DocsCode>normalizeView</DocsCode> (any
+                JSON value) or <DocsCode>jsonToView</DocsCode> (a tool&rsquo;s
+                output). Memoized on identity — keep it stable.
+              </>
+            ),
+          },
+          {
+            name: "classNames",
+            type: "Partial<Record<GenerativeViewSlot, string>>",
+            description:
+              "Per-part overrides — root, card, section, table, fields, list, timeline, stats, badge — applied to every block of that kind in the tree.",
+          },
+        ],
+      },
+      {
+        caption: "GenerativeViewBlock",
+        rows: [
+          {
+            name: "code",
+            type: "string",
+            required: true,
+            description: "The fence body: JSON for one node or an array of them.",
+          },
+          {
+            name: "isIncomplete",
+            type: "boolean",
+            default: "false",
+            description:
+              "The fence is still streaming: unparseable JSON shows a placeholder instead of an error.",
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "generative-view",
+      "generative-view-card",
+      "generative-view-card-header",
+      "generative-view-card-body",
+      "generative-view-section",
+      "generative-view-section-trigger",
+      "generative-view-row",
+      "generative-view-tabs",
+      "generative-view-text",
+      "generative-view-badge",
+      "generative-view-link",
+      "generative-view-divider",
+      "generative-view-fields",
+      "generative-view-table",
+      "generative-view-table-more",
+      "generative-view-list",
+      "generative-view-timeline",
+      "generative-view-stats",
+      "generative-view-stat",
+      "generative-view-progress",
+      "generative-view-code",
+      "generative-view-unknown",
+      "generative-view-pending",
+      "generative-view-error",
+    ],
+  },
   "message-markdown": {
     title: "Message Markdown",
     description:
@@ -2033,6 +2187,18 @@ export function Answer({ text }: { text: string }) {
                 there, with a sanitized copy of the rendered HTML beside it for
                 rich-paste targets. Set it false to hand the clipboard back to
                 the browser.
+              </>
+            ),
+          },
+          {
+            name: "views",
+            type: "boolean",
+            default: "true",
+            description: (
+              <>
+                Draws a <DocsCode>```ui</DocsCode> fence as a{" "}
+                <Link href="/docs/components/generative-view">Generative View</Link>{" "}
+                instead of printing its JSON. Off, it is an ordinary code block.
               </>
             ),
           },

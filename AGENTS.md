@@ -6,7 +6,7 @@
 
 A shadcn/ui **registry** of agent-grade chat primitives (composer, message list with reasoning /
 tool calls / artifacts, streaming markdown, DnD session sidebar, model & mode pickers,
-ask-question, change-summary), plus its docs site (`/docs`), landing (`/`), and a mock-agent
+ask-question, change-summary, generative views), plus its docs site (`/docs`), landing (`/`), and a mock-agent
 playground (`/demo`). Components are distributed by copying — consumers install them via
 `npx shadcn add miskibin/chat-components/<item>`.
 

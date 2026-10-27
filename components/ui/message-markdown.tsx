@@ -8,6 +8,7 @@ import {
   defaultRehypePlugins,
   defaultRemarkPlugins,
   type BlockProps,
+  type CustomRendererProps,
 } from "streamdown"
 import { code } from "@streamdown/code"
 import { mermaid } from "@streamdown/mermaid"
@@ -20,6 +21,7 @@ import {
   type FileActionItem,
 } from "@/components/ui/change-summary"
 import { FileIcon } from "@/components/ui/file-icon"
+import { GenerativeViewBlock } from "@/components/ui/generative-view"
 import { RenderErrorBoundary } from "@/components/ui/render-error-boundary"
 import { markdownClipboardPayload } from "@/lib/markdown-clipboard"
 import {
@@ -27,6 +29,7 @@ import {
   parseMarkdownFileLink,
   type FilePathPosition,
 } from "@/lib/markdown-file-paths"
+import { VIEW_FENCE_LANGUAGE } from "@/lib/generative-view"
 import { remarkGithubAlerts } from "@/lib/markdown-github-alerts"
 import { remarkNormalizeListItemIndentation } from "@/lib/markdown-list-indentation"
 import { isContinuation, nextRevealLength } from "@/lib/stream-pacing"
@@ -36,7 +39,18 @@ const math = createMathPlugin({
   singleDollarTextMath: true,
 })
 
-const plugins = { code, mermaid, math }
+/**
+ * A ` ```ui ` fence is a view, not code: its JSON is drawn by
+ * `GenerativeViewBlock` from a closed vocabulary of display blocks. Module
+ * scope, like every renderer here — Streamdown compares them by reference.
+ */
+function ViewFence({ code: source, isIncomplete }: CustomRendererProps) {
+  return <GenerativeViewBlock code={source} isIncomplete={isIncomplete} />
+}
+
+const viewRenderers = [{ language: VIEW_FENCE_LANGUAGE, component: ViewFence }]
+const plugins = { code, mermaid, math, renderers: viewRenderers }
+const pluginsWithoutViews = { code, mermaid, math }
 
 type RehypePlugins = React.ComponentProps<typeof Streamdown>["rehypePlugins"]
 type RehypePlugin = NonNullable<RehypePlugins>[number]
@@ -207,6 +221,13 @@ export type MessageMarkdownProps = {
    * @default true
    */
   copyAsMarkdown?: boolean
+  /**
+   * Draws a ` ```ui ` fence as a view (`GenerativeView`) instead of showing
+   * its JSON. Off, the fence is an ordinary code block.
+   *
+   * @default true
+   */
+  views?: boolean
 }
 
 type FileRefContextValue = {
@@ -609,6 +630,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
   onFileClick,
   fileActions,
   copyAsMarkdown = true,
+  views = true,
 }: MessageMarkdownProps) {
   const paced = streaming === "paced"
   const { text: visibleText, settling } = usePacedText(
@@ -761,7 +783,7 @@ export const MessageMarkdown = React.memo(function MessageMarkdown({
       <FileRefContext.Provider value={fileRefs}>
         <Streamdown
           className={cn("lc-markdown max-w-none", className)}
-          plugins={plugins}
+          plugins={views ? plugins : pluginsWithoutViews}
           rehypePlugins={rehypePlugins}
           remarkPlugins={remarkPlugins}
           BlockComponent={IsolatedBlock}
