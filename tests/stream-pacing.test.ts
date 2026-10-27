@@ -2,9 +2,12 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import {
+  DEFAULT_SENTENCE_PACING,
   DEFAULT_STREAM_PACING,
   isContinuation,
   nextRevealLength,
+  nextSentenceEnd,
+  nextSentenceReveal,
 } from "@/lib/stream-pacing"
 
 const words = (count: number) =>
@@ -67,4 +70,66 @@ test("continuation is growth from the same prefix only", () => {
   assert.equal(isContinuation("abc", "abc"), true)
   assert.equal(isContinuation("abc", "abX"), false)
   assert.equal(isContinuation("abc", "ab"), false)
+})
+
+const P = DEFAULT_SENTENCE_PACING
+
+test("sentences: reveals one whole sentence per step, at the cadence", () => {
+  const text = "First one here. Second one! Third? Tail being writ"
+  assert.equal(nextSentenceReveal(text, 0, P.sentenceMs - 1, true), 0)
+  const one = nextSentenceReveal(text, 0, P.sentenceMs, true)
+  assert.equal(text.slice(0, one), "First one here.")
+  const two = nextSentenceReveal(text, one, P.sentenceMs, true)
+  assert.equal(text.slice(0, two), "First one here. Second one!")
+  const three = nextSentenceReveal(text, two, P.sentenceMs, true)
+  assert.equal(text.slice(0, three), "First one here. Second one! Third?")
+  // The unfinished tail waits…
+  assert.equal(nextSentenceReveal(text, three, P.sentenceMs, true), three)
+  // …until it has held long enough, then its finished words show.
+  const words = nextSentenceReveal(text, three, P.holdMs, true)
+  assert.equal(text.slice(0, words), "First one here. Second one! Third? Tail being")
+})
+
+test("sentences: a line is a sentence — code and lists arrive line by line", () => {
+  const text = "```ts\nconst a = 1\nconst b = 2\n"
+  const one = nextSentenceReveal(text, 0, P.sentenceMs, true)
+  assert.equal(text.slice(0, one), "```ts\n")
+  assert.equal(text.slice(0, nextSentenceReveal(text, one, P.sentenceMs, true)), "```ts\nconst a = 1\n")
+})
+
+test("sentences: a terminator counts only once what follows has arrived", () => {
+  assert.equal(nextSentenceEnd("Pi is 3.", 0), -1)
+  assert.equal(nextSentenceEnd("Pi is 3.14 ok. Next", 0), "Pi is 3.14 ok.".length)
+})
+
+test("sentences: a numbered list marker is not a sentence", () => {
+  const text = "1. Install it. 2. Run"
+  assert.equal(text.slice(0, nextSentenceEnd(text, 0)), "1. Install it.")
+  assert.equal(nextSentenceEnd("  12. item text", 0), -1)
+})
+
+test("sentences: far behind, every complete sentence goes at once", () => {
+  const text = "Short sentence here. ".repeat(60) + "tail"
+  const next = nextSentenceReveal(text, 0, P.sentenceMs, true)
+  assert.equal(next, text.length - "tail".length - 1)
+})
+
+test("sentences: a long unfinished sentence does not stall the screen", () => {
+  const text = "word ".repeat(80)
+  const next = nextSentenceReveal(text.trimEnd() + "x", 0, P.sentenceMs, true)
+  assert.ok(next > 0 && next < text.length)
+})
+
+test("sentences: once the stream ends the rest drains, faster", () => {
+  const text = "One. Two. Three"
+  assert.equal(nextSentenceReveal(text, 0, P.settleSentenceMs, true), 0)
+  const one = nextSentenceReveal(text, 0, P.settleSentenceMs, false)
+  assert.equal(text.slice(0, one), "One.")
+  assert.equal(nextSentenceReveal(text, "One. Two.".length, P.settleSentenceMs, false), text.length)
+})
+
+test("sentences: never moves backwards or past the end", () => {
+  const text = "Done."
+  assert.equal(nextSentenceReveal(text, text.length, 10_000, true), text.length)
+  assert.equal(nextSentenceReveal(text, 2, 0, false), 2)
 })

@@ -2331,9 +2331,11 @@ export function Answer({ text }: { text: string }) {
         description: (
           <>
             The same bursty stream — a dozen words, a pause, three words — twice.
-            Paced, the bursts are spread into a steady word-by-word reveal that
-            stays within a few hundred milliseconds of the stream; instant, they
-            land as lumps. The pacing curve is{" "}
+            Paced, it lands a whole sentence (or line) at a time, each one
+            washing in word by word, and the screen holds still in between; a
+            sentence still being written shows its words after a moment rather
+            than stalling. Instant, the bursts land as lumps. The rules are{" "}
+            <DocsCode>nextSentenceReveal</DocsCode> in{" "}
             <DocsCode>lib/stream-pacing.ts</DocsCode>, pure and unit-tested.
           </>
         ),
