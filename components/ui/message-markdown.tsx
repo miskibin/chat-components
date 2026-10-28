@@ -46,11 +46,14 @@ const math = createMathPlugin({
  */
 function ViewFence({ code: source, isIncomplete }: CustomRendererProps) {
   const onAction = React.useContext(ViewActionContext)
+  const { onFileClick, fileActions } = React.useContext(FileRefContext)
   return (
     <GenerativeViewBlock
       code={source}
       isIncomplete={isIncomplete}
       onAction={onAction}
+      onFileClick={onFileClick ?? undefined}
+      fileActions={fileActions}
     />
   )
 }

@@ -23,6 +23,7 @@ import { FileTreeExample } from "@/components/examples/file-tree-example"
 import { FileTreeLazyExample } from "@/components/examples/file-tree-lazy-example"
 import { GenerativeViewActionsExample } from "@/components/examples/generative-view-actions-example"
 import { GenerativeViewExample } from "@/components/examples/generative-view-example"
+import { GenerativeViewInlineExample } from "@/components/examples/generative-view-inline-example"
 import { GenerativeViewJsonExample } from "@/components/examples/generative-view-json-example"
 import { GenerativeViewMarkdownExample } from "@/components/examples/generative-view-markdown-example"
 import { GenerativeViewStreamingExample } from "@/components/examples/generative-view-streaming-example"
@@ -1996,7 +1997,13 @@ export function Thread() {
     description:
       "UI an agent composes rather than one you wrote for it: a closed vocabulary of blocks — cards, fields, tables, lists, timelines, stats, progress, tabs, buttons and forms — drawn from JSON in a ```ui fence as it streams, or read straight off a tool's JSON output.",
     registry: "generative-view",
-    registryDependencies: ["collapsible", "tabs", "diff-stat"],
+    registryDependencies: [
+      "collapsible",
+      "tabs",
+      "diff-stat",
+      "file-icon",
+      "change-summary",
+    ],
     preview: { name: "generative-view-example", node: <GenerativeViewExample /> },
     usage: `import { GenerativeView } from "@/components/ui/generative-view"
 import { parseViewSpec } from "@/lib/generative-view"
@@ -2033,6 +2040,29 @@ export function View({ json }: { json: string }) {
         example: {
           name: "generative-view-streaming-example",
           node: <GenerativeViewStreamingExample />,
+        },
+      },
+      {
+        title: "Inline markdown and cited files",
+        description: (
+          <>
+            Every string reads the way the same sentence would in the answer
+            around it: <DocsCode>`code`</DocsCode>,{" "}
+            <DocsCode>**bold**</DocsCode>, <DocsCode>*em*</DocsCode> and safe
+            links. A file it cites — in
+            backticks or bare, <DocsCode>src/app.ts:42</DocsCode> or a list
+            like <DocsCode>expiry.py:32,48,79</DocsCode> — becomes a chip that
+            hands the path and its first line to{" "}
+            <DocsCode>onFileClick</DocsCode>. A bare word needs a separator or
+            a line to count, so prose like <DocsCode>Node.js</DocsCode> stays
+            prose. <DocsCode>MessageMarkdown</DocsCode> passes its own{" "}
+            <DocsCode>onFileClick</DocsCode> and{" "}
+            <DocsCode>fileActions</DocsCode> through to every fence.
+          </>
+        ),
+        example: {
+          name: "generative-view-inline-example",
+          node: <GenerativeViewInlineExample />,
         },
       },
       {
@@ -2145,6 +2175,18 @@ const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
             description:
               "The view is still streaming: actions are drawn but not clickable, so nothing half-written can be sent.",
           },
+          {
+            name: "onFileClick",
+            type: "(path: string, line?: number) => void",
+            description:
+              "Makes every file a string cites a button. The path arrives without its :line suffix; the first line it named arrives beside it. Keep it stable.",
+          },
+          {
+            name: "fileActions",
+            type: "FileActionItem[]",
+            description:
+              "Right-click menu for every cited file, the same one MessageMarkdown uses. Keep the array stable.",
+          },
         ],
       },
       {
@@ -2168,6 +2210,11 @@ const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
             type: "(action: ViewAction) => void",
             description: "Forwarded to GenerativeView.",
           },
+          {
+            name: "onFileClick / fileActions",
+            type: "see GenerativeView",
+            description: "Forwarded to GenerativeView.",
+          },
         ],
       },
     ],
@@ -2183,6 +2230,8 @@ const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
       "generative-view-text",
       "generative-view-badge",
       "generative-view-link",
+      "generative-view-inline-code",
+      "generative-view-file",
       "generative-view-divider",
       "generative-view-fields",
       "generative-view-table",

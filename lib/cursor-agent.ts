@@ -2,6 +2,7 @@ import "server-only"
 
 import { execFile, spawn, type ChildProcess } from "child_process"
 import { createHash, type Hash } from "crypto"
+import { join } from "path"
 import { createInterface } from "readline"
 
 import { resolveAgentCommand } from "@/lib/agent-runtime"
@@ -694,6 +695,17 @@ function* finishOpenTools(
  * Windows has no process groups to signal; `taskkill /T /F` walks the tree
  * instead.
  */
+
+/**
+ * `taskkill` by absolute path, not by a PATH lookup: a folder earlier on PATH
+ * could otherwise supply a `taskkill.exe` of its own to a process that runs
+ * on every turn's end.
+ */
+const TASKKILL = join(
+  process.env.SystemRoot ?? "C:\\Windows",
+  "System32",
+  "taskkill.exe"
+)
 const DETACH_CHILDREN = process.platform !== "win32"
 
 /** How long the group gets to unwind on SIGTERM before SIGKILL. */
@@ -708,10 +720,18 @@ function killAgent(child: ChildProcess) {
   killing.add(child)
 
   if (!DETACH_CHILDREN) {
-    execFile("taskkill", ["/T", "/F", "/PID", String(child.pid)], () => {
-      // Best effort: the tree may already be gone, and there is nothing left
-      // to report it to.
-    })
+    // `windowsHide`: from a console-less parent (the desktop sidecar)
+    // taskkill would otherwise open a console window of its own, which
+    // takes the foreground from whatever app the user is in.
+    execFile(
+      /*turbopackIgnore: true*/ TASKKILL,
+      ["/T", "/F", "/PID", String(child.pid)],
+      { windowsHide: true },
+      () => {
+        // Best effort: the tree may already be gone, and there is nothing left
+        // to report it to.
+      }
+    )
     return
   }
 

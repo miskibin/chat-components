@@ -68,6 +68,7 @@ eachPath("refuses routes, prose and URLs", [
   ["mailto:someone@example.com", null],
   ["", null],
   ["two words.ts", null],
+  ["RunExpiry._closing", null],
 ])
 
 eachPath("keeps POSIX roots that name a filesystem", [

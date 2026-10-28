@@ -9,6 +9,7 @@ import {
   parseViewSpec,
   safeHref,
   toneForStatus,
+  viewTextRuns,
   type ViewNode,
 } from "@/lib/generative-view"
 
@@ -281,5 +282,57 @@ describe("actions", () => {
         "- Mark WIP: no",
       ].join("\n")
     )
+  })
+})
+
+describe("viewTextRuns", () => {
+  it("reads code spans, emphasis and safe links", () => {
+    assert.deepEqual(viewTextRuns("run `npm test` **now**, *then* [docs](https://x.dev)"), [
+      { type: "text", text: "run " },
+      { type: "code", text: "npm test" },
+      { type: "text", text: " " },
+      { type: "strong", text: "now" },
+      { type: "text", text: ", " },
+      { type: "em", text: "then" },
+      { type: "text", text: " " },
+      { type: "link", label: "docs", href: "https://x.dev" },
+    ])
+  })
+
+  it("keeps an unsafe link as its label", () => {
+    assert.deepEqual(viewTextRuns("[x](javascript:alert)"), [
+      { type: "text", text: "x" },
+    ])
+    assert.deepEqual(viewTextRuns("[x](mailto:a@b.c)"), [
+      { type: "link", label: "x", href: "mailto:a@b.c" },
+    ])
+  })
+
+  it("lifts cited files out of code spans and prose, first line of a list", () => {
+    assert.deepEqual(
+      viewTextRuns("`_closing` (src/app/expiry.py:32,48,79) see `lib/x.ts:12`."),
+      [
+        { type: "code", text: "_closing" },
+        { type: "text", text: " (" },
+        {
+          type: "file",
+          text: "src/app/expiry.py:32,48,79",
+          path: "src/app/expiry.py",
+          line: 32,
+        },
+        { type: "text", text: ") see " },
+        { type: "file", text: "lib/x.ts:12", path: "lib/x.ts", line: 12 },
+        { type: "text", text: "." },
+      ]
+    )
+  })
+
+  it("leaves ordinary prose and identifiers alone", () => {
+    assert.deepEqual(viewTextRuns("`RunExpiry._closing`"), [
+      { type: "code", text: "RunExpiry._closing" },
+    ])
+    for (const text of ["e.g. Node.js and/or", "snake_case_name", "a * b * c"]) {
+      assert.deepEqual(viewTextRuns(text), [{ type: "text", text }])
+    }
   })
 })

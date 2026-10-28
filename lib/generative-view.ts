@@ -18,6 +18,12 @@
  * Framework-free on purpose, so `node --test` can load it.
  */
 
+import {
+  inlineCodeFileReference,
+  parseMarkdownFileLink,
+  type FilePathPosition,
+} from "@/lib/markdown-file-paths"
+
 export type ViewTone = "neutral" | "info" | "success" | "warning" | "danger"
 
 export type ViewBadge = { type: "badge"; label: string; tone: ViewTone }
@@ -1084,4 +1090,99 @@ export function jsonToView(output: string | undefined): ViewSpec | undefined {
   }
   const card = recordCard(value, 0)
   return card.length ? card : undefined
+}
+
+/* -------------------------------------------------------- inline text -- */
+
+/**
+ * One run of a view string once its inline markdown has been read. A view is
+ * still data: these are the only shapes a string can turn into, links keep the
+ * `safeHref` rule, and a file is only ever handed to the host to open.
+ */
+export type ViewTextRun =
+  | { type: "text"; text: string }
+  | { type: "code"; text: string }
+  | { type: "strong"; text: string }
+  | { type: "em"; text: string }
+  | { type: "link"; label: string; href: string }
+  | ({ type: "file"; text: string } & FilePathPosition)
+
+const INLINE_MARK_RE =
+  /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\[([^\]\n]+)\]\(([^)\s]+)\)|(?<![\w*])\*(?=\S)([^*\n]+?)\*(?![\w*])|(?<![\w_])_(?=\S)([^_\n]+?)_(?![\w_])/g
+
+/** `expiry.py:32,48,79` cites several lines; the first is the one to open. */
+const LINE_LIST_RE = /(:\d+)(?:,\s?\d+)+$/
+const BARE_PATH_RE = /[^\s()[\]{}<>"'`,;]+/g
+const TRAILING_PUNCT_RE = /[.:!?]+$/
+
+/** The file a code span or a bare word names, accepting a list of lines. */
+function fileReference(text: string): FilePathPosition | null {
+  return inlineCodeFileReference(text.replace(LINE_LIST_RE, "$1"))
+}
+
+/**
+ * Plain prose, with the paths in it lifted out. Stricter than a code span: a
+ * bare word needs a separator or a `:line` to count, so `e.g.` or `Node.js`
+ * in a sentence stays a word.
+ */
+function pushProse(runs: ViewTextRun[], text: string) {
+  let last = 0
+  for (const match of text.matchAll(BARE_PATH_RE)) {
+    const word = match[0].replace(TRAILING_PUNCT_RE, "")
+    // A list of lines may run on past a `,` the word pattern stops at.
+    const start = match.index
+    let end = start + word.length
+    let candidate = word
+    if (/:\d+$/.test(word)) {
+      const more = /^(?:,\s?\d+)+/.exec(text.slice(end))
+      if (more) {
+        candidate += more[0]
+        end += more[0].length
+      }
+    }
+    if (!/[\\/]/.test(candidate) && !/:\d+/.test(candidate)) continue
+    const file = fileReference(candidate)
+    if (!file) continue
+    if (start > last) runs.push({ type: "text", text: text.slice(last, start) })
+    runs.push({ type: "file", text: candidate, ...file })
+    last = end
+  }
+  if (last < text.length) runs.push({ type: "text", text: text.slice(last) })
+}
+
+/**
+ * Reads the inline markdown a model writes without thinking about it —
+ * `` `code` ``, `**bold**`, `*em*`, `[label](url)` — plus the file paths it
+ * cites, so a view string reads the way the same sentence would in the answer
+ * around it. Nesting is not supported: a run is one mark deep.
+ */
+export function viewTextRuns(text: string): ViewTextRun[] {
+  const runs: ViewTextRun[] = []
+  let last = 0
+  for (const match of text.matchAll(INLINE_MARK_RE)) {
+    const [whole, code, strong, strongAlt, label, href, em, emAlt] = match
+    let run: ViewTextRun | undefined
+    if (code !== undefined) {
+      const file = fileReference(code)
+      run = file
+        ? { type: "file", text: code, ...file }
+        : { type: "code", text: code }
+    } else if (strong !== undefined || strongAlt !== undefined) {
+      run = { type: "strong", text: (strong ?? strongAlt)! }
+    } else if (label !== undefined && href !== undefined) {
+      const url = safeHref(href)
+      const file = url ? null : parseMarkdownFileLink(href)
+      if (url) run = { type: "link", label, href: url }
+      else if (file) run = { type: "file", text: label, ...file }
+      else run = { type: "text", text: label }
+    } else if (em !== undefined || emAlt !== undefined) {
+      run = { type: "em", text: (em ?? emAlt)! }
+    }
+    if (!run) continue
+    if (match.index > last) pushProse(runs, text.slice(last, match.index))
+    runs.push(run)
+    last = match.index + whole.length
+  }
+  if (last < text.length) pushProse(runs, text.slice(last))
+  return runs
 }

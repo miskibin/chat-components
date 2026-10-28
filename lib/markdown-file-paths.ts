@@ -22,7 +22,8 @@ const POSITION_HASH_RE = /^#L(\d+)(?:C(\d+))?$/i
 const POSITION_ONLY_RE = /^\d+(?::\d+)?$/
 const INLINE_CODE_DISQUALIFIER_RE = /[\s`]/
 const PATH_SEPARATOR_RE = /[\\/]/
-const FILE_EXTENSION_RE = /\.[A-Za-z0-9_-]+$/
+/** An extension starts with a letter or digit: `RunExpiry._closing` is a member. */
+const FILE_EXTENSION_RE = /\.[A-Za-z0-9][A-Za-z0-9_-]*$/
 const NUMERIC_DOTTED_RE = /^\d+(?:\.\d+)+$/
 /** One path, no spaces — segments of word characters, dots, dashes and `@`. */
 const PATH_SHAPE_RE = /^(?:[A-Za-z]:)?[\w@.+~-]*(?:[\\/][\w@.+ -]*[\w@.+-])*[\\/]?$/
