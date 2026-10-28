@@ -708,10 +708,18 @@ function killAgent(child: ChildProcess) {
   killing.add(child)
 
   if (!DETACH_CHILDREN) {
-    execFile("taskkill", ["/T", "/F", "/PID", String(child.pid)], () => {
-      // Best effort: the tree may already be gone, and there is nothing left
-      // to report it to.
-    })
+    // `windowsHide`: from a console-less parent (the desktop sidecar)
+    // taskkill would otherwise open a console window of its own, which
+    // takes the foreground from whatever app the user is in.
+    execFile(
+      "taskkill",
+      ["/T", "/F", "/PID", String(child.pid)],
+      { windowsHide: true },
+      () => {
+        // Best effort: the tree may already be gone, and there is nothing left
+        // to report it to.
+      }
+    )
     return
   }
 
