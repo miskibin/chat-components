@@ -14,6 +14,7 @@ import { ModelPickerDisabledExample } from "@/components/examples/model-picker-d
 import { ModelPickerEffortsExample } from "@/components/examples/model-picker-efforts-example"
 import { ModelPickerExample } from "@/components/examples/model-picker-example"
 import { ModelPickerGroupsExample } from "@/components/examples/model-picker-groups-example"
+import { ModelPickerIconsExample } from "@/components/examples/model-picker-icons-example"
 import { ModelPickerSearchExample } from "@/components/examples/model-picker-search-example"
 import { ModelPickerStyledExample } from "@/components/examples/model-picker-styled-example"
 import { ThemeToggleExample } from "@/components/examples/theme-toggle-example"
@@ -379,6 +380,12 @@ export function Picker() {
             description: "Short tag after the name — the provider, usually.",
           },
           {
+            name: "icon",
+            type: "ReactNode",
+            description:
+              "Leading mark on the row and, while selected, on the trigger — the model family's logo, usually. Sized to 3.5 by the picker.",
+          },
+          {
             name: "description",
             type: "string",
             description: "Row tooltip, and a search keyword.",
@@ -454,6 +461,7 @@ export function Picker() {
     ],
     dataSlots: [
       "model-picker-trigger",
+      "model-picker-trigger-icon",
       "model-picker-trigger-effort",
       "model-picker-content",
       "model-picker-section",
@@ -463,6 +471,7 @@ export function Picker() {
       "model-picker-group",
       "model-picker-group-heading",
       "model-picker-item",
+      "model-picker-item-icon",
       "model-picker-badge",
       "model-picker-meta",
       "model-picker-effort",
@@ -515,6 +524,21 @@ export function Picker() {
         example: {
           name: "model-picker-groups-example",
           node: <ModelPickerGroupsExample />,
+        },
+      },
+      {
+        title: "A mark per model",
+        description: (
+          <>
+            <DocsCode>icon</DocsCode> leads each row and follows the pick onto
+            the trigger. Resolve it from the id rather than the source, so a
+            Qwen served by OpenRouter and one pulled into Ollama carry the
+            same mark. Rows without one keep their text aligned with the rest.
+          </>
+        ),
+        example: {
+          name: "model-picker-icons-example",
+          node: <ModelPickerIconsExample />,
         },
       },
       {
