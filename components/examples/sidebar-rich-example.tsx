@@ -67,6 +67,7 @@ export function SidebarRichExample() {
         items={items}
         activeId={activeId}
         draggable={false}
+        itemClassName="[contain-intrinsic-size:auto_78px]"
         onSelect={setActiveId}
         onRename={(id, title) =>
           setItems((prev) =>
@@ -79,7 +80,16 @@ export function SidebarRichExample() {
           )
         }
         renderContent={(item) =>
-          item.id === "indexing" ? (
+          item.id === "release" ? (
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
+              <span className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                <span className="truncate">chat-components</span>
+                <span className="shrink-0">{item.meta}</span>
+              </span>
+              <span className="truncate font-semibold">{item.title}</span>
+              <span className="text-[11px] text-muted-foreground">main</span>
+            </span>
+          ) : item.id === "indexing" ? (
             <span className="flex min-w-0 flex-1 flex-col gap-1.5">
               <span className="flex min-w-0 items-center gap-2">
                 <SidebarItemStatusDot status="pending" />
