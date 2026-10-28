@@ -30,6 +30,11 @@ export type ModelOption = {
   meta?: string
   disabled?: boolean
   disabledReason?: string
+  /**
+   * Small leading mark on the row and, once picked, on the trigger — the
+   * model family's logo, usually. Sized to 3.5 by the picker.
+   */
+  icon?: React.ReactNode
   /** Id of the ModelPickerGroup this model belongs to. */
   group?: string
   /**
@@ -181,6 +186,9 @@ export function ModelPicker({
             className
           )}
         >
+          {current?.icon ? (
+            <ModelIcon slot="model-picker-trigger-icon">{current.icon}</ModelIcon>
+          ) : null}
           <span className="truncate">{current?.name ?? placeholder}</span>
           {currentEffort ? (
             <span
@@ -311,6 +319,10 @@ function ModelList({
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   // No groups is the common case and stays a flat list, byte for byte as before.
+  // Once any row carries a mark, the rest keep its slot so every name starts
+  // at the same edge.
+  const iconGutter = options.some((option) => option.icon != null)
+
   const sections = React.useMemo(
     () => (groups && groups.length > 0 ? sectionize(options, groups) : null),
     [options, groups]
@@ -340,6 +352,7 @@ function ModelList({
                     key={model.id}
                     model={model}
                     selected={model.id === selectedId}
+                    iconGutter={iconGutter}
                     onPick={onPick}
                   />
                 ))}
@@ -350,6 +363,7 @@ function ModelList({
                 key={model.id}
                 model={model}
                 selected={model.id === selectedId}
+                iconGutter={iconGutter}
                 onPick={onPick}
               />
             ))}
@@ -402,6 +416,7 @@ function ModelList({
                       key={model.id}
                       model={model}
                       selected={model.id === selectedId}
+                      iconGutter={iconGutter}
                       onPick={onPick}
                     />
                   ))}
@@ -413,6 +428,7 @@ function ModelList({
                 key={model.id}
                 model={model}
                 selected={model.id === selectedId}
+                iconGutter={iconGutter}
                 onPick={onPick}
               />
             ))}
@@ -487,10 +503,16 @@ function GroupHeading({
 type ModelItemProps = {
   model: ModelOption
   selected: boolean
+  iconGutter: boolean
   onPick: (option: ModelOption) => void
 }
 
-function ModelMenuItem({ model, selected, onPick }: ModelItemProps) {
+function ModelMenuItem({
+  model,
+  selected,
+  iconGutter,
+  onPick,
+}: ModelItemProps) {
   return (
     <DropdownMenuItem
       data-slot="model-picker-item"
@@ -501,12 +523,17 @@ function ModelMenuItem({ model, selected, onPick }: ModelItemProps) {
       onSelect={() => onPick(model)}
       className="gap-2 py-1.5 text-[13px]"
     >
-      <ModelRow model={model} selected={selected} />
+      <ModelRow model={model} selected={selected} iconGutter={iconGutter} />
     </DropdownMenuItem>
   )
 }
 
-function ModelCommandItem({ model, selected, onPick }: ModelItemProps) {
+function ModelCommandItem({
+  model,
+  selected,
+  iconGutter,
+  onPick,
+}: ModelItemProps) {
   return (
     <CommandItem
       data-slot="model-picker-item"
@@ -516,7 +543,7 @@ function ModelCommandItem({ model, selected, onPick }: ModelItemProps) {
       onSelect={() => onPick(model)}
       className="gap-2 py-1.5 text-[13px]"
     >
-      <ModelRow model={model} selected={selected} />
+      <ModelRow model={model} selected={selected} iconGutter={iconGutter} />
     </CommandItem>
   )
 }
@@ -575,12 +602,17 @@ function nameRank(name: string, word: string): number | null {
 function ModelRow({
   model,
   selected,
+  iconGutter,
 }: {
   model: ModelOption
   selected: boolean
+  iconGutter: boolean
 }) {
   return (
     <>
+      {iconGutter ? (
+        <ModelIcon slot="model-picker-item-icon">{model.icon}</ModelIcon>
+      ) : null}
       <span className="min-w-0 flex-1 truncate">{model.name}</span>
       {model.badge ? (
         <span
@@ -602,5 +634,24 @@ function ModelRow({
         <Check className="size-3.5 shrink-0" />
       ) : null}
     </>
+  )
+}
+
+/** A fixed 3.5 box, so a mark of any size lines up with the text beside it. */
+function ModelIcon({
+  slot,
+  children,
+}: {
+  slot: string
+  children: React.ReactNode
+}) {
+  return (
+    <span
+      data-slot={slot}
+      aria-hidden="true"
+      className="inline-flex size-3.5 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0"
+    >
+      {children}
+    </span>
   )
 }

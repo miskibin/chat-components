@@ -248,7 +248,7 @@
       "name": "model-picker",
       "type": "registry:ui",
       "title": "Model Picker",
-      "description": "Compact model switcher with 36px phone touch targets that return to its compact desktop size at sm: one row per thing that can change, its current value alongside, choices in a submenu, optional provider sections, and a search field once the model list grows.",
+      "description": "Compact model switcher with 36px phone touch targets that return to its compact desktop size at sm: one row per thing that can change, its current value alongside, choices in a submenu, optional provider sections and per-model marks, and a search field once the model list grows.",
       "dependencies": ["lucide-react"],
       "registryDependencies": ["dropdown-menu", "command"],
       "files": [
