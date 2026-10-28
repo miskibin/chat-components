@@ -1017,7 +1017,10 @@ const items = sessions.map((session) => ({
             <DocsCode>renderContent</DocsCode> replaces the whole body while the
             row keeps its button shell, drag listeners, context menu and
             rename-on-double-click; return <DocsCode>undefined</DocsCode> to let
-            that row fall back to the default body.
+            that row fall back to the default body. The example also uses a
+            three-line card to put the workspace, title and branch in a single
+            row. Use <DocsCode>itemClassName</DocsCode> to tune the intrinsic
+            size when a custom row is taller than the default estimate.
           </>
         ),
         example: {
