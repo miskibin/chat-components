@@ -5,15 +5,21 @@ import { Check, ChevronDown } from "lucide-react"
 import * as React from "react"
 
 import {
+  FileContextMenu,
+  type FileActionItem,
+} from "@/components/ui/change-summary"
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { DiffStat } from "@/components/ui/diff-stat"
+import { FileIcon } from "@/components/ui/file-icon"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   formMessage,
   parseViewSpec,
+  viewTextRuns,
   type ViewAction,
   type ViewInline,
   type ViewItem,
@@ -99,6 +105,17 @@ type ActionContextValue = {
 
 const ActionContext = React.createContext<ActionContextValue>({ pending: false })
 
+type FileRefContextValue = {
+  onFileClick?: (path: string, line?: number) => void
+  fileActions?: FileActionItem[]
+}
+
+/**
+ * What a cited file can do — kept apart from actions, so a path stays
+ * clickable while the rest of the view is still streaming in.
+ */
+const FileRefContext = React.createContext<FileRefContextValue>({})
+
 const controlClassName =
   "w-full min-w-0 rounded-md border border-transparent bg-muted/60 px-2.5 py-1.5 text-[12.5px] transition-colors outline-none placeholder:text-muted-foreground/70 hover:bg-muted focus-visible:border-ring focus-visible:bg-transparent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
 
@@ -149,8 +166,100 @@ function ViewLink({ label, href }: { label: string; href: string }) {
   )
 }
 
+const fileRefClassName =
+  "inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/60 px-1.5 py-0 align-baseline font-mono text-[11.5px] text-foreground/90 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+
+function ViewFileRef({
+  path,
+  line,
+  children,
+}: {
+  path: string
+  line?: number
+  children: React.ReactNode
+}) {
+  const { onFileClick, fileActions } = React.useContext(FileRefContext)
+  const label = (
+    <>
+      <FileIcon path={path} size={12} aria-hidden />
+      {children}
+    </>
+  )
+  // A chip with no click handler is still a right-click target, so it has to
+  // be reachable from the keyboard when it carries a menu.
+  const chip = onFileClick ? (
+    <button
+      type="button"
+      data-slot="generative-view-file"
+      data-path={path}
+      title={path}
+      onClick={() => onFileClick(path, line)}
+      className={cn(
+        fileRefClassName,
+        "cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
+      )}
+    >
+      {label}
+    </button>
+  ) : (
+    <span
+      data-slot="generative-view-file"
+      data-path={path}
+      tabIndex={fileActions?.length ? 0 : undefined}
+      className={fileRefClassName}
+    >
+      {label}
+    </span>
+  )
+  return (
+    <FileContextMenu path={path} actions={fileActions}>
+      {chip}
+    </FileContextMenu>
+  )
+}
+
+/**
+ * A view string as the answer around it would read: inline code, emphasis,
+ * safe links, and the files it cites as chips the host can open.
+ */
+function RichText({ text }: { text: string }) {
+  const runs = React.useMemo(() => viewTextRuns(text), [text])
+  return runs.map((run, index) => {
+    switch (run.type) {
+      case "text":
+        return <React.Fragment key={index}>{run.text}</React.Fragment>
+      case "code":
+        return (
+          <code
+            key={index}
+            data-slot="generative-view-inline-code"
+            className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]"
+          >
+            {run.text}
+          </code>
+        )
+      case "strong":
+        return (
+          <strong key={index} className="font-semibold">
+            {run.text}
+          </strong>
+        )
+      case "em":
+        return <em key={index}>{run.text}</em>
+      case "link":
+        return <ViewLink key={index} label={run.label} href={run.href} />
+      case "file":
+        return (
+          <ViewFileRef key={index} path={run.path} line={run.line}>
+            {run.text}
+          </ViewFileRef>
+        )
+    }
+  })
+}
+
 function Inline({ value }: { value: ViewInline }) {
-  if (typeof value === "string") return <>{value}</>
+  if (typeof value === "string") return <RichText text={value} />
   if (value.type === "badge") return <ViewBadge label={value.label} tone={value.tone} />
   return <ViewLink label={value.label} href={value.href} />
 }
@@ -159,7 +268,9 @@ function ItemTitle({ item }: { item: ViewItem }) {
   return item.href ? (
     <ViewLink label={item.title} href={item.href} />
   ) : (
-    <span>{item.title}</span>
+    <span>
+      <RichText text={item.title} />
+    </span>
   )
 }
 
@@ -193,7 +304,7 @@ function Card({ node }: { node: Extract<ViewNode, { type: "card" }> }) {
             ) : null}
             {node.subtitle ? (
               <div className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
-                {node.subtitle}
+                <RichText text={node.subtitle} />
               </div>
             ) : null}
           </div>
@@ -418,7 +529,7 @@ function List({ node }: { node: Extract<ViewNode, { type: "list" }> }) {
             </div>
             {item.body ? (
               <p className="text-[12px] whitespace-pre-wrap text-muted-foreground">
-                {item.body}
+                <RichText text={item.body} />
               </p>
             ) : null}
           </div>
@@ -458,7 +569,7 @@ function Timeline({ node }: { node: Extract<ViewNode, { type: "timeline" }> }) {
           </div>
           {item.body ? (
             <p className="mt-0.5 text-[12px] whitespace-pre-wrap text-muted-foreground">
-              {item.body}
+              <RichText text={item.body} />
             </p>
           ) : null}
         </li>
@@ -719,7 +830,7 @@ function Block({ node }: { node: ViewNode }) {
             node.tone && TONE_TEXT[node.tone]
           )}
         >
-          {node.text}
+          {node.mono ? node.text : <RichText text={node.text} />}
         </p>
       )
     case "badge":
@@ -802,6 +913,14 @@ export type GenerativeViewProps = Omit<React.ComponentProps<"div">, "children"> 
    * nothing half-written can be sent.
    */
   pending?: boolean
+  /**
+   * Makes a file a string cites — `` `src/app.ts:42` ``, or bare
+   * `src/app.ts:42,57` — a button. The path arrives without its `:line`, and
+   * the (first) line arrives beside it.
+   */
+  onFileClick?: (path: string, line?: number) => void
+  /** Right-click menu for every cited file. Keep the array stable. */
+  fileActions?: FileActionItem[]
 }
 
 /**
@@ -818,30 +937,38 @@ export const GenerativeView = React.memo(function GenerativeView({
   classNames,
   onAction,
   pending = false,
+  onFileClick,
+  fileActions,
   className,
   ...props
 }: GenerativeViewProps) {
   const context = React.useMemo(() => classNames ?? {}, [classNames])
+  const fileRefs = React.useMemo(
+    () => ({ onFileClick, fileActions }),
+    [onFileClick, fileActions]
+  )
   const actions = React.useMemo(
     () => ({ onAction, pending }),
     [onAction, pending]
   )
   return (
     <ActionContext.Provider value={actions}>
-      <ClassNamesContext.Provider value={context}>
-        <div
-          data-slot="generative-view"
-          data-pending={pending || undefined}
-          className={cn(
-            "min-w-0 space-y-3 text-foreground",
-            classNames?.root,
-            className
-          )}
-          {...props}
-        >
-          <Nodes nodes={view} />
-        </div>
-      </ClassNamesContext.Provider>
+      <FileRefContext.Provider value={fileRefs}>
+        <ClassNamesContext.Provider value={context}>
+          <div
+            data-slot="generative-view"
+            data-pending={pending || undefined}
+            className={cn(
+              "min-w-0 space-y-3 text-foreground",
+              classNames?.root,
+              className
+            )}
+            {...props}
+          >
+            <Nodes nodes={view} />
+          </div>
+        </ClassNamesContext.Provider>
+      </FileRefContext.Provider>
     </ActionContext.Provider>
   )
 })
@@ -853,6 +980,10 @@ export type GenerativeViewBlockProps = {
   isIncomplete?: boolean
   /** Forwarded to `GenerativeView`. Keep it stable. */
   onAction?: (action: ViewAction) => void
+  /** Forwarded to `GenerativeView`. Keep it stable. */
+  onFileClick?: (path: string, line?: number) => void
+  /** Forwarded to `GenerativeView`. Keep it stable. */
+  fileActions?: FileActionItem[]
   className?: string
 }
 
@@ -867,6 +998,8 @@ export const GenerativeViewBlock = React.memo(function GenerativeViewBlock({
   code,
   isIncomplete = false,
   onAction,
+  onFileClick,
+  fileActions,
   className,
 }: GenerativeViewBlockProps) {
   const parsed = React.useMemo(
@@ -878,6 +1011,8 @@ export const GenerativeViewBlock = React.memo(function GenerativeViewBlock({
       <GenerativeView
         view={parsed.view}
         onAction={onAction}
+        onFileClick={onFileClick}
+        fileActions={fileActions}
         pending={isIncomplete}
         data-state={isIncomplete ? "streaming" : "done"}
         className={cn("my-3", className)}
