@@ -260,7 +260,7 @@ const DEMO_COMMANDS = [
 const DEMO_SUGGESTIONS: PromptSuggestion[] = [
   {
     id: "streaming",
-    label: "How does streaming work?",
+    label: "Show streaming and an interactive view",
     icon: <Waves />,
   },
   {
@@ -309,6 +309,8 @@ export default function ChatExample() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [chatsOpen, setChatsOpen] = useState(true)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [search, setSearch] = useState("")
   const [sessions, setSessions] = useState<ChatSession[]>(() => [
     {
       id: "1",
@@ -396,13 +398,18 @@ export default function ChatExample() {
     subtitle: sessionSubtitle(session, modelOptions),
     meta: sessionMeta(session, clock, session.id === activeId),
   }))
+  const visibleSessions = sessionItems.filter((item) =>
+    item.title.toLowerCase().includes(search.trim().toLowerCase())
+  )
 
   useEffect(() => {
     let cancelled = false
     fetch("/api/models")
       .then((res) => res.json())
       .then((data: { models?: ModelOption[]; error?: string; mock?: boolean }) => {
-        if (cancelled || !data.models?.length) return
+        if (cancelled) return
+        if (data.error) toast.warning(`Could not load Cursor models: ${data.error}`)
+        if (!data.models?.length) return
         setIsMock(Boolean(data.mock))
         setModelOptions(data.models)
         setSelectedModel((current) =>
@@ -443,7 +450,9 @@ export default function ChatExample() {
   const handleNewChat = () => {
     // Leave other sessions' streams running — the sidebar shows their Working state.
     setMobileNavOpen(false)
-    const id = String(nowMs())
+    const id = crypto.randomUUID()
+    activeIdRef.current = id
+    setPreviewFile(null)
     setSessions((prev) => [
       {
         id,
@@ -465,6 +474,8 @@ export default function ChatExample() {
     // Do not abort — background chats keep streaming and stay labeled Working.
     setMobileNavOpen(false)
     const session = sessions.find((s) => s.id === id)
+    activeIdRef.current = id
+    setPreviewFile(null)
     setActiveId(id)
     const next = session?.messages ?? []
     const crossing = (messages.length === 0) !== (next.length === 0)
@@ -478,9 +489,15 @@ export default function ChatExample() {
     // updater React may run twice has to stay pure, so the three setters are
     // siblings.
     const remaining = sessions.filter((s) => s.id !== id)
-    setSessions((prev) => prev.filter((s) => s.id !== id))
+    const replacement: ChatSession | undefined = remaining.length === 0
+      ? { id: crypto.randomUUID(), title: "New chat", pinned: false, messages: [], updatedAt: nowMs(), folder: DEMO_FOLDER, branch: DEMO_BRANCH }
+      : undefined
+    setSessions((prev) => replacement ? [replacement] : prev.filter((s) => s.id !== id))
     if (activeId === id) {
-      setActiveId(remaining[0]?.id ?? "")
+      const nextId = remaining[0]?.id ?? replacement!.id
+      activeIdRef.current = nextId
+      setActiveId(nextId)
+      setPreviewFile(null)
       setMessages(remaining[0]?.messages ?? [])
     }
   }
@@ -688,16 +705,26 @@ export default function ChatExample() {
     } finally {
       if (abortBySessionRef.current.get(sessionId) === controller) {
         abortBySessionRef.current.delete(sessionId)
+        persistSession(sessionId, (session) =>
+          session.run?.startedAt === started
+            ? { ...session, run: null, updatedAt: nowMs() }
+            : session
+        )
       }
-      persistSession(sessionId, (session) =>
-        session.run?.startedAt === started
-          ? { ...session, run: null, updatedAt: nowMs() }
-          : session
-      )
     }
   }
 
   const handleSend = (payload: ChatInputPayload) => {
+    if (payload.text.trim() === "/help") {
+      const next: MessageData[] = [
+        ...messages,
+        { id: crypto.randomUUID(), sender: "user", content: "/help" },
+        { id: crypto.randomUUID(), sender: "assistant", content: "Try the suggestions to explore streaming, tools and generated views. Use /clear to start this chat over." },
+      ]
+      persistSession(activeId, (session) => ({ ...session, messages: next, updatedAt: nowMs() }))
+      setMessages(next)
+      return
+    }
     if (payload.text.trim() === "/clear") {
       stopSession(activeId)
       persistSession(activeId, (session) => ({
@@ -960,7 +987,7 @@ export default function ChatExample() {
                 </SideIconBtn>
                 <SideIconBtn
                   label="Search"
-                  onClick={() => toast.message("Wire search to your app")}
+                  onClick={() => setSearchOpen((open) => !open)}
                 >
                   <Search className="size-4" />
                 </SideIconBtn>
@@ -973,17 +1000,27 @@ export default function ChatExample() {
                 </SideIconBtn>
                 <SideIconBtn
                   label="Search"
-                  onClick={() => toast.message("Wire search to your app")}
+                  onClick={() => { setCollapsed(false); setSearchOpen(true) }}
                 >
                   <Search className="size-4" />
                 </SideIconBtn>
               </>
             }
           >
+            {searchOpen ? (
+              <input
+                aria-label="Search chats"
+                placeholder="Search chats"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="mx-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              />
+            ) : null}
             <SidebarSessionSection
               open={chatsOpen}
               onToggle={() => setChatsOpen((v) => !v)}
-              sessions={sessionItems}
+              sessions={searchOpen ? visibleSessions : sessionItems}
+              sortable={!searchOpen || !search.trim()}
               activeId={activeId}
               onSelect={selectSession}
               onRename={(id, title) =>
@@ -1065,18 +1102,13 @@ export default function ChatExample() {
                   isGenerating={isGenerating}
                   generationStage={generationStage}
                   generationLabel={generationLabel}
-                  onEditMessage={(id, content) =>
-                    setMessages((prev) => {
-                      const next = prev.map((msg) =>
-                        msg.id === id ? { ...msg, content } : msg
-                      )
-                      persistSession(activeId, (session) => ({
-                        ...session,
-                        messages: next,
-                      }))
-                      return next
-                    })
-                  }
+                  onEditMessage={isGenerating ? undefined : (id, content) => {
+                    const next = messages.map((msg) =>
+                      msg.id === id ? { ...msg, content } : msg
+                    )
+                    persistSession(activeId, (session) => ({ ...session, messages: next }))
+                    setMessages(next)
+                  }}
                   onAskAnswer={handleAskAnswer}
                   onViewAction={(_, action) =>
                     handleSend({ text: action.text, files: [], skills: [] })
@@ -1094,7 +1126,7 @@ export default function ChatExample() {
                     else toast.message("Wire Review to your own diff view")
                   }}
                   renderActions={(message) => {
-                    if (message.sender !== "assistant") return null
+                    if (message.sender !== "assistant" || isGenerating) return null
                     return (
                       <div className="-mt-2 mb-4 flex gap-1 opacity-60 transition-opacity focus-within:opacity-100 hover:opacity-100">
                         <ActionBtn
@@ -1234,6 +1266,7 @@ function SidebarSessionSection({
   onRename,
   onTogglePin,
   onDelete,
+  sortable,
 }: {
   open: boolean
   onToggle: () => void
@@ -1243,6 +1276,7 @@ function SidebarSessionSection({
   onRename: (id: string, title: string) => void
   onTogglePin: (id: string, pinned: boolean) => void
   onDelete: (id: string) => void
+  sortable: boolean
 }) {
   return (
     <SidebarCollapsibleSection
@@ -1255,7 +1289,7 @@ function SidebarSessionSection({
         items={sessions}
         activeId={activeId}
         listId="recent"
-        sortable
+        sortable={sortable}
         emptyState={
           <SidebarEmptyState>New chats appear here.</SidebarEmptyState>
         }
