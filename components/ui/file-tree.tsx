@@ -207,7 +207,15 @@ ${FILE_ICON_COLOR_CSS}
 const ADDED_COLOR = "var(--chat-diff-added, oklch(0.696 0.17 162.48))"
 const REMOVED_COLOR = "var(--chat-diff-removed, oklch(0.637 0.237 25.331))"
 
-/** `add`/`remove` operations that turn `from` into `to`, in one batch. */
+/**
+ * `add`/`remove` operations that turn `from` into `to`, in one batch.
+ *
+ * Removals are recursive, so the batch must name each subtree once: a path
+ * under a directory that is also going was already removed with it, and
+ * naming it again throws "Path does not exist" — which took the whole page
+ * down. A directory row whose files are still listed stays, because the tree
+ * keeps it implicitly and a recursive remove would take those files with it.
+ */
 function treeUpdates(
   from: readonly string[],
   to: readonly string[]
@@ -216,10 +224,25 @@ function treeUpdates(
   const next = new Set(to)
   const updates: FileTreeBatchOperation[] = []
   for (const path of next) if (!previous.has(path)) updates.push({ path, type: "add" })
+  const removed = new Set<string>()
   for (const path of previous) {
-    if (!next.has(path)) updates.push({ path, type: "remove", recursive: true })
+    if (next.has(path)) continue
+    if (path.endsWith("/") && to.some((kept) => kept.startsWith(path))) continue
+    removed.add(path)
+  }
+  for (const path of removed) {
+    if (hasRemovedAncestor(path, removed)) continue
+    updates.push({ path, type: "remove", recursive: true })
   }
   return updates
+}
+
+function hasRemovedAncestor(path: string, removed: ReadonlySet<string>): boolean {
+  for (let slash = path.indexOf("/"); slash !== -1 && slash < path.length - 1; ) {
+    if (removed.has(path.slice(0, slash + 1))) return true
+    slash = path.indexOf("/", slash + 1)
+  }
+  return false
 }
 
 /** The menu the tree portals into its own slot, one row per action. */
