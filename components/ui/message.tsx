@@ -10,7 +10,6 @@ import {
   MessageProcess,
   MessageReasoning,
   MessageToolCall,
-  MessageToolCalls,
   type MessageArtifactData,
   type MessageAttachmentData,
   type MessageCodeBlockData,
@@ -499,6 +498,7 @@ export const Message = React.memo(function Message({
     reasoning && !parts?.some((part) => part.type === "thinking") ? (
       <MessageReasoning
         key="reasoning"
+        inline
         defaultOpen={reasoningDefaultOpen}
         duration={reasoningDuration}
         streaming={isAnimating}
@@ -532,6 +532,7 @@ export const Message = React.memo(function Message({
       return (
         <MessageReasoning
           key={part.id}
+          inline
           defaultOpen={reasoningDefaultOpen}
           streaming={isAnimating && isLiveThinking}
         >
@@ -542,7 +543,7 @@ export const Message = React.memo(function Message({
     return part.text ? (
       <MessageMarkdown
         key={part.id}
-        isAnimating={isAnimating}
+        isAnimating={isAnimating && index === parts.length - 1}
         patternHandlers={patternHandlers}
         onFileClick={onFileReferenceClick}
         fileActions={fileActions}
@@ -553,26 +554,29 @@ export const Message = React.memo(function Message({
     ) : null
   })
 
-  /* Same shape either way: the process above, the answer below. The legacy
-     `tools` array is one stack, already expanded — the group around it is
-     the collapse. */
+  // A single disclosure owns the entire chronological process. Individual
+  // tool rows still expose their input/output, never another group of tools.
   const process = partNodes
     ? partNodes.slice(0, processEnd + 1)
-    : tools.length > 0
-      ? [
-          <MessageToolCalls
-            key="tools"
-            tools={tools}
-            defaultOpen
-            onAskAnswer={onAskAnswer}
-            onPlanBuild={onPlanBuild}
-            onPlanOpen={onPlanOpen}
-            onOpenFile={onOpenFile}
-            fileActions={fileActions}
-            resolveFileUrl={resolveFileUrl}
-          />,
-        ]
-      : []
+    : tools.map((tool) => (
+        <MessageToolCall
+          key={tool.id}
+          tool={tool}
+          onAskAnswer={onAskAnswer}
+          onPlanBuild={onPlanBuild}
+          onPlanOpen={onPlanOpen}
+          onOpenFile={onOpenFile}
+          fileActions={fileActions}
+          resolveFileUrl={resolveFileUrl}
+        />
+      ))
+  const processTools = parts
+    ? parts.flatMap((part) => part.type === "tool" ? [part.tool] : [])
+    : tools
+  const count = processTools.length
+  const processLabel = isAnimating
+    ? `Working${count ? ` · ${count} tool ${count === 1 ? "call" : "calls"}` : "…"}`
+    : undefined
   const answer = partNodes
     ? partNodes.slice(processEnd + 1)
     : displayContent
@@ -612,7 +616,9 @@ export const Message = React.memo(function Message({
       >
         {hasProcess || legacyReasoning ? (
           <MessageProcess
-            streaming={isAnimating || hasOpenAsk}
+            streaming={isAnimating}
+            forceOpen={hasOpenAsk}
+            label={hasOpenAsk ? "Waiting for your answer" : processLabel}
             seconds={workedFor}
           >
             {legacyReasoning}

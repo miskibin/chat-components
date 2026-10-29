@@ -11,6 +11,7 @@ import {
   FileText,
   Globe,
   ListChecks,
+  LoaderCircle,
   Search,
   Table2,
   Terminal,
@@ -175,11 +176,14 @@ export const MessageReasoning = React.memo(function MessageReasoning({
   defaultOpen = false,
   duration,
   streaming = false,
+  inline = false,
   className,
 }: {
   children: string
   defaultOpen?: boolean
   duration?: number
+  /** Plain reasoning row inside a shared MessageProcess disclosure. */
+  inline?: boolean
   /** Keep the body open while this thought is still streaming in. */
   streaming?: boolean
   className?: string
@@ -201,6 +205,18 @@ export const MessageReasoning = React.memo(function MessageReasoning({
       ? "Thought for a few seconds"
       : formatThoughtDuration(duration)
   const bodyRef = useFollowLive<HTMLDivElement>(streaming && open, children)
+
+  if (inline) return (
+    <div data-slot="message-reasoning" data-streaming={streaming || undefined} className={cn("mb-2", className)}>
+      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+        <DisclosureIcon><Brain className="opacity-70" /></DisclosureIcon>
+        <span>{label}</span>
+      </div>
+      <div data-slot="message-reasoning-content" className={cn("mt-1 text-[13px] leading-relaxed text-muted-foreground", disclosureBody)}>
+        <MessageMarkdown isAnimating={streaming} className="text-inherit! text-[13px]! leading-relaxed!">{children}</MessageMarkdown>
+      </div>
+    </div>
+  )
 
   return (
     <Collapsible
@@ -2410,6 +2426,7 @@ export function MessageToolCalls({
   }
 
   const SummaryIcon = TOOL_GROUP_ICONS[summaryKind]
+  const running = tools.findLast((tool) => tool.status === "running" || tool.status === "pending")
 
   return (
     <Collapsible
@@ -2423,12 +2440,15 @@ export function MessageToolCalls({
           type="button"
           data-slot="message-tool-calls-trigger"
           data-kind={summaryKind}
+          data-running={!!running}
           className={cn(disclosureTrigger, "w-full")}
         >
           <DisclosureIcon>
             <SummaryIcon className="opacity-70" />
           </DisclosureIcon>
-          <span className="min-w-0 truncate">{summary}</span>
+          <span className={cn("min-w-0 truncate", running && "animate-pulse motion-reduce:animate-none")}>
+            {running ? toolHeadline(running).label : summary}
+          </span>
           <ChevronDown
             className={cn(
               "size-3.5 opacity-50 transition-transform duration-150",
@@ -2449,12 +2469,10 @@ export type MessageProcessProps = {
   seconds?: number
   /** Overrides the derived label. */
   label?: React.ReactNode
-  /**
-   * True while the turn is still streaming: the stack stays open and the
-   * trigger is withheld, so live parts read exactly as a flat stack. When it
-   * flips to false the group folds into the labelled row.
-   */
+  /** Live work keeps the same shared disclosure, and folds when it settles. */
   streaming?: boolean
+  /** Keep a pending user question reachable; the disclosure cannot hide it. */
+  forceOpen?: boolean
   /** Keep the stack expanded after the turn settles. */
   defaultOpen?: boolean
   className?: string
@@ -2473,49 +2491,32 @@ export function MessageProcess({
   seconds,
   label,
   streaming = false,
+  forceOpen = false,
   defaultOpen = false,
   className,
 }: MessageProcessProps) {
   const [open, setOpen] = React.useState(defaultOpen || streaming)
   const [wasStreaming, setWasStreaming] = React.useState(streaming)
-
-  // Adjusted while rendering rather than in an effect — the group never paints
-  // one frame of an expanded stack after the turn has already settled.
   if (wasStreaming !== streaming) {
     setWasStreaming(streaming)
     if (streaming) setOpen(true)
     else if (!defaultOpen) setOpen(false)
   }
-
-  const text =
-    label ?? (seconds == null ? "Worked for a while" : formatWorkedFor(seconds))
-
+  const expanded = forceOpen || open
+  const text = label ?? (streaming ? "Working…" : seconds == null ? "Worked for a while" : formatWorkedFor(seconds))
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      data-slot="message-process"
-      className={cn("mb-3 animate-in fade-in duration-150", className)}
-    >
-      {streaming ? null : (
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            data-slot="message-process-trigger"
-            className={disclosureTrigger}
-          >
-            <span className="min-w-0 truncate">{text}</span>
-            <ChevronDown
-              className={cn(
-                "size-3.5 opacity-50 transition-transform duration-150",
-                open && "rotate-180"
-              )}
-            />
-          </button>
-        </CollapsibleTrigger>
-      )}
+    <Collapsible open={expanded} onOpenChange={setOpen} data-slot="message-process" data-streaming={streaming || undefined}
+      className={cn("mb-3 animate-in fade-in duration-150", className)}>
+      <CollapsibleTrigger asChild>
+        <button type="button" data-slot="message-process-trigger" disabled={forceOpen}
+          className={cn(disclosureTrigger, "disabled:cursor-default")}>
+          <DisclosureIcon>{streaming ? <LoaderCircle className="motion-safe:animate-spin" /> : <Check className="opacity-70" />}</DisclosureIcon>
+          <span className="min-w-0 truncate">{text}</span>
+          <ChevronDown className={cn("size-3.5 opacity-50 transition-transform duration-150", expanded && "rotate-180")} />
+        </button>
+      </CollapsibleTrigger>
       <CollapsibleContent data-slot="message-process-content">
-        <div className={cn(streaming ? null : "mt-1.5")}>{children}</div>
+        <div className="mt-1.5">{children}</div>
       </CollapsibleContent>
     </Collapsible>
   )
