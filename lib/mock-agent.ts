@@ -224,6 +224,23 @@ export async function* runMockAgent(
 /* Scenarios                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/** Deterministic phases for exercising T3-style live groups and final folding. */
+function activityTimelineScenario(): MockStep[] {
+  return [
+    { kind: "thinking", text: "Inspecting the worktree." },
+    { kind: "tool", name: "Read", input: { path: "src/reducer.ts" }, status: "done", output: "Read complete", runMs: 1100 },
+    { kind: "text", text: "Reading finished. I will check the project.\n\n" },
+    { kind: "tool", name: "exec_command", input: { command: "npm run test" }, status: "done", output: "All tests passed", runMs: 1400 },
+    { kind: "tool", name: "exec_command", input: { command: "git diff --check" }, status: "done", output: "No whitespace errors", runMs: 1400 },
+    { kind: "text", text: "Both checks passed. Waiting for the next check.\n\n" },
+    { kind: "tool", name: "exec_command", input: { command: "sleep 5" }, status: "done", output: "Wait complete", runMs: 1800 },
+    { kind: "thinking", text: "Preparing the result." },
+    { kind: "pause", ms: 900 },
+    { kind: "text", text: "Finished. All checks passed." },
+    { kind: "pause", ms: 1500 },
+  ]
+}
+
 function streamingScenario(topic: string): MockStep[] {
   return [
     {
@@ -717,6 +734,7 @@ export function isAskDemoPrompt(prompt: string) {
 }
 
 function pickScenario(prompt: string): Scenario {
+  if (/activity timeline/i.test(prompt)) return activityTimelineScenario
   if (isAskDemoPrompt(prompt)) {
     return /^askquestion result:/i.test(prompt.trim())
       ? askFollowUpScenario

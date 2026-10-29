@@ -525,7 +525,7 @@
       "name": "message",
       "type": "registry:ui",
       "title": "Message",
-      "description": "Memoized user bubble and assistant message: live parts while streaming, collapsed into a \"Worked for 12s\" process group with the answer and a change summary once the turn settles.",
+      "description": "Memoized user bubble and assistant message: live activity groups with current-action headers and visible commentary, collapsed into a \"Worked for 12s\" process group with the answer and a change summary once the turn settles.",
       "dependencies": ["lucide-react"],
       "registryDependencies": [
         "miskibin/chat-components/message-parts",

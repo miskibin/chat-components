@@ -1,75 +1,69 @@
 "use client"
 
 import * as React from "react"
+import { Message, type MessagePart } from "@/components/ui/message"
 
-import {
-  MessageProcess,
-  MessageReasoning,
-  MessageToolCall,
-} from "@/components/ui/message-parts"
+const tool = (id: string, command: string, running = false): MessagePart => ({
+  type: "tool",
+  id,
+  tool: {
+    id,
+    name: "exec_command",
+    status: running ? "running" : "done",
+    input: JSON.stringify({ command }),
+    output: running ? undefined : "Passed"
+  }
+})
+const commentary: MessagePart = {
+  type: "text",
+  id: "update",
+  text: "The tests pass. I am checking the remaining changes."
+}
 
-const REPLAY_MS = 2600
-
-/**
- * A turn folds its thinking and tool calls into one “Worked for 12s” row the
- * moment it stops streaming. It starts collapsed while working too; expand
- * the shared disclosure manually to inspect the chronological activity.
- */
+/** Commentary stays between live blocks, then folds with the finished process. */
 export function MessageProcessExample() {
-  const [streaming, setStreaming] = React.useState(false)
-
+  const [phase, setPhase] = React.useState(0)
   React.useEffect(() => {
-    if (!streaming) return
-    const id = window.setTimeout(() => setStreaming(false), REPLAY_MS)
-    return () => window.clearTimeout(id)
-  }, [streaming])
-
+    if (phase === 0 || phase >= 6) return
+    const timer = window.setTimeout(() => setPhase((value) => value + 1), 1400)
+    return () => window.clearTimeout(timer)
+  }, [phase])
+  const complete = phase === 0 || phase >= 6
+  const parts: MessagePart[] = [
+    { type: "thinking", id: "thought", text: "Checking the failing test." },
+    ...(phase >= 2 || complete ? [tool("test", "npm test", phase === 2)] : []),
+    ...(phase >= 3 || complete ? [commentary] : []),
+    ...(phase >= 4 || complete ? [tool("wait", "sleep 5", phase === 4)] : []),
+    ...(phase >= 5 || complete
+      ? [tool("diff", "git diff --check", phase === 5)]
+      : []),
+    ...(complete
+      ? [
+          {
+            type: "text" as const,
+            id: "final",
+            text: "The fix is ready. Tests and diff checks pass."
+          }
+        ]
+      : [])
+  ]
   return (
     <div className="flex w-full max-w-2xl flex-col items-start gap-3">
       <button
         type="button"
-        onClick={() => setStreaming(true)}
-        disabled={streaming}
+        onClick={() => setPhase(1)}
+        disabled={phase > 0 && phase < 6}
         className="inline-flex h-7 items-center rounded-md border px-2.5 text-[12px] text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
       >
-        {streaming ? "Working…" : "Replay the turn"}
+        {phase > 0 && phase < 6 ? "Working…" : "Replay the turn"}
       </button>
-
-      <div className="w-full">
-        <MessageProcess streaming={streaming} seconds={12}>
-          <MessageReasoning inline streaming={streaming} duration={4}>
-            {"The failing test only touches the reducer, so `applyPatch` is the first thing to read."}
-          </MessageReasoning>
-          <MessageToolCall
-            tool={{
-              id: "grep-1",
-              name: "grep",
-              status: "done",
-              input: '{ "pattern": "applyPatch" }',
-              output: "3 matches",
-            }}
-          />
-          <MessageToolCall
-            tool={{
-              id: "edit-1",
-              name: "Edit",
-              status: "done",
-              input: JSON.stringify({
-                path: "lib/reducer.ts",
-                old_string: "  return { ...state, ...patch }",
-                new_string:
-                  "  if (!patch) return state\n  return { ...state, ...patch }",
-              }),
-              output: "+1 −0",
-            }}
-          />
-        </MessageProcess>
-
-        <p className="text-[15px] leading-[1.65]">
-          applyPatch spread a null patch straight onto the state. It now returns
-          the state untouched, and the reducer test passes.
-        </p>
-      </div>
+      <Message
+        sender="assistant"
+        content=""
+        parts={parts}
+        isAnimating={phase > 0 && phase < 6}
+        workedFor={12}
+      />
     </div>
   )
 }
