@@ -608,19 +608,21 @@ function formatCountdown(seconds: number) {
 function SleepCountdown({
   toolId,
   seconds,
+  activityLabel = false,
 }: {
   toolId: string
   seconds: number
+  activityLabel?: boolean
 }) {
   const ref = React.useRef<HTMLSpanElement>(null)
   React.useEffect(() => {
     const node = ref.current
-    if (!node || seconds < MIN_COUNTDOWN_SECONDS) return
+    if (!node || (!activityLabel && seconds < MIN_COUNTDOWN_SECONDS)) return
     const endsAt = sleepStartedAt(toolId) + seconds * 1000
     const render = () => {
       const left = (endsAt - Date.now()) / 1000
       node.textContent =
-        left > 0 ? `sleeping · ${formatCountdown(left)} left` : ""
+        left > 0 ? `${activityLabel ? "Sleeping" : "sleeping"} · ${formatCountdown(left)} left` : activityLabel ? "Running command" : ""
       return left > 0
     }
     if (!render()) return
@@ -628,7 +630,7 @@ function SleepCountdown({
       if (!render()) clearInterval(timer)
     }, 1000)
     return () => clearInterval(timer)
-  }, [toolId, seconds])
+  }, [toolId, seconds, activityLabel])
   return (
     <span
       ref={ref}
@@ -692,7 +694,7 @@ function toolHeadline(tool: MessageToolCallData): ToolHeadline {
       detail: progress ? `${progress.completed}/${progress.total}` : undefined,
     }
   }
-  if (kind.includes("shell") || kind === "bash" || kind === "command") {
+  if (toolGroupAction(tool) === "command") {
     const summary = command ? summarizeCommand(command) : null
     const sleepSeconds =
       (summary && leadingSleepSeconds(summary.display)) ?? undefined
@@ -2457,6 +2459,118 @@ export function MessageToolCalls({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>{list}</CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+export type MessageActivityProps = {
+  /** Consecutive thinking/tool entries, never assistant commentary. */
+  parts: (
+    | { type: "thinking"; id: string; text: string }
+    | { type: "tool"; id: string; tool: MessageToolCallData }
+  )[]
+  children: React.ReactNode
+  streaming?: boolean
+  /** The current group is at the live tail; model thinking may follow tools. */
+  thinking?: boolean
+  duration?: number
+  defaultOpen?: boolean
+  className?: string
+}
+
+/** One live work group. The header follows the latest actual activity. */
+export function MessageActivity({
+  parts,
+  children,
+  streaming = false,
+  thinking = false,
+  duration,
+  defaultOpen = false,
+  className
+}: MessageActivityProps) {
+  const [open, setOpen] = React.useState(defaultOpen)
+  const tools = parts.flatMap((part) =>
+    part.type === "tool" ? [part.tool] : []
+  )
+  const running = streaming
+    ? tools.findLast(
+        (tool) => tool.status === "running" || tool.status === "pending"
+      )
+    : undefined
+  const liveThought =
+    streaming && thinking && (!running || parts.at(-1)?.type === "thinking")
+  const headline = running && !liveThought ? toolHeadline(running) : undefined
+  const active = liveThought || !!running
+  const last = tools.at(-1)
+  const completed =
+    tools.length === 1 && last
+      ? toolHeadline({
+          ...last,
+          status: last.status === "error" ? "error" : "done"
+        })
+      : undefined
+  const label = liveThought
+    ? "Thinking…"
+    : ((headline?.shell ? "Running command" : headline?.label) ??
+      (completed?.shell ? "Ran command" : completed?.label) ??
+      (tools.length
+        ? summarizeToolGroup(tools)
+        : duration == null
+          ? "Thought for a few seconds"
+          : formatThoughtDuration(duration)))
+  const detail = headline?.detail ?? (!active ? completed?.detail : undefined)
+  const kind =
+    liveThought || !tools.length ? "thinking" : toolGroupSummaryKind(tools)
+  const Icon = kind === "thinking" ? Brain : TOOL_GROUP_ICONS[kind]
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      data-slot="message-activity"
+      data-active={active || undefined}
+      data-kind={kind}
+      className={cn("mb-3 animate-in fade-in duration-150", className)}
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          data-slot="message-activity-trigger"
+          className={cn(disclosureTrigger, "w-full")}
+        >
+          <DisclosureIcon>
+            <Icon className="opacity-70" />
+          </DisclosureIcon>
+          {active ? <ShineStyles /> : null}
+          <span className={cn("shrink-0", active && shineClassName)}>
+            {running && headline?.sleepSeconds ? (
+              <SleepCountdown
+                toolId={running.id}
+                seconds={headline.sleepSeconds}
+                activityLabel
+              />
+            ) : (
+              label
+            )}
+          </span>
+          {detail ? (
+            <span
+              title={headline?.title ?? detail}
+              className="min-w-0 truncate text-[12px]"
+            >
+              {detail}
+            </span>
+          ) : null}
+          <ChevronDown
+            className={cn(
+              "size-3 opacity-50 transition-transform duration-150",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent data-slot="message-activity-content">
+        <div className="mt-1.5">{children}</div>
+      </CollapsibleContent>
     </Collapsible>
   )
 }

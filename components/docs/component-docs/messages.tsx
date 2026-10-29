@@ -346,6 +346,8 @@ export function Turn() {
     dataSlots: [
       "message",
       "message-content",
+      "message-live-timeline",
+      "message-activity",
       "message-quote",
       "message-attachments",
       "message-attachment",
@@ -918,6 +920,15 @@ export function Answer() {
 }`,
     props: [
       {
+        caption: "MessageActivity",
+        rows: [
+          { name: "parts", type: "(thinking | tool)[]", required: true, description: "Consecutive work entries. Commentary is a boundary and stays outside this group." },
+          { name: "streaming", type: "boolean", default: "false", description: "Use the actual running tool for the header, including command details and sleep countdown." },
+          { name: "thinking", type: "boolean", default: "false", description: "This is the live tail; show Thinking when the model is reasoning or waiting after a completed tool." },
+          { name: "defaultOpen", type: "boolean", default: "false", description: "Activity bodies start closed; manual expansion is preserved as the header changes." },
+        ],
+      },
+      {
         caption: "MessageProcess",
         rows: [
           {
@@ -1251,6 +1262,9 @@ export function Answer() {
       },
     ],
     dataSlots: [
+      "message-activity",
+      "message-activity-trigger",
+      "message-activity-content",
       "message-process",
       "message-process-trigger",
       "message-process-content",
@@ -1349,15 +1363,17 @@ export function Answer() {
         },
       },
       {
-        title: "Thinking and tools, one disclosure",
+        title: "Live groups, then one finished turn",
         description: (
           <>
             <DocsCode>MessageProcess</DocsCode> is the shape a settled turn
             takes: everything it did before answering behind one{" "}
             <DocsCode>Worked for 12s</DocsCode> row.{" "}
-            <DocsCode>streaming</DocsCode> is the whole state machine — true
-            while the run is live (one collapsed Working disclosure for thinking and tools),
-            false once it settles (collapsed, labelled).{" "}
+            While streaming, adjacent thinking and tool entries form closed
+            activity groups. Headers follow the current thought, command or
+            sleep countdown, then summarize the completed calls. Assistant
+            commentary between groups stays visible. Only after the turn ends
+            does the whole process fold into the one Worked row.{" "}
             <DocsCode>Message</DocsCode> wires this for you from{" "}
             <DocsCode>isAnimating</DocsCode> and{" "}
             <DocsCode>workedFor</DocsCode>; mount it yourself only in a custom
