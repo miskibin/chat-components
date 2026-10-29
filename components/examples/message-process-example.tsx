@@ -12,8 +12,8 @@ const REPLAY_MS = 2600
 
 /**
  * A turn folds its thinking and tool calls into one “Worked for 12s” row the
- * moment it stops streaming. Replay it to watch the live stack collapse —
- * `streaming` is the only thing driving that.
+ * moment it stops streaming. It starts collapsed while working too; expand
+ * the shared disclosure manually to inspect the chronological activity.
  */
 export function MessageProcessExample() {
   const [streaming, setStreaming] = React.useState(false)

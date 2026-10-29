@@ -947,7 +947,7 @@ export function Answer() {
             type: "boolean",
             default: "false",
             description:
-              "Shows a Working label while the same shared disclosure remains available. The group folds when the turn settles.",
+              "Shows a Working label without opening the group. It starts collapsed during streaming too; expand it manually to inspect the activity.",
           },
           {
             name: "forceOpen", type: "boolean", default: "false",
@@ -975,14 +975,14 @@ export function Answer() {
             name: "defaultOpen",
             type: "boolean",
             default: "false",
-            description: "Start expanded. Ignored while `streaming` is driving the open state.",
+            description: "Start expanded. Defaults to collapsed, including while streaming.",
           },
           {
             name: "streaming",
             type: "boolean",
             default: "false",
             description:
-              "This thought is still arriving: the trigger reads “Thinking…” and the body stays open, bounded, and pinned to its newest line unless the reader scrolls it. When it flips to false the disclosure collapses. `Message` sets it only while the thought is the turn's last part.",
+              "This thought is still arriving: the trigger reads “Thinking…” without opening the body. When expanded manually, the body is bounded and follows the newest line unless the reader scrolls it. When it flips to false the disclosure collapses. `Message` sets it only while the thought is the turn's last part.",
           },
           {
             name: "duration",
@@ -1356,7 +1356,7 @@ export function Answer() {
             takes: everything it did before answering behind one{" "}
             <DocsCode>Worked for 12s</DocsCode> row.{" "}
             <DocsCode>streaming</DocsCode> is the whole state machine — true
-            while the run is live (one Working disclosure for thinking and tools),
+            while the run is live (one collapsed Working disclosure for thinking and tools),
             false once it settles (collapsed, labelled).{" "}
             <DocsCode>Message</DocsCode> wires this for you from{" "}
             <DocsCode>isAnimating</DocsCode> and{" "}

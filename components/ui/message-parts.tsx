@@ -184,19 +184,18 @@ export const MessageReasoning = React.memo(function MessageReasoning({
   duration?: number
   /** Plain reasoning row inside a shared MessageProcess disclosure. */
   inline?: boolean
-  /** Keep the body open while this thought is still streaming in. */
+  /** Labels live reasoning; never expands it automatically. */
   streaming?: boolean
   className?: string
 }) {
-  const [open, setOpen] = React.useState(defaultOpen || streaming)
+  const [open, setOpen] = React.useState(defaultOpen)
   const [wasStreaming, setWasStreaming] = React.useState(streaming)
 
   // Adjust while rendering rather than in an effect: the disclosure never
   // paints a stale open state, and no extra commit lands mid-stream.
   if (wasStreaming !== streaming) {
     setWasStreaming(streaming)
-    if (streaming) setOpen(true)
-    else if (!defaultOpen) setOpen(false)
+    if (!streaming && !defaultOpen) setOpen(false)
   }
 
   const label = streaming
@@ -2469,7 +2468,7 @@ export type MessageProcessProps = {
   seconds?: number
   /** Overrides the derived label. */
   label?: React.ReactNode
-  /** Live work keeps the same shared disclosure, and folds when it settles. */
+  /** Labels live work without expanding it; folds when it settles. */
   streaming?: boolean
   /** Keep a pending user question reachable; the disclosure cannot hide it. */
   forceOpen?: boolean
@@ -2495,12 +2494,11 @@ export function MessageProcess({
   defaultOpen = false,
   className,
 }: MessageProcessProps) {
-  const [open, setOpen] = React.useState(defaultOpen || streaming)
+  const [open, setOpen] = React.useState(defaultOpen)
   const [wasStreaming, setWasStreaming] = React.useState(streaming)
   if (wasStreaming !== streaming) {
     setWasStreaming(streaming)
-    if (streaming) setOpen(true)
-    else if (!defaultOpen) setOpen(false)
+    if (!streaming && !defaultOpen) setOpen(false)
   }
   const expanded = forceOpen || open
   const text = label ?? (streaming ? "Working…" : seconds == null ? "Worked for a while" : formatWorkedFor(seconds))
