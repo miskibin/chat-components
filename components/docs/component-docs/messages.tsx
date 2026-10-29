@@ -22,6 +22,7 @@ import { FilePreviewSplitExample } from "@/components/examples/file-preview-spli
 import { FileTreeExample } from "@/components/examples/file-tree-example"
 import { FileTreeLazyExample } from "@/components/examples/file-tree-lazy-example"
 import { GenerativeViewActionsExample } from "@/components/examples/generative-view-actions-example"
+import { GenerativeViewChartsExample } from "@/components/examples/generative-view-charts-example"
 import { GenerativeViewExample } from "@/components/examples/generative-view-example"
 import { GenerativeViewInlineExample } from "@/components/examples/generative-view-inline-example"
 import { GenerativeViewJsonExample } from "@/components/examples/generative-view-json-example"
@@ -946,20 +947,24 @@ export function Answer() {
             type: "boolean",
             default: "false",
             description:
-              "True while the turn is still arriving: the stack stays open and the trigger is withheld, so live parts read as a flat list. When it flips to false the group folds into the labelled row.",
+              "Shows a Working label while the same shared disclosure remains available. The group folds when the turn settles.",
+          },
+          {
+            name: "forceOpen", type: "boolean", default: "false",
+            description: "Keeps pending questions visible and disables collapsing until answered.",
           },
           {
             name: "defaultOpen",
             type: "boolean",
             default: "false",
-            description:
-              "Keep the stack expanded once the turn settles, instead of collapsing it.",
+            description: "Keep the shared process expanded by default.",
           },
         ],
       },
       {
         caption: "MessageReasoning",
         rows: [
+          { name: "inline", type: "boolean", default: "false", description: "Render plain reasoning inside a shared MessageProcess, without a nested disclosure." },
           {
             name: "children",
             type: "string",
@@ -1344,14 +1349,14 @@ export function Answer() {
         },
       },
       {
-        title: "Collapse a finished turn",
+        title: "Thinking and tools, one disclosure",
         description: (
           <>
             <DocsCode>MessageProcess</DocsCode> is the shape a settled turn
             takes: everything it did before answering behind one{" "}
             <DocsCode>Worked for 12s</DocsCode> row.{" "}
             <DocsCode>streaming</DocsCode> is the whole state machine — true
-            while the run is live (open, unlabelled, reading as a flat stack),
+            while the run is live (one Working disclosure for thinking and tools),
             false once it settles (collapsed, labelled).{" "}
             <DocsCode>Message</DocsCode> wires this for you from{" "}
             <DocsCode>isAnimating</DocsCode> and{" "}
@@ -2014,6 +2019,11 @@ export function View({ json }: { json: string }) {
 }`,
     examples: [
       {
+        title: "Charts that follow your theme",
+        description: <>Line, area, grouped bar and donut charts use <DocsCode>--chart-1</DocsCode> through <DocsCode>--chart-5</DocsCode>, quiet grids and tooltips. Each has a keyboard-accessible data table. Missing values stay gaps; the spec cannot set arbitrary colors or execute code.</>,
+        example: { name: "generative-view-charts-example", node: <GenerativeViewChartsExample /> },
+      },
+      {
         title: "In an answer",
         description: (
           <>
@@ -2238,6 +2248,14 @@ const system = [VIEW_SPEC_PROMPT, userMemory].filter(Boolean).join("\\n\\n")`,
       "generative-view-table-more",
       "generative-view-list",
       "generative-view-timeline",
+      "generative-view-chart",
+      "generative-view-chart-plot",
+      "generative-view-chart-mark",
+      "generative-view-chart-grid",
+      "generative-view-chart-tooltip",
+      "generative-view-chart-legend",
+      "generative-view-chart-data",
+      "generative-view-chart-empty",
       "generative-view-stats",
       "generative-view-stat",
       "generative-view-progress",

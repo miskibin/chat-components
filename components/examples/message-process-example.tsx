@@ -37,7 +37,7 @@ export function MessageProcessExample() {
 
       <div className="w-full">
         <MessageProcess streaming={streaming} seconds={12}>
-          <MessageReasoning streaming={streaming} duration={4}>
+          <MessageReasoning inline streaming={streaming} duration={4}>
             {"The failing test only touches the reducer, so `applyPatch` is the first thing to read."}
           </MessageReasoning>
           <MessageToolCall

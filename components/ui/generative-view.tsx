@@ -13,6 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { GenerativeChart } from "@/components/ui/generative-chart"
 import { DiffStat } from "@/components/ui/diff-stat"
 import { FileIcon } from "@/components/ui/file-icon"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -38,6 +39,7 @@ export type GenerativeViewSlot =
   | "list"
   | "timeline"
   | "stats"
+  | "chart"
   | "badge"
   | "form"
 
@@ -802,8 +804,15 @@ function ViewForm({ node }: { node: Extract<ViewNode, { type: "form" }> }) {
   )
 }
 
+function Chart({ node }: { node: Extract<ViewNode, { type: "chart" }> }) {
+  const className = useSlotClass("chart")
+  return <GenerativeChart node={node} className={className} />
+}
+
 function Block({ node }: { node: ViewNode }) {
   switch (node.type) {
+    case "chart":
+      return <Chart node={node} />
     case "card":
       return <Card node={node} />
     case "section":

@@ -34,10 +34,10 @@ describe("parseViewSpec", () => {
   })
 
   it("keeps a block it does not know as a visible marker", () => {
-    const parsed = parseViewSpec('{"type":"chart","series":[]}')
+    const parsed = parseViewSpec('{"type":"unrecognized-block","series":[]}')
     assert.deepEqual(parsed, {
       ok: true,
-      view: [{ type: "unknown", name: "chart" }],
+      view: [{ type: "unknown", name: "unrecognized-block" }],
     })
   })
 

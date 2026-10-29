@@ -60,7 +60,19 @@ export type ViewFormField = {
  */
 export type ViewAction = { type: "send"; text: string }
 
+/** Bounded numeric data; colors and rendering always belong to the theme. */
+export type ViewChart = {
+  type: "chart"
+  kind: "line" | "area" | "bar" | "donut"
+  title?: string
+  description?: string
+  unit?: string
+  series: { key: string; label: string }[]
+  data: { label: string; values: (number | null)[] }[]
+}
+
 export type ViewNode =
+  | ViewChart
   | {
       type: "card"
       title?: string
@@ -129,6 +141,8 @@ card{title,subtitle?,href?,status?,children[]} section{title,collapsed?,children
 text{text,tone?,mono?} badge{label,tone?} link{label?,href} divider{}
 fields{items[{label,value}]} table{columns[],rows[[]]} list{items[]} timeline{items[]}
 stats{items[{label,value,hint?,tone?}]} progress{value,max?,label?,tone?} code{code,lang?} diffstat{added,removed}
+chart{kind:line|area|bar|donut,title?,description?,unit?,xKey?,series:[{key,label?}],data:[{label,...numericSeriesValues}]}
+Charts use theme colors. xKey defaults to label; donut uses the first series and nonnegative values. Use null for missing points, never invent data.
 button{label,send,tone?} form{title?,fields[{name,label,type?:text|textarea|select|checkbox,options?,required?,value?}],submit,send?}
 list/timeline items: a string or {title,meta?,body?,href?,tone?}. Field values and table cells: a string, a number, or a badge/link node. status: a string or a badge node. tone: neutral|info|success|warning|danger.
 A button sends its \`send\` text to you as the user's next message; a form sends \`send\` (or its submit label) followed by the answers. Use them to offer next steps or collect input; to ask the user a question, prefer your own ask tool if you have one.
@@ -418,6 +432,30 @@ function tableFrom(node: Obj): ViewNode | undefined {
   }
 }
 
+function chartFrom(value: Obj): ViewChart {
+  const kind = value.kind === "area" || value.kind === "bar" || value.kind === "donut" ? value.kind : "line"
+  const series: ViewChart["series"] = []
+  for (const item of (Array.isArray(value.series) ? value.series.slice(0, MAX_ITEMS) : [])) {
+    if (series.length >= 5) break
+    const key = str(isObj(item) ? item.key : item)
+    if (key && !series.some((s) => s.key === key)) series.push({ key, label: (isObj(item) ? str(item.label) : undefined) ?? key })
+  }
+  if (!series.length) series.push({ key: "value", label: "Value" })
+  const xKey = str(value.xKey) ?? "label"
+  const data: ViewChart["data"] = []
+  for (const row of (Array.isArray(value.data) ? value.data.slice(0, MAX_ROWS) : [])) {
+    if (!isObj(row)) continue
+    data.push({
+      label: str(row[xKey]) ?? String(data.length + 1),
+      values: series.map(({ key }) => {
+        const n = Object.hasOwn(row, key) ? num(row[key]) : undefined
+        return n != null && Math.abs(n) <= 1e100 && (kind !== "donut" || n >= 0) ? n : null
+      }),
+    })
+  }
+  return { type: "chart", kind, title: str(value.title), description: str(value.description, MAX_TEXT), unit: str(value.unit, 30), series, data }
+}
+
 function nodeFrom(value: Json, depth: number, budget: Budget): ViewNode | undefined {
   if (depth > MAX_DEPTH || budget.nodes >= MAX_NODES) return undefined
   if (typeof value === "string") {
@@ -430,6 +468,8 @@ function nodeFrom(value: Json, depth: number, budget: Budget): ViewNode | undefi
   const type = typeof value.type === "string" ? value.type.trim().toLowerCase() : ""
   budget.nodes++
   switch (type) {
+    case "chart":
+      return chartFrom(value)
     case "card": {
       const status =
         value.status !== undefined ? badgeFrom(value.status) : undefined
