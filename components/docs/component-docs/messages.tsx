@@ -4462,7 +4462,8 @@ export function Note({ note }: { note: { id: string; markdown: string } }) {
                 Threads drawn as highlights over the first line of their{" "}
                 <DocsCode>text</DocsCode>; <DocsCode>state</DocsCode> (
                 <DocsCode>open | running | done | error</DocsCode>) lands on{" "}
-                <DocsCode>data-state</DocsCode>. A click hands back the id.
+                <DocsCode>data-state</DocsCode>. A click on the words — or
+                moving the caret into them — hands back the id.
               </>
             ),
           },
