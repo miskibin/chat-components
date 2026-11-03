@@ -723,6 +723,18 @@ export function NoteEditor({
     if (id) emitAnchorClick(id)
   }
 
+  // The keyboard path to a thread: moving the caret into its words opens it,
+  // the way a click on them does.
+  const caretAnchorRef = React.useRef<string | undefined>(undefined)
+  const onKeyUp = (event: React.KeyboardEvent) => {
+    if (!(event.target as HTMLElement | null)?.closest(".ProseMirror")) return
+    const node = window.getSelection()?.focusNode
+    const element = node instanceof Element ? node : node?.parentElement
+    const id = element?.closest<HTMLElement>("[data-anchor-id]")?.dataset.anchorId
+    if (id && id !== caretAnchorRef.current) emitAnchorClick(id)
+    caretAnchorRef.current = id
+  }
+
   const submitAsk = () => {
     const text = instruction.trim()
     if (!ask || !text) return
@@ -746,6 +758,7 @@ export function NoteEditor({
       data-readonly={readOnly ? "true" : undefined}
       className={cn("relative", classNames?.root, className)}
       onKeyDownCapture={onKeyDownCapture}
+      onKeyUp={onKeyUp}
       onClick={onClick}
     >
       <div ref={hostRef} data-slot="note-editor-content" className={cn("note-editor", classNames?.editor)} />
