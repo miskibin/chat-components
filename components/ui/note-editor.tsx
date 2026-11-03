@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ArrowUp, Sparkles } from "lucide-react"
+import { ClipboardPaste, Copy, Scissors, TextSelect } from "lucide-react"
 import type { Crepe } from "@milkdown/crepe"
 import type { Ctx } from "@milkdown/kit/ctx"
 import type { Node as ProseNode } from "@milkdown/kit/prose/model"
@@ -11,6 +11,14 @@ import "@milkdown/crepe/theme/common/style.css"
 import "katex/dist/katex.min.css"
 import "./note-editor.css"
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
 
 /**
@@ -30,26 +38,43 @@ export type NoteEditorAnchor = {
   state?: "open" | "running" | "done" | "error"
 }
 
-/** What the ask bubble hands back: the selected words and the instruction. */
-export type NoteEditorAsk = {
+/** A range of the note and the words in it. */
+export type NoteEditorSelection = {
   text: string
-  instruction: string
+  from: number
+  to: number
+}
+
+/**
+ * A host action in the editor's right-click menu, above Cut / Copy / Paste —
+ * "Ask the agent about this", "Explain", whatever the host does with words.
+ */
+export type NoteEditorAction = {
+  id: string
+  label: string
+  icon?: React.ReactNode
+  shortcut?: string
+  /** Disabled while nothing is selected. */
+  needsSelection?: boolean
+  /** The action moves focus away (to a composer, say); the menu leaves it there. */
+  movesFocus?: boolean
+  onSelect: (selection: NoteEditorSelection | null) => void
 }
 
 export type NoteEditorHandle = {
   focus(): void
   /** The note as markdown, as the editor would save it now. */
   getMarkdown(): string | undefined
-  /** Opens the ask bubble on the current selection; false when it is empty. */
-  ask(): boolean
+  /** The current selection, or null when it is collapsed. */
+  getSelection(): NoteEditorSelection | null
+  /** Collapses the selection to its end. */
+  clearSelection(): void
 }
 
 export type NoteEditorClassNames = {
   root?: string
   editor?: string
-  ask?: string
-  askInput?: string
-  askQuote?: string
+  menu?: string
 }
 
 export type NoteEditorProps = {
@@ -64,12 +89,13 @@ export type NoteEditorProps = {
   activeAnchorId?: string
   onAnchorClick?: (id: string) => void
   /**
-   * Turns on the ask bubble — a toolbar button on any selection and
-   * ⌘E / Ctrl+E — and receives what was asked. Read once, when the editor
-   * mounts.
+   * The selected words as the user selects them — null once the selection
+   * collapses. What a host hands to a composer as the thing being asked
+   * about. While the editor is not focused, the last selection stays marked.
    */
-  onAsk?: (ask: NoteEditorAsk) => void
-  askPlaceholder?: string
+  onSelectionChange?: (selection: NoteEditorSelection | null) => void
+  /** Host actions at the top of the right-click menu. */
+  actions?: NoteEditorAction[]
   /** Stores a pasted or dropped image and resolves to the URL to write. */
   uploadImage?: (file: File) => Promise<string>
   /** Maps an image URL in the markdown to one the browser can load. */
@@ -110,9 +136,6 @@ type MarkMeta = {
 
 /** A tag on transactions that carry a value from outside, so they are not echoed. */
 const EXTERNAL = "note-editor-external"
-
-const SPARKLES_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>'
 
 /**
  * The words a highlight is searched for: the first line of the anchor,
@@ -182,8 +205,8 @@ function buildDecorations(modules: Modules, doc: ProseNode, state: Omit<MarkStat
   if (asking && asking.from < asking.to && asking.to <= doc.content.size) {
     decorations.push(
       Decoration.inline(asking.from, asking.to, {
-        class: "note-editor-asking",
-        "data-slot": "note-editor-asking",
+        class: "note-editor-held",
+        "data-slot": "note-editor-held-selection",
       })
     )
   }
@@ -425,25 +448,36 @@ function useStableCallback<A extends unknown[], R>(callback: ((...args: A) => R)
   return React.useCallback((...args: A) => ref.current?.(...args), [])
 }
 
-type AskState = { text: string; top: number; left: number }
+function readSelection(view: EditorView): NoteEditorSelection | null {
+  const { from, to, empty } = view.state.selection
+  if (empty) return null
+  const text = view.state.doc.textBetween(from, to, "\n\n", (leaf) => leaf.textContent || "")
+  return text.trim() ? { text, from, to } : null
+}
+
+function isMac() {
+  return typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+}
 
 /**
  * A WYSIWYG markdown note built on Milkdown Crepe — headings, lists, tasks,
  * tables, images, KaTeX, code with Mermaid drawn in place — that an agent can
  * work in beside the person writing it: its edits arrive as a new `value` and
  * land as the smallest block change, threads hang on words as highlights, and
- * a selection can be handed to the agent with an instruction.
+ * the selection is reported as it changes so a host can hand it to a composer.
+ * Formatting is markdown itself and the `/` menu; the right-click menu holds
+ * the host's actions and the clipboard.
  */
 export function NoteEditor({
   value,
   onChange,
   readOnly = false,
-  placeholder = "Write, or select text and ask the agent…",
+  placeholder = "Start writing…",
   anchors,
   activeAnchorId,
   onAnchorClick,
-  onAsk,
-  askPlaceholder = "Ask the agent to change this…",
+  onSelectionChange,
+  actions,
   uploadImage,
   resolveImageUrl,
   changeDelay = 300,
@@ -451,7 +485,6 @@ export function NoteEditor({
   classNames,
   ref,
 }: NoteEditorProps) {
-  const rootRef = React.useRef<HTMLDivElement>(null)
   const hostRef = React.useRef<HTMLDivElement>(null)
   const viewRef = React.useRef<EditorView | null>(null)
   const ctxRef = React.useRef<Ctx | null>(null)
@@ -462,18 +495,20 @@ export function NoteEditor({
   const syncedDocRef = React.useRef<ProseNode | null>(null)
   const lastValueRef = React.useRef(value)
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const selectionTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const lastSelectionRef = React.useRef("")
   /** Set while an outside value is being dispatched, so it is not echoed. */
   const applyingRef = React.useRef(false)
+  /** A host action took focus elsewhere; the menu must not hand it back. */
+  const handedOffRef = React.useRef(false)
   const [ready, setReady] = React.useState(false)
-  const [ask, setAsk] = React.useState<AskState | null>(null)
-  const [instruction, setInstruction] = React.useState("")
+  const [menu, setMenu] = React.useState<{ selection: NoteEditorSelection | null; mod: string } | null>(null)
 
   const emitChange = useStableCallback(onChange)
-  const emitAsk = useStableCallback(onAsk)
+  const emitSelection = useStableCallback(onSelectionChange)
   const emitAnchorClick = useStableCallback(onAnchorClick)
   const upload = useStableCallback(uploadImage)
   const resolveUrl = useStableCallback(resolveImageUrl)
-  const askEnabled = React.useRef(!!onAsk).current
   const hasUpload = React.useRef(!!uploadImage).current
   const hasResolver = React.useRef(!!resolveImageUrl).current
   const delayRef = React.useRef(changeDelay)
@@ -502,51 +537,31 @@ export function NoteEditor({
     emitChange(markdown)
   }, [emitChange, serialize])
 
-  const openAsk = React.useCallback(() => {
+  const reportSelection = React.useCallback(() => {
     const view = viewRef.current
-    const root = rootRef.current
-    const key = markKeyRef.current
-    if (!view || !root || !key || !askEnabled) return false
-    const { from, to } = view.state.selection
-    if (from === to) return false
-    const text = view.state.doc.textBetween(from, to, "\n\n", (leaf) => leaf.textContent || "")
-    if (!text.trim()) return false
-    const caret = view.coordsAtPos(to)
-    const box = root.getBoundingClientRect()
-    const width = Math.min(360, box.width - 16)
-    setAsk({
-      text,
-      top: caret.bottom - box.top + 8,
-      left: Math.max(8, Math.min(caret.left - box.left - 24, box.width - width - 8)),
-    })
-    setInstruction("")
-    view.dispatch(view.state.tr.setMeta(key, { asking: { from, to } } satisfies MarkMeta))
-    return true
-  }, [askEnabled])
-
-  const closeAsk = React.useCallback((refocus: boolean) => {
-    setAsk(null)
-    const view = viewRef.current
-    const key = markKeyRef.current
-    if (view && key) view.dispatch(view.state.tr.setMeta(key, { asking: null } satisfies MarkMeta))
-    if (refocus) view?.focus()
-  }, [])
+    if (!view) return
+    const selection = readSelection(view)
+    const key = selection ? `${selection.from}:${selection.to}:${selection.text}` : ""
+    if (key === lastSelectionRef.current) return
+    lastSelectionRef.current = key
+    emitSelection(selection)
+  }, [emitSelection])
 
   const flushRef = React.useRef(flush)
   React.useEffect(() => {
     flushRef.current = flush
   }, [flush])
-
-  const openAskRef = React.useRef(openAsk)
+  const reportSelectionRef = React.useRef(reportSelection)
   React.useEffect(() => {
-    openAskRef.current = openAsk
-  }, [openAsk])
+    reportSelectionRef.current = reportSelection
+  }, [reportSelection])
 
   // Mount once: Crepe owns the DOM under `host` from here on.
   React.useEffect(() => {
     const host = hostRef.current
     if (!host) return
     let cancelled = false
+    let detach = () => {}
     void (async () => {
       const modules = await loadModules()
       if (cancelled) return
@@ -557,6 +572,9 @@ export function NoteEditor({
       const crepe = new Crepe({
         root: host,
         defaultValue: lastValueRef.current,
+        // Formatting is markdown and the `/` menu; a toolbar floating over
+        // every selection covers the words being selected.
+        features: { [Crepe.Feature.Toolbar]: false },
         featureConfigs: {
           [Crepe.Feature.Placeholder]: { text: placeholder, mode: "doc" },
           [Crepe.Feature.CodeMirror]: {
@@ -581,24 +599,13 @@ export function NoteEditor({
               : null),
             ...(hasResolver ? { proxyDomURL: (url: string) => resolveUrl(url) ?? url } : null),
           },
-          ...(askEnabled
-            ? {
-                [Crepe.Feature.Toolbar]: {
-                  buildToolbar: (builder) => {
-                    builder.addGroup("agent", "Agent").addItem("ask-agent", {
-                      icon: SPARKLES_SVG,
-                      label: "Ask the agent",
-                      shortcut: "⌘E",
-                      active: () => false,
-                      onRun: () => {
-                        openAskRef.current()
-                      },
-                    })
-                  },
-                },
-              }
-            : null),
         },
+      })
+      crepe.editor.config((ctx) => {
+        ctx.update(modules.core.editorViewOptionsCtx, (prev) => ({
+          ...prev,
+          attributes: { spellcheck: "false", "aria-label": "Note" },
+        }))
       })
       crepe.editor.use(modules.utils.$prose(() => markPlugin(modules, key)))
       crepe.editor.use(
@@ -607,6 +614,10 @@ export function NoteEditor({
             new modules.state.Plugin({
               view: () => ({
                 update(view, previous) {
+                  if (!view.state.selection.eq(previous.selection) || !view.state.doc.eq(previous.doc)) {
+                    clearTimeout(selectionTimerRef.current)
+                    selectionTimerRef.current = setTimeout(reportSelectionRef.current, 120)
+                  }
                   if (applyingRef.current || view.state.doc.eq(previous.doc)) return
                   if (view.state.doc === syncedDocRef.current) return
                   clearTimeout(timerRef.current)
@@ -627,12 +638,28 @@ export function NoteEditor({
         viewRef.current = ctx.get(modules.core.editorViewCtx)
         syncedDocRef.current = viewRef.current.state.doc
       })
+      // While focus is elsewhere — in a composer the selection was handed
+      // to — the selected words stay marked, so it is clear what is meant.
+      const view = viewRef.current!
+      const hold = () => {
+        const selection = readSelection(view)
+        if (selection) view.dispatch(view.state.tr.setMeta(key, { asking: { from: selection.from, to: selection.to } } satisfies MarkMeta))
+      }
+      const release = () => view.dispatch(view.state.tr.setMeta(key, { asking: null } satisfies MarkMeta))
+      view.dom.addEventListener("blur", hold)
+      view.dom.addEventListener("focus", release)
+      detach = () => {
+        view.dom.removeEventListener("blur", hold)
+        view.dom.removeEventListener("focus", release)
+      }
       setReady(true)
     })()
     return () => {
       cancelled = true
+      detach()
       flushRef.current()
       clearTimeout(timerRef.current)
+      clearTimeout(selectionTimerRef.current)
       // Only a created editor is destroyed here; one still being created is
       // destroyed by the mount itself once `create()` settles.
       const created = crepeRef.current
@@ -695,27 +722,27 @@ export function NoteEditor({
     )
   }, [ready, anchors, activeAnchorId])
 
+  const clearSelection = React.useCallback(() => {
+    const view = viewRef.current
+    const modules = modulesRef.current
+    const key = markKeyRef.current
+    if (!view || !modules) return
+    const { TextSelection } = modules.state
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.to))
+    if (key) tr.setMeta(key, { asking: null } satisfies MarkMeta)
+    view.dispatch(tr)
+  }, [])
+
   React.useImperativeHandle(
     ref,
     () => ({
       focus: () => viewRef.current?.focus(),
       getMarkdown: () => serialize(),
-      ask: () => openAskRef.current(),
+      getSelection: () => (viewRef.current ? readSelection(viewRef.current) : null),
+      clearSelection,
     }),
-    [serialize]
+    [serialize, clearSelection]
   )
-
-  // Captured before ProseMirror sees it: ⌘E is also Milkdown's inline-code
-  // toggle, and with the ask bubble on it means "ask" alone.
-  const onKeyDownCapture = (event: React.KeyboardEvent) => {
-    if (!askEnabled || readOnly) return
-    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "e") {
-      if (!(event.target as HTMLElement | null)?.closest(".ProseMirror")) return
-      event.preventDefault()
-      event.stopPropagation()
-      openAsk()
-    }
-  }
 
   const onClick = (event: React.MouseEvent) => {
     const anchor = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-anchor-id]")
@@ -735,95 +762,105 @@ export function NoteEditor({
     caretAnchorRef.current = id
   }
 
-  const submitAsk = () => {
-    const text = instruction.trim()
-    if (!ask || !text) return
-    emitAsk({ text: ask.text, instruction: text })
-    closeAsk(true)
-    // The words are handed over; drop the selection so the formatting
-    // toolbar stops covering the note while the agent works.
+  /** Puts a menu's captured selection back before acting on it. */
+  const restore = (selection: NoteEditorSelection | null) => {
     const view = viewRef.current
     const modules = modulesRef.current
-    if (view && modules) {
-      const { TextSelection } = modules.state
-      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.selection.to)))
-    }
+    if (!view || !modules || !selection) return view
+    const { TextSelection } = modules.state
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, selection.from, selection.to)))
+    return view
   }
+
+  const clipboard = {
+    cut: (selection: NoteEditorSelection | null) => {
+      if (!selection) return
+      void navigator.clipboard?.writeText(selection.text).then(() => {
+        const view = restore(selection)
+        view?.dispatch(view.state.tr.deleteSelection())
+      })
+    },
+    copy: (selection: NoteEditorSelection | null) => {
+      if (selection) void navigator.clipboard?.writeText(selection.text)
+    },
+    paste: (selection: NoteEditorSelection | null) => {
+      void navigator.clipboard?.readText().then((text) => {
+        const view = restore(selection) ?? viewRef.current
+        if (text && view) view.pasteText(text)
+      })
+    },
+    selectAll: () => {
+      const view = viewRef.current
+      const modules = modulesRef.current
+      if (!view || !modules) return
+      view.dispatch(view.state.tr.setSelection(new modules.state.AllSelection(view.state.doc)))
+    },
+  }
+
+  const selection = menu?.selection ?? null
+  const mod = menu?.mod ?? "Ctrl+"
 
   return (
     <div
-      ref={rootRef}
       data-slot="note-editor"
       data-ready={ready ? "true" : undefined}
       data-readonly={readOnly ? "true" : undefined}
       className={cn("relative", classNames?.root, className)}
-      onKeyDownCapture={onKeyDownCapture}
       onKeyUp={onKeyUp}
       onClick={onClick}
     >
-      <div ref={hostRef} data-slot="note-editor-content" className={cn("note-editor", classNames?.editor)} />
-      {ask ? (
-        <div
-          data-slot="note-editor-ask"
-          role="dialog"
-          aria-label="Ask the agent"
-          className={cn(
-            "bg-popover text-popover-foreground absolute z-20 flex w-[min(360px,calc(100%-16px))] flex-col gap-1.5 rounded-lg border p-2 shadow-md",
-            classNames?.ask
-          )}
-          style={{ top: ask.top, left: ask.left }}
+      <ContextMenu
+        onOpenChange={(open) => {
+          handedOffRef.current = false
+          setMenu(open ? { selection: viewRef.current ? readSelection(viewRef.current) : null, mod: isMac() ? "⌘" : "Ctrl+" } : null)
+        }}
+      >
+        <ContextMenuTrigger asChild>
+          <div ref={hostRef} data-slot="note-editor-content" className={cn("note-editor", classNames?.editor)} />
+        </ContextMenuTrigger>
+        <ContextMenuContent
+          data-slot="note-editor-menu"
+          className={cn("w-56", classNames?.menu)}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            if (!handedOffRef.current) viewRef.current?.focus()
+          }}
         >
-          <p
-            data-slot="note-editor-ask-quote"
-            className={cn(
-              "text-muted-foreground line-clamp-2 border-l-2 pl-2 text-[11.5px] leading-snug",
-              classNames?.askQuote
-            )}
-          >
-            {ask.text}
-          </p>
-          <div className="flex items-end gap-1.5">
-            <Sparkles className="text-muted-foreground mb-1.5 size-3.5 shrink-0" aria-hidden />
-            <textarea
-              data-slot="note-editor-ask-input"
-              autoFocus
-              rows={1}
-              value={instruction}
-              placeholder={askPlaceholder}
-              onChange={(event) => setInstruction(event.target.value)}
-              onKeyDown={(event) => {
-                event.stopPropagation()
-                if (event.key === "Escape") {
-                  event.preventDefault()
-                  closeAsk(true)
-                } else if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault()
-                  submitAsk()
-                }
-              }}
-              onBlur={(event) => {
-                if (!event.currentTarget.closest("[data-slot=note-editor-ask]")?.contains(event.relatedTarget)) {
-                  closeAsk(false)
-                }
-              }}
-              className={cn(
-                "placeholder:text-muted-foreground field-sizing-content max-h-32 min-h-7 flex-1 resize-none bg-transparent py-1 text-[13px] leading-snug outline-none",
-                classNames?.askInput
-              )}
-            />
-            <button
-              type="button"
-              data-slot="note-editor-ask-submit"
-              aria-label="Send to the agent"
-              disabled={!instruction.trim()}
-              onClick={submitAsk}
-              className="bg-primary text-primary-foreground focus-visible:ring-ring/50 inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors outline-none focus-visible:ring-[3px] disabled:opacity-40"
-            >
-              <ArrowUp className="size-3.5" />
-            </button>
-          </div>
-        </div>
-      ) : null}
+          {actions?.length ? (
+            <>
+              {actions.map((action) => (
+                <ContextMenuItem
+                  key={action.id}
+                  data-slot="note-editor-action"
+                  disabled={action.needsSelection && !selection}
+                  onSelect={() => {
+                    if (action.movesFocus) handedOffRef.current = true
+                    action.onSelect(selection)
+                  }}
+                >
+                  {action.icon}
+                  {action.label}
+                  {action.shortcut ? <ContextMenuShortcut>{action.shortcut}</ContextMenuShortcut> : null}
+                </ContextMenuItem>
+              ))}
+              <ContextMenuSeparator />
+            </>
+          ) : null}
+          <ContextMenuItem disabled={!selection || readOnly} onSelect={() => clipboard.cut(selection)}>
+            <Scissors /> Cut <ContextMenuShortcut>{mod}X</ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem disabled={!selection} onSelect={() => clipboard.copy(selection)}>
+            <Copy /> Copy <ContextMenuShortcut>{mod}C</ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem disabled={readOnly} onSelect={() => clipboard.paste(selection)}>
+            <ClipboardPaste /> Paste <ContextMenuShortcut>{mod}V</ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={clipboard.selectAll}>
+            <TextSelect /> Select all <ContextMenuShortcut>{mod}A</ContextMenuShortcut>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   )
 }

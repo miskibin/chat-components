@@ -4337,8 +4337,9 @@ export function ChangedFiles({ entries }: { entries: FileTreeEntry[] }) {
   "note-editor": {
     title: "Note Editor",
     description:
-      "A WYSIWYG markdown note an agent works in beside the person writing it — headings, tasks, tables, images, KaTeX and Mermaid drawn in place — with threads hung on words, a pending placeholder for answers still being written, and a selection handed to the agent with ⌘E.",
+      "A WYSIWYG markdown note an agent works in beside the person writing it — headings, tasks, tables, images, KaTeX and Mermaid drawn in place — with threads hung on words, a pending placeholder for answers still being written, the selection reported for a composer, and a right-click menu for host actions.",
     registry: "note-editor",
+    registryDependencies: ["context-menu"],
     preview: {
       name: "note-editor-example",
       node: <NoteEditorExample />,
@@ -4370,10 +4371,12 @@ export function Note({ note }: { note: { id: string; markdown: string } }) {
         title: "Asking the agent",
         description: (
           <>
-            With <DocsCode>onAsk</DocsCode> set, a selection grows a sparkles
-            button in the formatting toolbar and <DocsCode>⌘E</DocsCode> opens
-            an instruction bubble over it. What the host does next is only new
-            props: the ask becomes an <DocsCode>anchors</DocsCode> entry over
+            <DocsCode>onSelectionChange</DocsCode> hands the selected words to
+            a composer as they are selected, and they stay marked while focus
+            is in it; an <DocsCode>actions</DocsCode> entry puts &ldquo;Ask
+            the agent&rdquo; at the top of the right-click menu. What the host
+            does next is only new props: the ask becomes an{" "}
+            <DocsCode>anchors</DocsCode> entry over
             the selected words, a <DocsCode>{"```agent-pending"}</DocsCode>{" "}
             fence lands where the answer will go, and the finished answer
             replaces it — each a new <DocsCode>value</DocsCode>, applied
@@ -4442,15 +4445,28 @@ export function Note({ note }: { note: { id: string; markdown: string } }) {
             description: "Milliseconds between the last keystroke and onChange.",
           },
           {
-            name: "onAsk",
-            type: "(ask: NoteEditorAsk) => void",
+            name: "onSelectionChange",
+            type: "(selection: NoteEditorSelection | null) => void",
             description: (
               <>
-                Turns on the ask bubble and receives{" "}
-                <DocsCode>{"{ text, instruction }"}</DocsCode> — the selected
-                words and what to do with them. Read once, when the editor
-                mounts. With it set, <DocsCode>⌘E</DocsCode> asks instead of
-                toggling inline code.
+                <DocsCode>{"{ text, from, to }"}</DocsCode> as the user selects,
+                null once the selection collapses. While focus is elsewhere the
+                last selection stays marked (
+                <DocsCode>note-editor-held-selection</DocsCode>), so a composer
+                it was handed to shows what it is about.
+              </>
+            ),
+          },
+          {
+            name: "actions",
+            type: "NoteEditorAction[]",
+            description: (
+              <>
+                Host items at the top of the right-click menu, above Cut, Copy,
+                Paste and Select all. <DocsCode>needsSelection</DocsCode>{" "}
+                disables one with nothing selected;{" "}
+                <DocsCode>movesFocus</DocsCode> keeps the menu from handing
+                focus back to the editor.
               </>
             ),
           },
@@ -4486,23 +4502,24 @@ export function Note({ note }: { note: { id: string; markdown: string } }) {
             description: "Shows the note without editing; fences open as their drawings.",
           },
           {
-            name: "placeholder / askPlaceholder",
+            name: "placeholder",
             type: "string",
-            description: "Hints for an empty note and for the ask bubble.",
+            description: "Hint for an empty note.",
           },
           {
             name: "classNames",
             type: "NoteEditorClassNames",
-            description: "root, editor, ask, askInput and askQuote, merged after the defaults.",
+            description: "root, editor and menu, merged after the defaults.",
           },
           {
             name: "ref",
             type: "Ref<NoteEditorHandle>",
             description: (
               <>
-                <DocsCode>focus()</DocsCode>, <DocsCode>getMarkdown()</DocsCode>{" "}
-                and <DocsCode>ask()</DocsCode>, which opens the bubble on the
-                current selection.
+                <DocsCode>focus()</DocsCode>, <DocsCode>getMarkdown()</DocsCode>,{" "}
+                <DocsCode>getSelection()</DocsCode> and{" "}
+                <DocsCode>clearSelection()</DocsCode> — the last once a
+                composer has sent what was selected.
               </>
             ),
           },
@@ -4513,13 +4530,11 @@ export function Note({ note }: { note: { id: string; markdown: string } }) {
       "note-editor",
       "note-editor-content",
       "note-editor-anchor",
-      "note-editor-asking",
+      "note-editor-held-selection",
       "note-editor-pending",
       "note-editor-mermaid",
-      "note-editor-ask",
-      "note-editor-ask-quote",
-      "note-editor-ask-input",
-      "note-editor-ask-submit",
+      "note-editor-menu",
+      "note-editor-action",
     ],
   },
 } satisfies Record<string, ComponentDoc>

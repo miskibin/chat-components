@@ -32,48 +32,221 @@
 }
 
 [data-slot="note-editor"] .milkdown .ProseMirror {
-  padding: 8px 56px 96px;
-  font-size: 14px;
-  line-height: 1.65;
+  padding: 24px 48px 30vh;
+  font-size: 15px;
+  line-height: 1.7;
   outline: none;
 }
 
 @media (max-width: 640px) {
   [data-slot="note-editor"] .milkdown .ProseMirror {
-    padding: 8px 20px 72px;
+    padding: 16px 20px 30vh;
   }
 }
 
+/* Spelling squiggles are noise in notes full of names and code. */
+[data-slot="note-editor"] ::spelling-error,
+[data-slot="note-editor"] ::grammar-error {
+  text-decoration: none;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
 [data-slot="note-editor"] .milkdown .ProseMirror h1 {
-  font-size: 26px;
-  line-height: 1.25;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  margin-bottom: 0.6em;
+  font-size: 1.9em;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.03em;
 }
 
 [data-slot="note-editor"] .milkdown .ProseMirror h2 {
-  font-size: 20px;
-  line-height: 1.3;
-  font-weight: 620;
+  margin-top: 1.6em;
+  font-size: 1.35em;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 [data-slot="note-editor"] .milkdown .ProseMirror h3 {
-  font-size: 16px;
-  line-height: 1.35;
+  font-size: 1.1em;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
-[data-slot="note-editor"] .milkdown .ProseMirror code {
+[data-slot="note-editor"] .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)::before {
+  display: none;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror p {
+  line-height: 1.7;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror :not(pre) > code {
   background: var(--muted);
   border-radius: 4px;
   padding: 0.1em 0.3em;
-  font-size: 0.9em;
+  font-size: 0.88em;
 }
 
 [data-slot="note-editor"] .milkdown .ProseMirror a {
   color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror blockquote {
+  padding-left: 18px;
+  color: var(--muted-foreground);
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror blockquote::before {
+  width: 2px;
+  background: var(--border);
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-list-item-block li .label-wrapper,
+[data-slot="note-editor"] .milkdown .milkdown-list-item-block li .label-wrapper .label {
+  color: var(--muted-foreground);
+}
+
+/* Tables: rules between rows only, a tinted header. */
+[data-slot="note-editor"] .milkdown .milkdown-table-block {
+  margin-block: 1.25em;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-table-block :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  padding: 8px 14px;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-table-block th {
+  background: color-mix(in oklab, var(--muted) 50%, transparent);
+}
+
+/* Blocks move by keyboard and the `/` menu; the drag handle and its plus
+   sat in the margin of every line the pointer crossed. */
+[data-slot="note-editor"] .milkdown .milkdown-block-handle {
+  display: none;
+}
+
+/* Code blocks: a quiet card. One drawn as its preview (Mermaid, LaTeX, a
+   pending placeholder) loses the card and shows its controls on hover. */
+[data-slot="note-editor"] .milkdown .milkdown-code-block {
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--muted) 55%, transparent);
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-code-block .cm-editor,
+[data-slot="note-editor"] .milkdown .milkdown-code-block .cm-gutters {
+  background: transparent;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) {
+  padding: 4px 0;
+  background: transparent;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-code-block:has(> .codemirror-host.hidden) > .tools {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-code-block:has(> .codemirror-host.hidden):is(:hover, :focus-within) > .tools {
+  opacity: 1;
+}
+
+/* The `/` menu, as a popover of this app rather than Crepe's own card. */
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu {
+  width: 240px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 0.5rem);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu ul {
+  margin: 0;
+  padding: 0;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .tab-group {
+  border-bottom: 1px solid var(--border);
+  padding: 2px 2px 4px;
+  margin-bottom: 2px;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .tab-group ul {
+  gap: 2px;
+  padding: 0;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .tab-group ul li {
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .tab-group ul li:hover,
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .tab-group ul li.selected {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups {
+  max-height: 280px;
+  padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+  margin: 0;
+  padding: 8px 8px 2px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups .menu-group li {
+  min-width: 0;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover,
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+  fill: currentColor;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+[data-slot="note-editor"] .milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
+  margin: 4px 8px;
+  background: var(--border);
 }
 
 /* A thread hung on words: a quiet underline-weight tint, louder when active. */
@@ -99,8 +272,9 @@
   border-bottom-color: color-mix(in oklab, var(--destructive) 55%, transparent);
 }
 
-/* The words being asked about, while the ask bubble has focus. */
-[data-slot="note-editor"] .note-editor-asking {
+/* The last selection, kept marked while focus is elsewhere — a composer it
+   was handed to, a menu. */
+[data-slot="note-editor"] .note-editor-held {
   background: color-mix(in oklab, var(--primary) 18%, transparent);
   border-radius: 2px;
 }
