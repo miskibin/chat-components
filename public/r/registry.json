@@ -388,8 +388,9 @@
       "name": "note-editor",
       "type": "registry:ui",
       "title": "Note Editor",
-      "description": "WYSIWYG markdown note on Milkdown Crepe that an agent can work in: KaTeX, Mermaid and images drawn in place, outside edits applied as the smallest block change, threads hung on words as highlights, pending placeholders for answers still being written, and a selection handed to the agent with ⌘E.",
+      "description": "WYSIWYG markdown note on Milkdown Crepe that an agent can work in: KaTeX, Mermaid and images drawn in place, outside edits applied as the smallest block change, threads hung on words as highlights, pending placeholders for answers still being written, the selection reported for a composer, and a right-click menu for host actions.",
       "dependencies": ["@milkdown/crepe", "@milkdown/kit", "mermaid", "katex", "lucide-react"],
+      "registryDependencies": ["miskibin/chat-components/context-menu"],
       "files": [
         {
           "path": "components/ui/note-editor.tsx",
