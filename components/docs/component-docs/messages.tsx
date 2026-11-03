@@ -59,6 +59,8 @@ import { MessageProcessExample } from "@/components/examples/message-process-exa
 import { PlanCardExample } from "@/components/examples/plan-card-example"
 import { PlanCardLongExample } from "@/components/examples/plan-card-long-example"
 import { MessageQuoteExample } from "@/components/examples/message-quote-example"
+import { NoteEditorAgentExample } from "@/components/examples/note-editor-agent-example"
+import { NoteEditorExample } from "@/components/examples/note-editor-example"
 import { MessageSenderExample } from "@/components/examples/message-sender-example"
 import { MessageStyledExample } from "@/components/examples/message-styled-example"
 import { MessageToolImageExample } from "@/components/examples/message-tool-image-example"
@@ -4330,6 +4332,193 @@ export function ChangedFiles({ entries }: { entries: FileTreeEntry[] }) {
           align: "stretch",
         },
       },
+    ],
+  },
+  "note-editor": {
+    title: "Note Editor",
+    description:
+      "A WYSIWYG markdown note an agent works in beside the person writing it — headings, tasks, tables, images, KaTeX and Mermaid drawn in place — with threads hung on words, a pending placeholder for answers still being written, and a selection handed to the agent with ⌘E.",
+    registry: "note-editor",
+    preview: {
+      name: "note-editor-example",
+      node: <NoteEditorExample />,
+      align: "stretch",
+    },
+    usage: `"use client"
+
+import { NoteEditor } from "@/components/ui/note-editor"
+
+export function Note({ note }: { note: { id: string; markdown: string } }) {
+  const [markdown, setMarkdown] = useState(note.markdown)
+
+  // The value is the note; a new one — the user's own, or an agent's edit
+  // pushed from the server — lands as the smallest block change.
+  return (
+    <NoteEditor
+      value={markdown}
+      onChange={(next) => {
+        setMarkdown(next)
+        save(note.id, next)
+      }}
+      uploadImage={(file) => uploadAsset(file)}
+      resolveImageUrl={(url) => \`/api/assets?src=\${encodeURIComponent(url)}\`}
+    />
+  )
+}`,
+    examples: [
+      {
+        title: "Asking the agent",
+        description: (
+          <>
+            With <DocsCode>onAsk</DocsCode> set, a selection grows a sparkles
+            button in the formatting toolbar and <DocsCode>⌘E</DocsCode> opens
+            an instruction bubble over it. What the host does next is only new
+            props: the ask becomes an <DocsCode>anchors</DocsCode> entry over
+            the selected words, a <DocsCode>{"```agent-pending"}</DocsCode>{" "}
+            fence lands where the answer will go, and the finished answer
+            replaces it — each a new <DocsCode>value</DocsCode>, applied
+            without moving the caret or losing the undo history.
+          </>
+        ),
+        example: {
+          name: "note-editor-agent-example",
+          node: <NoteEditorAgentExample />,
+          align: "stretch",
+        },
+      },
+    ],
+    notes: [
+      {
+        title: "Outside edits and typing at once",
+        description: (
+          <>
+            A new <DocsCode>value</DocsCode> replaces only the top-level blocks
+            that differ. If the user has typed since the last{" "}
+            <DocsCode>onChange</DocsCode>, the value is merged in rather than
+            laid over their words — a block-level three-way merge against the
+            last value the editor held — and the merged note goes out in the
+            next <DocsCode>onChange</DocsCode>. A host that saves to a server
+            sends the previous value as the base so the server can merge the
+            same way, and passes back only values that descend from the
+            editor&apos;s latest <DocsCode>onChange</DocsCode>.
+          </>
+        ),
+      },
+      {
+        title: "Fences that draw",
+        description: (
+          <>
+            <DocsCode>mermaid</DocsCode> fences render as diagrams,{" "}
+            <DocsCode>latex</DocsCode> as display math, and{" "}
+            <DocsCode>{"agent-pending"}</DocsCode> (
+            <DocsCode>NOTE_PENDING_LANGUAGE</DocsCode>) as a shimmering line
+            showing its body as the intent. Each opens as its drawing; Edit on
+            the block shows the source.
+          </>
+        ),
+      },
+    ],
+    props: [
+      {
+        caption: "NoteEditor",
+        rows: [
+          {
+            name: "value",
+            type: "string",
+            required: true,
+            description:
+              "The note as markdown. Read on mount, then every change is applied as the smallest top-level block replacement — merged with unsent typing — which keeps the caret and undo history.",
+          },
+          {
+            name: "onChange",
+            type: "(markdown: string) => void",
+            description:
+              "The markdown after the user edits, debounced by changeDelay. Values that came in through value are never echoed back.",
+          },
+          {
+            name: "changeDelay",
+            type: "number",
+            default: "300",
+            description: "Milliseconds between the last keystroke and onChange.",
+          },
+          {
+            name: "onAsk",
+            type: "(ask: NoteEditorAsk) => void",
+            description: (
+              <>
+                Turns on the ask bubble and receives{" "}
+                <DocsCode>{"{ text, instruction }"}</DocsCode> — the selected
+                words and what to do with them. Read once, when the editor
+                mounts. With it set, <DocsCode>⌘E</DocsCode> asks instead of
+                toggling inline code.
+              </>
+            ),
+          },
+          {
+            name: "anchors / activeAnchorId / onAnchorClick",
+            type: "NoteEditorAnchor[]",
+            description: (
+              <>
+                Threads drawn as highlights over the first line of their{" "}
+                <DocsCode>text</DocsCode>; <DocsCode>state</DocsCode> (
+                <DocsCode>open | running | done | error</DocsCode>) lands on{" "}
+                <DocsCode>data-state</DocsCode>. A click hands back the id.
+              </>
+            ),
+          },
+          {
+            name: "uploadImage",
+            type: "(file: File) => Promise<string>",
+            description:
+              "Stores a pasted, dropped or picked image and resolves to the URL written into the markdown. Without it Crepe keeps a blob URL that does not survive a reload.",
+          },
+          {
+            name: "resolveImageUrl",
+            type: "(url: string) => string",
+            description:
+              "Maps an image URL from the markdown to one the browser can load — a relative assets/ path to an API route, say. The markdown keeps the original.",
+          },
+          {
+            name: "readOnly",
+            type: "boolean",
+            default: "false",
+            description: "Shows the note without editing; fences open as their drawings.",
+          },
+          {
+            name: "placeholder / askPlaceholder",
+            type: "string",
+            description: "Hints for an empty note and for the ask bubble.",
+          },
+          {
+            name: "classNames",
+            type: "NoteEditorClassNames",
+            description: "root, editor, ask, askInput and askQuote, merged after the defaults.",
+          },
+          {
+            name: "ref",
+            type: "Ref<NoteEditorHandle>",
+            description: (
+              <>
+                <DocsCode>focus()</DocsCode>, <DocsCode>getMarkdown()</DocsCode>{" "}
+                and <DocsCode>ask()</DocsCode>, which opens the bubble on the
+                current selection.
+              </>
+            ),
+          },
+        ],
+      },
+    ],
+    dataSlots: [
+      "note-editor",
+      "note-editor-content",
+      "note-editor-anchor",
+      "note-editor-asking",
+      "note-editor-pending",
+      "note-editor-mermaid",
+      "note-editor-ask",
+      "note-editor-ask-quote",
+      "note-editor-ask-input",
+      "note-editor-ask-submit",
     ],
   },
 } satisfies Record<string, ComponentDoc>
