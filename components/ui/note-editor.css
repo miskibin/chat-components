@@ -1,0 +1,182 @@
+/*
+ * Crepe, bound to the app's own tokens: every color it draws comes from the
+ * semantic palette, so the note follows the theme and dark mode with no
+ * second stylesheet. Imported by `note-editor.tsx` after Crepe's common CSS.
+ */
+[data-slot="note-editor"] .milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--card);
+  --crepe-color-surface-low: var(--muted);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  /* Crepe draws toolbar and menu icons in this colour, not just rules. */
+  --crepe-color-outline: var(--muted-foreground);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--muted);
+  --crepe-color-on-secondary: var(--foreground);
+  --crepe-color-inverse: var(--foreground);
+  --crepe-color-on-inverse: var(--background);
+  --crepe-color-inline-code: var(--foreground);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: var(--accent);
+  --crepe-color-selected: var(--accent);
+  --crepe-color-inline-area: var(--muted);
+  --crepe-font-title: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  --crepe-font-default: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  --crepe-font-code: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  --crepe-shadow-1: 0 1px 2px 0 color-mix(in oklab, var(--foreground) 10%, transparent);
+  --crepe-shadow-2: 0 4px 12px -2px color-mix(in oklab, var(--foreground) 14%, transparent);
+  background: transparent;
+  color: var(--foreground);
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror {
+  padding: 8px 56px 96px;
+  font-size: 14px;
+  line-height: 1.65;
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  [data-slot="note-editor"] .milkdown .ProseMirror {
+    padding: 8px 20px 72px;
+  }
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror h1 {
+  font-size: 26px;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror h2 {
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 620;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror h3 {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror code {
+  background: var(--muted);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+}
+
+[data-slot="note-editor"] .milkdown .ProseMirror a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* A thread hung on words: a quiet underline-weight tint, louder when active. */
+[data-slot="note-editor"] .note-editor-anchor {
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  border-bottom: 2px solid color-mix(in oklab, var(--primary) 45%, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+[data-slot="note-editor"] .note-editor-anchor[data-active="true"] {
+  background: color-mix(in oklab, var(--primary) 24%, transparent);
+  border-bottom-color: var(--primary);
+}
+
+[data-slot="note-editor"] .note-editor-anchor[data-state="running"] {
+  animation: note-editor-pulse 1.6s ease-in-out infinite;
+}
+
+[data-slot="note-editor"] .note-editor-anchor[data-state="error"] {
+  background: color-mix(in oklab, var(--destructive) 12%, transparent);
+  border-bottom-color: color-mix(in oklab, var(--destructive) 55%, transparent);
+}
+
+/* The words being asked about, while the ask bubble has focus. */
+[data-slot="note-editor"] .note-editor-asking {
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  border-radius: 2px;
+}
+
+/* The placeholder an agent plants before it writes. */
+[data-slot="note-editor"] .note-editor-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--foreground) 6%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: note-editor-shimmer 1.8s linear infinite;
+}
+
+[data-slot="note-editor"] .note-editor-pending-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  flex-shrink: 0;
+  animation: note-editor-pulse 1.2s ease-in-out infinite;
+}
+
+[data-slot="note-editor"] .note-editor-mermaid {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 8px 0;
+}
+
+[data-slot="note-editor"] .note-editor-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+[data-slot="note-editor"] .note-editor-mermaid[data-state="error"] {
+  color: var(--destructive);
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: pre-wrap;
+  justify-content: flex-start;
+}
+
+@keyframes note-editor-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes note-editor-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="note-editor"] .note-editor-pending,
+  [data-slot="note-editor"] .note-editor-pending-dot,
+  [data-slot="note-editor"] .note-editor-anchor[data-state="running"] {
+    animation: none;
+  }
+}
